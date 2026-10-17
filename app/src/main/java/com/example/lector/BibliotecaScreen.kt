@@ -3,6 +3,8 @@ package com.example.lector
 import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -56,10 +58,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // Qué cómics mostrar según cuánto los hayas leído.
 enum class Filtro { TODOS, SIN_LEER, EN_CURSO, TERMINADOS }
@@ -70,8 +76,10 @@ fun BibliotecaScreen(
     comics: List<Comic>,
     almacen: Almacen,
     alAnadir: () -> Unit,
+    alAnadirCarpeta: () -> Unit,
     alAbrir: (Comic) -> Unit,
     alEliminar: (Comic) -> Unit,
+    alRestaurar: () -> Unit,
 ) {
     var categorias by remember { mutableStateOf(almacen.categorias()) }
     var asignaciones by remember { mutableStateOf(almacen.asignaciones()) }
@@ -94,10 +102,58 @@ fun BibliotecaScreen(
     var dialogoApariencia by remember { mutableStateOf(false) }
     var categoriaNueva by remember { mutableStateOf(false) }
     var renombrando by remember { mutableStateOf<Categoria?>(null) }
+    var dialogoAnadir by remember { mutableStateOf(false) }
+    var dialogoCopia by remember { mutableStateOf(false) }
+    var resultadoCopia by remember { mutableStateOf<String?>(null) }
+
+    val contexto = LocalContext.current
 
     fun recargar() {
         categorias = almacen.categorias()
         asignaciones = almacen.asignaciones()
+    }
+
+    // Guardar la copia de seguridad en un archivo que eliges.
+    val crearCopia = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            resultadoCopia = try {
+                val salida = contexto.contentResolver.openOutputStream(uri)
+                    ?: throw IllegalStateException("Sin salida")
+                salida.use { it.write(almacen.crearCopia().toByteArray(Charsets.UTF_8)) }
+                "Copia guardada."
+            } catch (e: Exception) {
+                "No se pudo guardar la copia."
+            }
+        }
+    }
+
+    // Restaurar desde un archivo de copia.
+    val restaurar = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            resultadoCopia = try {
+                val entrada = contexto.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("Sin entrada")
+                val texto = entrada.use { it.readBytes().toString(Charsets.UTF_8) }
+                val r = almacen.restaurarCopia(texto)
+                recargar()
+                orden = almacen.orden
+                ascendente = almacen.ordenAscendente
+                alRestaurar()
+                "Copia restaurada: ${r.actualizados} cómics actualizados" +
+                    if (r.pendientes > 0) {
+                        " y ${r.pendientes} pendientes. Su progreso y categorías se aplicarán " +
+                            "cuando añadas esos archivos."
+                    } else {
+                        "."
+                    }
+            } catch (e: Exception) {
+                "El archivo no es una copia válida."
+            }
+        }
     }
 
     fun alternar(id: String) {
@@ -143,7 +199,7 @@ fun BibliotecaScreen(
         floatingActionButton = {
             if (!modoSeleccion) {
                 FloatingActionButton(
-                    onClick = alAnadir,
+                    onClick = { dialogoAnadir = true },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                 ) {
@@ -259,6 +315,13 @@ fun BibliotecaScreen(
                                 onClick = {
                                     menuAbierto = false
                                     dialogoApariencia = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Copia de seguridad") },
+                                onClick = {
+                                    menuAbierto = false
+                                    dialogoCopia = true
                                 },
                             )
                         }
@@ -576,6 +639,77 @@ fun BibliotecaScreen(
             },
             confirmButton = {
                 TextButton(onClick = { dialogoApariencia = false }) { Text("Listo") }
+            },
+        )
+    }
+
+    // ---- Añadir: archivo o carpeta ----
+    if (dialogoAnadir) {
+        AlertDialog(
+            onDismissRequest = { dialogoAnadir = false },
+            title = { Text("Añadir") },
+            text = {
+                Column {
+                    TextButton(onClick = {
+                        dialogoAnadir = false
+                        alAnadir()
+                    }) { Text("Archivo .cbz") }
+                    TextButton(onClick = {
+                        dialogoAnadir = false
+                        alAnadirCarpeta()
+                    }) { Text("Carpeta de imágenes") }
+                    Text(
+                        "En una carpeta, las imágenes se ordenan por nombre. Si tiene " +
+                            "subcarpetas (por ejemplo, una por capítulo), se leen todas seguidas.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { dialogoAnadir = false }) { Text("Cancelar") }
+            },
+        )
+    }
+
+    // ---- Copia de seguridad ----
+    if (dialogoCopia) {
+        AlertDialog(
+            onDismissRequest = { dialogoCopia = false },
+            title = { Text("Copia de seguridad") },
+            text = {
+                Column {
+                    Text(
+                        "La copia guarda tu progreso, categorías, modos de lectura y ajustes. " +
+                            "No incluye los archivos de los cómics.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = {
+                        dialogoCopia = false
+                        val fecha = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                        crearCopia.launch("lector-copia-$fecha.json")
+                    }) { Text("Crear copia") }
+                    TextButton(onClick = {
+                        dialogoCopia = false
+                        restaurar.launch(arrayOf("*/*"))
+                    }) { Text("Restaurar copia") }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { dialogoCopia = false }) { Text("Cerrar") }
+            },
+        )
+    }
+
+    resultadoCopia?.let { mensaje ->
+        AlertDialog(
+            onDismissRequest = { resultadoCopia = null },
+            title = { Text("Copia de seguridad") },
+            text = { Text(mensaje) },
+            confirmButton = {
+                TextButton(onClick = { resultadoCopia = null }) { Text("Aceptar") }
             },
         )
     }

@@ -3,6 +3,7 @@ package com.example.lector
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,6 +12,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
+import java.util.zip.Deflater
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 data class Comic(
     val id: String,
@@ -22,6 +26,9 @@ data class Comic(
 
 // Una categoría para organizar la biblioteca. Si es "oculta", esconde sus cómics.
 data class Categoria(val id: String, val nombre: String, val oculta: Boolean)
+
+// Resultado de restaurar una copia de seguridad.
+data class ResultadoRestauracion(val actualizados: Int, val pendientes: Int)
 
 // Criterios para ordenar la biblioteca.
 enum class Orden { TITULO, ULTIMO_LEIDO, PROGRESO, ANADIDO }
@@ -206,6 +213,75 @@ class Almacen(private val contexto: Context) {
         } ?: false
         if (!copiado) return null
 
+        return registrar(id, archivo, nombre.substringBeforeLast('.'))
+    }
+
+    // Convierte una carpeta de imágenes (elegida con el selector de carpetas) en un cómic.
+    // Por dentro la empaqueta como .cbz, así el resto de la app funciona igual.
+    fun importarCarpeta(arbol: Uri): Comic? {
+        val raizId = DocumentsContract.getTreeDocumentId(arbol)
+        val titulo = nombreDe(DocumentsContract.buildDocumentUriUsingTree(arbol, raizId))
+            ?: "Sin título"
+
+        val imagenes = ArrayList<Pair<String, Uri>>()
+        listarImagenes(arbol, raizId, "", imagenes)
+        if (imagenes.isEmpty()) return null
+
+        val id = UUID.randomUUID().toString()
+        val archivo = archivoDe(id)
+        try {
+            ZipOutputStream(archivo.outputStream().buffered()).use { zip ->
+                zip.setLevel(Deflater.NO_COMPRESSION) // las imágenes ya vienen comprimidas
+                for ((ruta, uri) in imagenes) {
+                    zip.putNextEntry(ZipEntry(ruta))
+                    contexto.contentResolver.openInputStream(uri)?.use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
+        } catch (e: Exception) {
+            archivo.delete()
+            return null
+        }
+        return registrar(id, archivo, titulo)
+    }
+
+    private fun nombreDe(uri: Uri): String? =
+        contexto.contentResolver
+            .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+
+    // Busca imágenes dentro de la carpeta y sus subcarpetas (por ejemplo, una por capítulo).
+    private fun listarImagenes(
+        arbol: Uri,
+        carpetaId: String,
+        prefijo: String,
+        destino: MutableList<Pair<String, Uri>>,
+    ) {
+        val hijos = DocumentsContract.buildChildDocumentsUriUsingTree(arbol, carpetaId)
+        val columnas = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+        )
+        contexto.contentResolver.query(hijos, columnas, null, null, null)?.use { c ->
+            while (c.moveToNext()) {
+                val docId = c.getString(0)
+                val nombre = c.getString(1) ?: continue
+                val mime = c.getString(2)
+                if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    listarImagenes(arbol, docId, "$prefijo$nombre/", destino)
+                } else if (Cbz.esImagen(nombre)) {
+                    destino.add(
+                        "$prefijo$nombre" to
+                            DocumentsContract.buildDocumentUriUsingTree(arbol, docId),
+                    )
+                }
+            }
+        }
+    }
+
+    // Comprueba el archivo, le saca la portada y lo añade a la biblioteca.
+    private fun registrar(id: String, archivo: File, titulo: String): Comic? {
         val paginas = try {
             Cbz.paginas(archivo)
         } catch (e: Exception) {
@@ -220,9 +296,175 @@ class Almacen(private val contexto: Context) {
             portadaDe(id).outputStream().use { portada.compress(Bitmap.CompressFormat.JPEG, 85, it) }
         }
 
-        val comic = Comic(id, nombre.substringBeforeLast('.'), paginas.size, 0)
+        val comic = Comic(id, titulo, paginas.size, 0)
         guardar(cargar() + comic)
-        return comic
+        // Si venía de una copia de seguridad, recupera su progreso y categorías.
+        return aplicarPendiente(comic)
+    }
+
+    // ---- Copia de seguridad ----
+    // Guarda progreso, categorías, modos de lectura y ajustes (no los archivos de los cómics).
+    // Los cómics se reconocen por título y número de páginas.
+    private fun claveDe(titulo: String, paginas: Int) = titulo.trim().lowercase() + "|" + paginas
+
+    private fun pendientes(): JSONObject = JSONObject(prefs.getString("pendientes", "{}"))
+
+    fun crearCopia(): String {
+        val listaCategorias = categorias()
+        val nombres = listaCategorias.associate { it.id to it.nombre }
+        val asign = asignaciones()
+
+        val raiz = JSONObject()
+        raiz.put("version", 1)
+        raiz.put("app", "Lector")
+        raiz.put(
+            "ajustes",
+            JSONObject()
+                .put("orden", orden.name)
+                .put("orden_asc", ordenAscendente)
+                .put("rtl", derechaAIzquierda)
+                .put("paleta", paleta)
+                .put("color_portada", colorPortada),
+        )
+
+        val cats = JSONArray()
+        listaCategorias.forEach {
+            cats.put(JSONObject().put("nombre", it.nombre).put("oculta", it.oculta))
+        }
+        raiz.put("categorias", cats)
+
+        val lista = JSONArray()
+        cargar().forEach { c ->
+            val e = JSONObject()
+                .put("titulo", c.titulo)
+                .put("paginas", c.paginas)
+                .put("ultima", c.ultimaPagina)
+                .put("leido", c.leido)
+            modoDe(c.id)?.let { e.put("modo", it.name) }
+            val nombresDelComic = JSONArray()
+            asign[c.id].orEmpty().mapNotNull { nombres[it] }.forEach { nombresDelComic.put(it) }
+            e.put("categorias", nombresDelComic)
+            lista.put(e)
+        }
+        // También los que aún esperan a que añadas su archivo.
+        val pend = pendientes()
+        for (clave in pend.keys()) lista.put(pend.getJSONObject(clave))
+        raiz.put("comics", lista)
+
+        return raiz.toString(2)
+    }
+
+    // Busca una categoría por nombre o la crea.
+    private fun idCategoria(nombre: String, oculta: Boolean, cats: MutableList<Categoria>): String {
+        val existente = cats.firstOrNull { it.nombre.equals(nombre, ignoreCase = true) }
+        if (existente != null) return existente.id
+        val nueva = Categoria(UUID.randomUUID().toString(), nombre, oculta)
+        cats.add(nueva)
+        return nueva.id
+    }
+
+    // Aplica los datos de una copia a un cómic que ya está en la biblioteca.
+    private fun aplicarEntrada(
+        local: Comic,
+        e: JSONObject,
+        cats: MutableList<Categoria>,
+        mapa: MutableMap<String, Set<String>>,
+    ): Comic {
+        // El progreso solo se pisa si la copia es más reciente que lo que ya tienes.
+        val leidoCopia = e.optLong("leido", 0L)
+        val resultado = if (leidoCopia > local.leido) {
+            local.copy(
+                ultimaPagina = e.optInt("ultima", 0).coerceIn(0, maxOf(0, local.paginas - 1)),
+                leido = leidoCopia,
+            )
+        } else {
+            local
+        }
+
+        val modo = e.optString("modo")
+        if (modo.isNotEmpty() && modoDe(local.id) == null) {
+            runCatching { Modo.valueOf(modo) }.getOrNull()?.let { guardarModo(local.id, it) }
+        }
+
+        val arreglo = e.optJSONArray("categorias")
+        if (arreglo != null && arreglo.length() > 0) {
+            val ids = HashSet<String>()
+            for (i in 0 until arreglo.length()) {
+                ids.add(idCategoria(arreglo.getString(i), false, cats))
+            }
+            mapa[local.id] = mapa[local.id].orEmpty() + ids
+        }
+        return resultado
+    }
+
+    // Cuando añades un cómic que estaba en una copia, recupera sus datos.
+    private fun aplicarPendiente(comic: Comic): Comic {
+        val pend = pendientes()
+        val clave = claveDe(comic.titulo, comic.paginas)
+        val e = pend.optJSONObject(clave) ?: return comic
+
+        val cats = categorias().toMutableList()
+        val mapa = asignaciones().toMutableMap()
+        val nuevo = aplicarEntrada(comic, e, cats, mapa)
+        pend.remove(clave)
+
+        guardar(cargar().map { if (it.id == comic.id) nuevo else it })
+        guardarAsignaciones(mapa)
+        guardarCategorias(cats)
+        prefs.edit().putString("pendientes", pend.toString()).apply()
+        return nuevo
+    }
+
+    // Lanza una excepción si el texto no es una copia válida.
+    fun restaurarCopia(texto: String): ResultadoRestauracion {
+        val raiz = JSONObject(texto)
+        require(raiz.optInt("version", 0) == 1) { "Copia no válida" }
+
+        raiz.optJSONObject("ajustes")?.let { a ->
+            val nombreOrden = a.optString("orden")
+            if (nombreOrden.isNotEmpty()) {
+                runCatching { Orden.valueOf(nombreOrden) }.getOrNull()?.let { orden = it }
+            }
+            if (a.has("orden_asc")) ordenAscendente = a.getBoolean("orden_asc")
+            if (a.has("rtl")) derechaAIzquierda = a.getBoolean("rtl")
+            val nombrePaleta = a.optString("paleta")
+            if (nombrePaleta.isNotEmpty()) elegirPaleta(nombrePaleta)
+            if (a.has("color_portada")) elegirColorPortada(a.getBoolean("color_portada"))
+        }
+
+        val cats = categorias().toMutableList()
+        raiz.optJSONArray("categorias")?.let { arreglo ->
+            for (i in 0 until arreglo.length()) {
+                val o = arreglo.getJSONObject(i)
+                idCategoria(o.getString("nombre"), o.optBoolean("oculta", false), cats)
+            }
+        }
+
+        val locales = cargar().toMutableList()
+        val mapa = asignaciones().toMutableMap()
+        val pend = pendientes()
+        var actualizados = 0
+        var sinArchivo = 0
+
+        val entradas = raiz.optJSONArray("comics") ?: JSONArray()
+        for (i in 0 until entradas.length()) {
+            val e = entradas.getJSONObject(i)
+            val clave = claveDe(e.getString("titulo"), e.getInt("paginas"))
+            val indice = locales.indexOfFirst { claveDe(it.titulo, it.paginas) == clave }
+            if (indice >= 0) {
+                locales[indice] = aplicarEntrada(locales[indice], e, cats, mapa)
+                actualizados++
+            } else {
+                pend.put(clave, e)
+                sinArchivo++
+            }
+        }
+
+        guardar(locales)
+        guardarAsignaciones(mapa)
+        guardarCategorias(cats)
+        prefs.edit().putString("pendientes", pend.toString()).apply()
+        return ResultadoRestauracion(actualizados, sinArchivo)
     }
 
     fun guardarProgreso(id: String, pagina: Int) {

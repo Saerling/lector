@@ -9,6 +9,10 @@ import java.util.zip.ZipFile
 object Cbz {
     private val extensiones = setOf("jpg", "jpeg", "png", "webp", "gif")
 
+    // ¿El nombre de archivo parece una imagen que sabemos leer?
+    fun esImagen(nombre: String): Boolean =
+        nombre.substringAfterLast('.', "").lowercase() in extensiones
+
     // Devuelve los nombres de las páginas, en orden natural (1, 2, 10 y no 1, 10, 2).
     fun paginas(archivo: File): List<String> =
         ZipFile(archivo).use { zip ->
