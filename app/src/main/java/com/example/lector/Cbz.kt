@@ -95,7 +95,7 @@ object Cbz {
             total > 0 && largas * 2 > total
         }
 
-    private fun compararNatural(a: String, b: String): Int {
+    fun compararNatural(a: String, b: String): Int {
         var i = 0
         var j = 0
         while (i < a.length && j < b.length) {
