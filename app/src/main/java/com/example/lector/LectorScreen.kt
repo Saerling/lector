@@ -79,74 +79,77 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
         paginas = lista
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        val lista = paginas
-        if (lista == null) {
-            CircularProgressIndicator(Modifier.align(Alignment.Center))
-        } else {
-            val inicial = paginaActual.coerceIn(0, lista.size - 1)
-
-            LaunchedEffect(paginaActual) {
-                almacen.guardarProgreso(comic.id, paginaActual)
-            }
-
-            val alTocar = { barraVisible = !barraVisible }
-
-            if (modo == Modo.VERTICAL) {
-                LectorVertical(
-                    archivo = archivo,
-                    lista = lista,
-                    inicial = inicial,
-                    alCambiarPagina = { paginaActual = it },
-                    alTocar = alTocar,
-                )
+    // El color de acento puede tomarse de la portada del cómic.
+    TemaPortada(almacen.portadaDe(comic.id), almacen.colorPortada) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            val lista = paginas
+            if (lista == null) {
+                CircularProgressIndicator(Modifier.align(Alignment.Center))
             } else {
-                LectorPaginado(
-                    archivo = archivo,
-                    lista = lista,
-                    inicial = inicial,
-                    rtl = modo == Modo.MANGA,
-                    alCambiarPagina = { paginaActual = it },
-                    alTocar = alTocar,
-                )
-            }
+                val inicial = paginaActual.coerceIn(0, lista.size - 1)
 
-            if (barraVisible) {
-                Row(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .background(Color(0xCC000000))
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "${paginaActual + 1} / ${lista.size}",
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.onBackground,
+                LaunchedEffect(paginaActual) {
+                    almacen.guardarProgreso(comic.id, paginaActual)
+                }
+
+                val alTocar = { barraVisible = !barraVisible }
+
+                if (modo == Modo.VERTICAL) {
+                    LectorVertical(
+                        archivo = archivo,
+                        lista = lista,
+                        inicial = inicial,
+                        alCambiarPagina = { paginaActual = it },
+                        alTocar = alTocar,
                     )
-                    TextButton(onClick = {
-                        val nuevo = when (modo) {
-                            Modo.MANGA -> Modo.COMIC
-                            Modo.COMIC -> Modo.VERTICAL
-                            Modo.VERTICAL -> Modo.MANGA
-                        }
-                        modo = nuevo
-                        almacen.guardarModo(comic.id, nuevo)
-                        if (nuevo != Modo.VERTICAL) {
-                            almacen.derechaAIzquierda = nuevo == Modo.MANGA
-                        }
-                    }) {
+                } else {
+                    LectorPaginado(
+                        archivo = archivo,
+                        lista = lista,
+                        inicial = inicial,
+                        rtl = modo == Modo.MANGA,
+                        alCambiarPagina = { paginaActual = it },
+                        alTocar = alTocar,
+                    )
+                }
+
+                if (barraVisible) {
+                    Row(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .background(Color(0xCC000000))
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            when (modo) {
-                                Modo.MANGA -> "Manga ←"
-                                Modo.COMIC -> "Cómic →"
-                                Modo.VERTICAL -> "Vertical ↓"
-                            },
+                            "${paginaActual + 1} / ${lista.size}",
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onBackground,
                         )
+                        TextButton(onClick = {
+                            val nuevo = when (modo) {
+                                Modo.MANGA -> Modo.COMIC
+                                Modo.COMIC -> Modo.VERTICAL
+                                Modo.VERTICAL -> Modo.MANGA
+                            }
+                            modo = nuevo
+                            almacen.guardarModo(comic.id, nuevo)
+                            if (nuevo != Modo.VERTICAL) {
+                                almacen.derechaAIzquierda = nuevo == Modo.MANGA
+                            }
+                        }) {
+                            Text(
+                                when (modo) {
+                                    Modo.MANGA -> "Manga ←"
+                                    Modo.COMIC -> "Cómic →"
+                                    Modo.VERTICAL -> "Vertical ↓"
+                                },
+                            )
+                        }
+                        TextButton(onClick = alCerrar) { Text("Cerrar") }
                     }
-                    TextButton(onClick = alCerrar) { Text("Cerrar") }
                 }
             }
         }

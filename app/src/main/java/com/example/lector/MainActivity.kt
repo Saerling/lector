@@ -30,15 +30,20 @@ class MainActivity : ComponentActivity() {
         )
         val almacen = Almacen(applicationContext)
         setContent {
-            LectorTheme {
-                App(almacen)
-            }
+            App(almacen)
         }
     }
 }
 
 @Composable
 fun App(almacen: Almacen) {
+    LectorTheme(acento = colorDePaleta(almacen.paleta)) {
+        Contenido(almacen)
+    }
+}
+
+@Composable
+private fun Contenido(almacen: Almacen) {
     val contexto = LocalContext.current
     val scope = rememberCoroutineScope()
     var comics by remember { mutableStateOf(almacen.cargar()) }

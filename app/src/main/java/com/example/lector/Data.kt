@@ -4,6 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -31,6 +34,25 @@ class Almacen(private val contexto: Context) {
     private val prefs = contexto.getSharedPreferences("lector", Context.MODE_PRIVATE)
     private val carpetaComics = File(contexto.filesDir, "comics").apply { mkdirs() }
     private val carpetaPortadas = File(contexto.filesDir, "portadas").apply { mkdirs() }
+
+    // ---- Apariencia (son "estado" de Compose: al cambiarlos, la app se repinta sola) ----
+    var paleta by mutableStateOf(
+        prefs.getString("paleta", Paletas.porDefecto.nombre) ?: Paletas.porDefecto.nombre,
+    )
+        private set
+
+    fun elegirPaleta(nombre: String) {
+        paleta = nombre
+        prefs.edit().putString("paleta", nombre).apply()
+    }
+
+    var colorPortada by mutableStateOf(prefs.getBoolean("color_portada", true))
+        private set
+
+    fun elegirColorPortada(valor: Boolean) {
+        colorPortada = valor
+        prefs.edit().putBoolean("color_portada", valor).apply()
+    }
 
     fun archivoDe(id: String) = File(carpetaComics, "$id.cbz")
     fun portadaDe(id: String) = File(carpetaPortadas, "$id.jpg")
@@ -126,6 +148,13 @@ class Almacen(private val contexto: Context) {
             if (ids.isNotEmpty()) objeto.put(comicId, JSONArray(ids.toList()))
         }
         prefs.edit().putString("asignaciones", objeto.toString()).apply()
+    }
+
+    // Cambia las categorías de varios cómics a la vez: añade unas y quita otras.
+    fun modificarCategorias(comicIds: Set<String>, agregar: Set<String>, quitar: Set<String>) {
+        val mapa = asignaciones().toMutableMap()
+        comicIds.forEach { id -> mapa[id] = (mapa[id].orEmpty() + agregar) - quitar }
+        guardarAsignaciones(mapa)
     }
 
     fun asignarCategorias(comicId: String, ids: Set<String>) {

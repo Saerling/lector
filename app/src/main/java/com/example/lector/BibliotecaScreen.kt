@@ -1,9 +1,12 @@
 package com.example.lector
 
 import android.graphics.BitmapFactory
+import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -24,11 +28,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -78,17 +84,24 @@ fun BibliotecaScreen(
     var mostrarOcultas by remember { mutableStateOf(false) }
     var menuAbierto by remember { mutableStateOf(false) }
 
-    var porEliminar by remember { mutableStateOf<Comic?>(null) }
-    var opcionesDe by remember { mutableStateOf<Comic?>(null) }
-    var categoriasDe by remember { mutableStateOf<Comic?>(null) }
+    // Selección múltiple: ids de los cómics marcados.
+    var seleccion by remember { mutableStateOf(emptySet<String>()) }
+    var dialogoCategoriasSel by remember { mutableStateOf(false) }
+    var confirmarBorrado by remember { mutableStateOf(false) }
+
     var dialogoOrden by remember { mutableStateOf(false) }
     var dialogoCategorias by remember { mutableStateOf(false) }
+    var dialogoApariencia by remember { mutableStateOf(false) }
     var categoriaNueva by remember { mutableStateOf(false) }
     var renombrando by remember { mutableStateOf<Categoria?>(null) }
 
     fun recargar() {
         categorias = almacen.categorias()
         asignaciones = almacen.asignaciones()
+    }
+
+    fun alternar(id: String) {
+        seleccion = if (id in seleccion) seleccion - id else seleccion + id
     }
 
     // ---- Qué se ve ----
@@ -118,71 +131,137 @@ fun BibliotecaScreen(
     }
     val lista = if (ascendente) ordenados else ordenados.reversed()
 
+    // Solo cuentan los seleccionados que se ven ahora mismo.
+    val seleccionados = lista.filter { it.id in seleccion }
+    val modoSeleccion = seleccionados.isNotEmpty()
+
+    // El botón "atrás" cierra la selección en vez de salir.
+    BackHandler(enabled = modoSeleccion) { seleccion = emptySet() }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = alAnadir,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Text("+", style = MaterialTheme.typography.headlineMedium)
+            if (!modoSeleccion) {
+                FloatingActionButton(
+                    onClick = alAnadir,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Text("+", style = MaterialTheme.typography.headlineMedium)
+                }
             }
         },
     ) { padding ->
         Column(Modifier.padding(padding)) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Mantener pulsado el título muestra u oculta las categorías ocultas.
+            if (modoSeleccion) {
+                // ---- Barra de selección ----
                 Column(
                     Modifier
-                        .weight(1f)
-                        .combinedClickable(
-                            onClick = {},
-                            onLongClick = { mostrarOcultas = !mostrarOcultas },
-                        ),
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
-                    Text(
-                        "Biblioteca",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (mostrarOcultas) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Ocultas visibles",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            if (seleccionados.size == 1) {
+                                "1 seleccionado"
+                            } else {
+                                "${seleccionados.size} seleccionados"
+                            },
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
                         )
+                        TextButton(onClick = { seleccion = emptySet() }) { Text("Cancelar") }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val margen = PaddingValues(horizontal = 8.dp)
+                        TextButton(
+                            onClick = { seleccion = lista.map { it.id }.toSet() },
+                            contentPadding = margen,
+                        ) { Text("Todo") }
+                        TextButton(
+                            onClick = {
+                                seleccion = lista.map { it.id }.toSet() -
+                                    seleccionados.map { it.id }.toSet()
+                            },
+                            contentPadding = margen,
+                        ) { Text("Invertir") }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(
+                            onClick = { dialogoCategoriasSel = true },
+                            contentPadding = margen,
+                        ) { Text("Categorías") }
+                        TextButton(
+                            onClick = { confirmarBorrado = true },
+                            contentPadding = margen,
+                        ) { Text("Eliminar") }
                     }
                 }
-                TextButton(onClick = {
-                    buscando = !buscando
-                    if (!buscando) consulta = ""
-                }) { Text(if (buscando) "Cerrar" else "Buscar") }
-                Box {
-                    TextButton(onClick = { menuAbierto = true }) { Text("⋮") }
-                    DropdownMenu(
-                        expanded = menuAbierto,
-                        onDismissRequest = { menuAbierto = false },
+            } else {
+                // ---- Cabecera normal ----
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Mantener pulsado el título muestra u oculta las categorías ocultas.
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = { mostrarOcultas = !mostrarOcultas },
+                            ),
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Ordenar y filtrar") },
-                            onClick = {
-                                menuAbierto = false
-                                dialogoOrden = true
-                            },
+                        Text(
+                            "Biblioteca",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
                         )
-                        DropdownMenuItem(
-                            text = { Text("Categorías") },
-                            onClick = {
-                                menuAbierto = false
-                                dialogoCategorias = true
-                            },
-                        )
+                        if (mostrarOcultas) {
+                            Text(
+                                "Ocultas visibles",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    TextButton(onClick = {
+                        buscando = !buscando
+                        if (!buscando) consulta = ""
+                    }) { Text(if (buscando) "Cerrar" else "Buscar") }
+                    Box {
+                        TextButton(onClick = { menuAbierto = true }) { Text("⋮") }
+                        DropdownMenu(
+                            expanded = menuAbierto,
+                            onDismissRequest = { menuAbierto = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Ordenar y filtrar") },
+                                onClick = {
+                                    menuAbierto = false
+                                    dialogoOrden = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Categorías") },
+                                onClick = {
+                                    menuAbierto = false
+                                    dialogoCategorias = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Apariencia") },
+                                onClick = {
+                                    menuAbierto = false
+                                    dialogoApariencia = true
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -204,18 +283,23 @@ fun BibliotecaScreen(
             val continuar = visibles.firstOrNull {
                 it.id == almacen.ultimoAbierto && it.ultimaPagina < it.paginas - 1
             }
-            continuar?.let { c ->
-                Button(
-                    onClick = { alAbrir(c) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                ) {
-                    Text(
-                        "Continuar: ${c.titulo} · pág. ${c.ultimaPagina + 1}",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+            if (!modoSeleccion) {
+                continuar?.let { c ->
+                    // El botón toma el color de la portada si esa opción está activada.
+                    TemaPortada(almacen.portadaDe(c.id), almacen.colorPortada) {
+                        Button(
+                            onClick = { alAbrir(c) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                        ) {
+                            Text(
+                                "Continuar: ${c.titulo} · pág. ${c.ultimaPagina + 1}",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -266,8 +350,12 @@ fun BibliotecaScreen(
                         Tarjeta(
                             comic = comic,
                             almacen = almacen,
-                            alAbrir = { alAbrir(comic) },
-                            alMantener = { opcionesDe = comic },
+                            seleccionado = comic.id in seleccion,
+                            // Con la selección activa, tocar marca o desmarca.
+                            alAbrir = {
+                                if (modoSeleccion) alternar(comic.id) else alAbrir(comic)
+                            },
+                            alMantener = { alternar(comic.id) },
                         )
                     }
                 }
@@ -275,34 +363,22 @@ fun BibliotecaScreen(
         }
     }
 
-    // ---- Opciones de un cómic (pulsación larga) ----
-    opcionesDe?.let { comic ->
+    // ---- Categorías de los cómics seleccionados ----
+    if (dialogoCategoriasSel) {
+        val ids = seleccionados.map { it.id }
+        // Para cada categoría: la tienen todos (On), ninguno (Off) o solo algunos (Indeterminate).
+        val inicial = categorias.associate { cat ->
+            val cuantos = ids.count { cat.id in asignaciones[it].orEmpty() }
+            val estado = when {
+                ids.isNotEmpty() && cuantos == ids.size -> ToggleableState.On
+                cuantos == 0 -> ToggleableState.Off
+                else -> ToggleableState.Indeterminate
+            }
+            cat.id to estado
+        }
+        var estados by remember { mutableStateOf(inicial) }
         AlertDialog(
-            onDismissRequest = { opcionesDe = null },
-            title = { Text(comic.titulo, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-            text = {
-                Column {
-                    TextButton(onClick = {
-                        categoriasDe = comic
-                        opcionesDe = null
-                    }) { Text("Categorías…") }
-                    TextButton(onClick = {
-                        porEliminar = comic
-                        opcionesDe = null
-                    }) { Text("Eliminar") }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { opcionesDe = null }) { Text("Cerrar") }
-            },
-        )
-    }
-
-    // ---- Elegir las categorías de un cómic ----
-    categoriasDe?.let { comic ->
-        var marcadas by remember(comic.id) { mutableStateOf(asignaciones[comic.id].orEmpty()) }
-        AlertDialog(
-            onDismissRequest = { categoriasDe = null },
+            onDismissRequest = { dialogoCategoriasSel = false },
             title = { Text("Categorías") },
             text = {
                 if (categorias.isEmpty()) {
@@ -310,19 +386,21 @@ fun BibliotecaScreen(
                 } else {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         categorias.forEach { cat ->
+                            val estado = estados[cat.id] ?: ToggleableState.Off
                             Row(
                                 Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        marcadas = if (cat.id in marcadas) {
-                                            marcadas - cat.id
+                                        val nuevo = if (estado == ToggleableState.On) {
+                                            ToggleableState.Off
                                         } else {
-                                            marcadas + cat.id
+                                            ToggleableState.On
                                         }
+                                        estados = estados + (cat.id to nuevo)
                                     },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Checkbox(checked = cat.id in marcadas, onCheckedChange = null)
+                                TriStateCheckbox(state = estado, onClick = null)
                                 Spacer(Modifier.width(8.dp))
                                 Text(cat.nombre + if (cat.oculta) " (oculta)" else "")
                             }
@@ -332,32 +410,45 @@ fun BibliotecaScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    almacen.asignarCategorias(comic.id, marcadas)
+                    val agregar = estados.filter { it.value == ToggleableState.On }.keys
+                    val quitar = estados.filter { it.value == ToggleableState.Off }.keys
+                    almacen.modificarCategorias(ids.toSet(), agregar, quitar)
                     recargar()
-                    categoriasDe = null
+                    seleccion = emptySet()
+                    dialogoCategoriasSel = false
                 }) { Text("Guardar") }
             },
             dismissButton = {
-                TextButton(onClick = { categoriasDe = null }) { Text("Cancelar") }
+                TextButton(onClick = { dialogoCategoriasSel = false }) { Text("Cancelar") }
             },
         )
     }
 
-    // ---- Eliminar un cómic ----
-    porEliminar?.let { comic ->
+    // ---- Eliminar los cómics seleccionados ----
+    if (confirmarBorrado) {
+        val unico = seleccionados.singleOrNull()
         AlertDialog(
-            onDismissRequest = { porEliminar = null },
+            onDismissRequest = { confirmarBorrado = false },
             title = { Text("Eliminar") },
-            text = { Text("¿Quitar «${comic.titulo}» de la biblioteca?") },
+            text = {
+                Text(
+                    if (unico != null) {
+                        "¿Quitar «${unico.titulo}» de la biblioteca?"
+                    } else {
+                        "¿Quitar ${seleccionados.size} cómics de la biblioteca?"
+                    },
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    alEliminar(comic)
-                    porEliminar = null
+                    seleccionados.forEach { alEliminar(it) }
+                    seleccion = emptySet()
+                    confirmarBorrado = false
                     recargar()
                 }) { Text("Eliminar") }
             },
             dismissButton = {
-                TextButton(onClick = { porEliminar = null }) { Text("Cancelar") }
+                TextButton(onClick = { confirmarBorrado = false }) { Text("Cancelar") }
             },
         )
     }
@@ -397,6 +488,94 @@ fun BibliotecaScreen(
             },
             confirmButton = {
                 TextButton(onClick = { dialogoOrden = false }) { Text("Listo") }
+            },
+        )
+    }
+
+    // ---- Apariencia: paletas y color según la portada ----
+    if (dialogoApariencia) {
+        AlertDialog(
+            onDismissRequest = { dialogoApariencia = false },
+            title = { Text("Apariencia") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("Color de acento", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+
+                    val opciones = Paletas.fijas.map { it.nombre to it.color } +
+                        if (Build.VERSION.SDK_INT >= 31) {
+                            listOf(Paletas.SISTEMA to colorDePaleta(Paletas.SISTEMA))
+                        } else {
+                            emptyList()
+                        }
+
+                    opciones.chunked(4).forEach { fila ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            fila.forEach { (nombre, color) ->
+                                Column(
+                                    Modifier
+                                        .width(60.dp)
+                                        .clickable { almacen.elegirPaleta(nombre) },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(color)
+                                            .then(
+                                                if (almacen.paleta == nombre) {
+                                                    Modifier.border(
+                                                        3.dp,
+                                                        MaterialTheme.colorScheme.onBackground,
+                                                        CircleShape,
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                },
+                                            ),
+                                    )
+                                    Text(
+                                        nombre,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        Text(
+                            "«Sistema» usa los colores de tu fondo de pantalla.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Color según la portada")
+                            Text(
+                                "El lector y el botón Continuar toman el color de la portada.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = almacen.colorPortada,
+                            onCheckedChange = { almacen.elegirColorPortada(it) },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { dialogoApariencia = false }) { Text("Listo") }
             },
         )
     }
@@ -557,6 +736,7 @@ private fun progresoDe(c: Comic): Float =
 private fun Tarjeta(
     comic: Comic,
     almacen: Almacen,
+    seleccionado: Boolean,
     alAbrir: () -> Unit,
     alMantener: () -> Unit,
 ) {
@@ -569,7 +749,18 @@ private fun Tarjeta(
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .then(
+                    if (seleccionado) {
+                        Modifier.border(
+                            3.dp,
+                            MaterialTheme.colorScheme.primary,
+                            RoundedCornerShape(12.dp),
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
         ) {
             if (portada != null) {
                 Image(
@@ -578,6 +769,24 @@ private fun Tarjeta(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+            if (seleccionado) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "✓",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
