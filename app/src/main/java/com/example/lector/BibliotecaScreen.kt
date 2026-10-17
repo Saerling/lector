@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -68,6 +69,24 @@ fun BibliotecaScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
+            // Botón para seguir donde lo dejaste (solo si el último cómic no está terminado).
+            val continuar = remember(comics) {
+                comics.firstOrNull { it.id == almacen.ultimoAbierto && it.ultimaPagina < it.paginas - 1 }
+            }
+            continuar?.let { c ->
+                Button(
+                    onClick = { alAbrir(c) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                ) {
+                    Text(
+                        "Continuar: ${c.titulo} · pág. ${c.ultimaPagina + 1}",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
             if (comics.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(

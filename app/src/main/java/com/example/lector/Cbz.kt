@@ -38,6 +38,63 @@ object Cbz {
             zip.getInputStream(entrada).use { BitmapFactory.decodeStream(it, null, opciones) }
         }
 
+    // Decodifica una página limitando el ANCHO (para tiras verticales muy largas).
+    // También limita los píxeles totales para no agotar la memoria.
+    private fun decodificarAncho(archivo: File, nombre: String, anchoMax: Int): Bitmap? =
+        ZipFile(archivo).use { zip ->
+            val entrada = zip.getEntry(nombre) ?: return@use null
+
+            val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            zip.getInputStream(entrada).use { BitmapFactory.decodeStream(it, null, medidas) }
+            if (medidas.outWidth <= 0) return@use null
+
+            var reduccion = 1
+            while (
+                medidas.outWidth / (reduccion * 2) >= anchoMax ||
+                (medidas.outWidth / reduccion).toLong() * (medidas.outHeight / reduccion) > 16_000_000L
+            ) {
+                reduccion *= 2
+            }
+
+            val opciones = BitmapFactory.Options().apply {
+                inSampleSize = reduccion
+                inPreferredConfig = Bitmap.Config.RGB_565 // la mitad de memoria
+            }
+            zip.getInputStream(entrada).use { BitmapFactory.decodeStream(it, null, opciones) }
+        }
+
+    // Decodifica una página y, si es muy alta, la corta en tiras (la GPU no admite imágenes gigantes).
+    fun decodificarTiras(archivo: File, nombre: String, anchoMax: Int, altoTira: Int): List<Bitmap> {
+        val completo = decodificarAncho(archivo, nombre, anchoMax) ?: return emptyList()
+        if (completo.height <= altoTira) return listOf(completo)
+        val tiras = ArrayList<Bitmap>()
+        var y = 0
+        while (y < completo.height) {
+            val alto = minOf(altoTira, completo.height - y)
+            tiras.add(Bitmap.createBitmap(completo, 0, y, completo.width, alto))
+            y += alto
+        }
+        completo.recycle()
+        return tiras
+    }
+
+    // Detecta si es un webtoon: la mayoría de las primeras páginas son mucho más altas que anchas.
+    fun esWebtoon(archivo: File, paginas: List<String>): Boolean =
+        ZipFile(archivo).use { zip ->
+            var total = 0
+            var largas = 0
+            for (nombre in paginas.take(3)) {
+                val entrada = zip.getEntry(nombre) ?: continue
+                val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                zip.getInputStream(entrada).use { BitmapFactory.decodeStream(it, null, medidas) }
+                if (medidas.outWidth > 0) {
+                    total++
+                    if (medidas.outHeight.toFloat() / medidas.outWidth > 3f) largas++
+                }
+            }
+            total > 0 && largas * 2 > total
+        }
+
     private fun compararNatural(a: String, b: String): Int {
         var i = 0
         var j = 0

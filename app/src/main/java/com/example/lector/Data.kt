@@ -16,6 +16,9 @@ data class Comic(
     val ultimaPagina: Int,
 )
 
+// Cómo se lee un cómic: paginado de derecha a izquierda, de izquierda a derecha, o en tira vertical.
+enum class Modo { MANGA, COMIC, VERTICAL }
+
 // Guarda la biblioteca: copia cada .cbz a la memoria de la app y recuerda el progreso.
 class Almacen(private val contexto: Context) {
     private val prefs = contexto.getSharedPreferences("lector", Context.MODE_PRIVATE)
@@ -28,6 +31,22 @@ class Almacen(private val contexto: Context) {
     var derechaAIzquierda: Boolean
         get() = prefs.getBoolean("rtl", true)
         set(valor) = prefs.edit().putBoolean("rtl", valor).apply()
+
+    // Modo por defecto para cómics nuevos: el último modo paginado que elegiste.
+    fun modoPorDefecto(): Modo = if (derechaAIzquierda) Modo.MANGA else Modo.COMIC
+
+    // Modo elegido a mano para un cómic concreto (null si nunca lo cambiaste).
+    fun modoDe(id: String): Modo? =
+        prefs.getString("modo_$id", null)?.let { runCatching { Modo.valueOf(it) }.getOrNull() }
+
+    fun guardarModo(id: String, modo: Modo) {
+        prefs.edit().putString("modo_$id", modo.name).apply()
+    }
+
+    // Último cómic que abriste, para el botón "Continuar".
+    var ultimoAbierto: String?
+        get() = prefs.getString("ultimo", null)
+        set(valor) = prefs.edit().putString("ultimo", valor).apply()
 
     fun cargar(): List<Comic> {
         val json = JSONArray(prefs.getString("comics", "[]"))
@@ -87,12 +106,15 @@ class Almacen(private val contexto: Context) {
     }
 
     fun guardarProgreso(id: String, pagina: Int) {
+        ultimoAbierto = id
         guardar(cargar().map { if (it.id == id) it.copy(ultimaPagina = pagina) else it })
     }
 
     fun eliminar(id: String) {
         archivoDe(id).delete()
         portadaDe(id).delete()
+        prefs.edit().remove("modo_$id").apply()
+        if (ultimoAbierto == id) ultimoAbierto = null
         guardar(cargar().filter { it.id != id })
     }
 }
