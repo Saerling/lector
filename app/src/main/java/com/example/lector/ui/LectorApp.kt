@@ -54,7 +54,8 @@ fun Inicio(
     var ruta by rememberSaveable { mutableStateOf<Ruta?>(null) }
     var detalleId by rememberSaveable { mutableStateOf<String?>(null) }
     // Explorar / extensiones: gestor único + qué extensión o fuente se está viendo.
-    val ext = remember { ExtManager.obtener(LocalContext.current) }
+    val contexto = LocalContext.current
+    val ext = remember { ExtManager.obtener(contexto) }
     var extPkg by rememberSaveable { mutableStateOf<String?>(null) }
     var fuenteId by rememberSaveable { mutableStateOf<Long?>(null) }
     val hayCapa = ruta != null || detalleId != null
