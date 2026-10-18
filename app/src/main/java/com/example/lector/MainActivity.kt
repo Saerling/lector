@@ -1,7 +1,9 @@
 package com.example.lector
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -18,33 +20,76 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.lector.ui.Inicio
-import com.example.lector.ui.LectorTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private lateinit var almacen: Almacen
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
-        val almacen = Almacen(applicationContext)
+        almacen = Almacen(applicationContext)
+        procesarEnlace(intent)
         setContent {
             App(almacen)
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        procesarEnlace(intent)
+    }
+
+    // Tras iniciar sesión, AniList nos devuelve aquí: lector://anilist#access_token=...
+    private fun procesarEnlace(intent: Intent?) {
+        val datos = intent?.data ?: return
+        if (datos.scheme != "lector" || datos.host != "anilist") return
+        val token = datos.fragment
+            ?.split("&")
+            ?.map { it.split("=", limit = 2) }
+            ?.firstOrNull { it.size == 2 && it[0] == "access_token" }
+            ?.get(1)
+        if (!token.isNullOrEmpty()) {
+            almacen.guardarTokenAnilist(token)
+            Toast.makeText(this, "Sesión de AniList iniciada", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Teclas de volumen: solo se interceptan mientras el lector las tiene activadas.
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (Teclas.activo &&
+            (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)
+        ) {
+            if (event?.repeatCount == 0) {
+                Teclas.eventos.tryEmit(if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) 1 else -1)
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (Teclas.activo &&
+            (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)
+        ) {
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 }
 
@@ -62,7 +107,21 @@ private fun Contenido(almacen: Almacen) {
     var comics by remember { mutableStateOf(almacen.cargar()) }
     var abierto by remember { mutableStateOf<Comic?>(null) }
     var importando by remember { mutableStateOf(false) }
-    var pestana by rememberSaveable { mutableStateOf(LectorTab.Home) }
+
+    // Con sesión de AniList: averigua el nombre de usuario y sube lo que quedó pendiente.
+    // Se repite al volver a la biblioteca.
+    LaunchedEffect(almacen.anilistToken, abierto == null) {
+        val token = almacen.anilistToken
+        if (token != null && abierto == null) {
+            withContext(Dispatchers.IO) {
+                if (almacen.anilistUsuario == null) {
+                    runCatching { Anilist.usuario(token) }.getOrNull()
+                        ?.let { almacen.guardarUsuarioAnilist(it) }
+                }
+                almacen.sincronizarPendientes()
+            }
+        }
+    }
 
     // Añadir un archivo .cbz.
     val selector = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -120,9 +179,7 @@ private fun Contenido(almacen: Almacen) {
 
     val actual = abierto
     if (actual == null) {
-        Inicio(
-            tab = pestana,
-            onTab = { pestana = it },
+        BibliotecaScreen(
             comics = comics,
             almacen = almacen,
             alAnadir = { selector.launch(arrayOf("*/*")) },

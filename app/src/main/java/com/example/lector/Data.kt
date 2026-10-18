@@ -27,6 +27,14 @@ data class Comic(
 // Una categoría para organizar la biblioteca. Si es "oculta", esconde sus cómics.
 data class Categoria(val id: String, val nombre: String, val oculta: Boolean)
 
+// A qué serie de AniList está vinculado un cómic y qué número es (volumen o capítulo).
+data class Seguimiento(
+    val mediaId: Int,
+    val titulo: String,
+    val volumenes: Boolean,
+    val numero: Int,
+)
+
 // Resultado de restaurar una copia de seguridad.
 data class ResultadoRestauracion(val actualizados: Int, val pendientes: Int)
 
@@ -59,6 +67,125 @@ class Almacen(private val contexto: Context) {
     fun elegirColorPortada(valor: Boolean) {
         colorPortada = valor
         prefs.edit().putBoolean("color_portada", valor).apply()
+    }
+
+    // ---- Ajustes del lector ----
+    var zonasToque by mutableStateOf(prefs.getBoolean("zonas_toque", true))
+        private set
+
+    fun elegirZonasToque(valor: Boolean) {
+        zonasToque = valor
+        prefs.edit().putBoolean("zonas_toque", valor).apply()
+    }
+
+    var teclasVolumen by mutableStateOf(prefs.getBoolean("teclas_volumen", false))
+        private set
+
+    fun elegirTeclasVolumen(valor: Boolean) {
+        teclasVolumen = valor
+        prefs.edit().putBoolean("teclas_volumen", valor).apply()
+    }
+
+    var mantenerEncendida by mutableStateOf(prefs.getBoolean("mantener_encendida", true))
+        private set
+
+    fun elegirMantenerEncendida(valor: Boolean) {
+        mantenerEncendida = valor
+        prefs.edit().putBoolean("mantener_encendida", valor).apply()
+    }
+
+    // ---- Seguimiento con AniList ----
+    var anilistClientId by mutableStateOf(prefs.getString("anilist_client", "") ?: "")
+        private set
+
+    fun guardarClientId(valor: String) {
+        anilistClientId = valor
+        prefs.edit().putString("anilist_client", valor).apply()
+    }
+
+    var anilistToken by mutableStateOf<String?>(prefs.getString("anilist_token", null))
+        private set
+
+    var anilistUsuario by mutableStateOf<String?>(prefs.getString("anilist_usuario", null))
+        private set
+
+    fun guardarTokenAnilist(token: String) {
+        anilistToken = token
+        anilistUsuario = null
+        prefs.edit().putString("anilist_token", token).remove("anilist_usuario").apply()
+    }
+
+    fun guardarUsuarioAnilist(nombre: String) {
+        anilistUsuario = nombre
+        prefs.edit().putString("anilist_usuario", nombre).apply()
+    }
+
+    fun cerrarSesionAnilist() {
+        anilistToken = null
+        anilistUsuario = null
+        prefs.edit().remove("anilist_token").remove("anilist_usuario").apply()
+    }
+
+    fun seguimientoDe(id: String): Seguimiento? {
+        val texto = prefs.getString("seg_$id", null) ?: return null
+        return runCatching {
+            val o = JSONObject(texto)
+            Seguimiento(o.getInt("media"), o.getString("titulo"), o.getBoolean("vol"), o.getInt("numero"))
+        }.getOrNull()
+    }
+
+    fun guardarSeguimiento(id: String, seguimiento: Seguimiento?) {
+        val editor = prefs.edit()
+        if (seguimiento == null) {
+            editor.remove("seg_$id")
+            marcarSincronizacion(id, false)
+        } else {
+            editor.putString(
+                "seg_$id",
+                JSONObject()
+                    .put("media", seguimiento.mediaId)
+                    .put("titulo", seguimiento.titulo)
+                    .put("vol", seguimiento.volumenes)
+                    .put("numero", seguimiento.numero)
+                    .toString(),
+            )
+        }
+        editor.apply()
+    }
+
+    // Cómics terminados cuyo progreso aún no se ha podido subir (por ejemplo, sin conexión).
+    fun sincronizacionesPendientes(): List<String> =
+        (prefs.getString("sync_pend", "") ?: "").split(",").filter { it.isNotEmpty() }
+
+    @Synchronized
+    fun marcarSincronizacion(id: String, pendiente: Boolean) {
+        val actuales = sincronizacionesPendientes().toMutableList()
+        actuales.remove(id)
+        if (pendiente) actuales.add(id)
+        prefs.edit().putString("sync_pend", actuales.joinToString(",")).apply()
+    }
+
+    // Sube el progreso de un cómic a AniList. Bloquea: llamar desde un hilo de fondo.
+    // Devuelve true si quedó subido (o no hacía falta).
+    fun sincronizarAnilist(id: String): Boolean {
+        val seguimiento = seguimientoDe(id)
+        if (seguimiento == null) {
+            marcarSincronizacion(id, false)
+            return true
+        }
+        val token = anilistToken ?: return false
+        return try {
+            Anilist.actualizarProgreso(token, seguimiento.mediaId, seguimiento.volumenes, seguimiento.numero)
+            marcarSincronizacion(id, false)
+            true
+        } catch (e: Exception) {
+            marcarSincronizacion(id, true)
+            false
+        }
+    }
+
+    fun sincronizarPendientes() {
+        for (id in sincronizacionesPendientes()) sincronizarAnilist(id)
     }
 
     fun archivoDe(id: String) = File(carpetaComics, "$id.cbz")
@@ -324,7 +451,10 @@ class Almacen(private val contexto: Context) {
                 .put("orden_asc", ordenAscendente)
                 .put("rtl", derechaAIzquierda)
                 .put("paleta", paleta)
-                .put("color_portada", colorPortada),
+                .put("color_portada", colorPortada)
+                .put("zonas_toque", zonasToque)
+                .put("teclas_volumen", teclasVolumen)
+                .put("mantener_encendida", mantenerEncendida),
         )
 
         val cats = JSONArray()
@@ -341,6 +471,16 @@ class Almacen(private val contexto: Context) {
                 .put("ultima", c.ultimaPagina)
                 .put("leido", c.leido)
             modoDe(c.id)?.let { e.put("modo", it.name) }
+            seguimientoDe(c.id)?.let {
+                e.put(
+                    "seguimiento",
+                    JSONObject()
+                        .put("media", it.mediaId)
+                        .put("titulo", it.titulo)
+                        .put("vol", it.volumenes)
+                        .put("numero", it.numero),
+                )
+            }
             val nombresDelComic = JSONArray()
             asign[c.id].orEmpty().mapNotNull { nombres[it] }.forEach { nombresDelComic.put(it) }
             e.put("categorias", nombresDelComic)
@@ -384,6 +524,13 @@ class Almacen(private val contexto: Context) {
         val modo = e.optString("modo")
         if (modo.isNotEmpty() && modoDe(local.id) == null) {
             runCatching { Modo.valueOf(modo) }.getOrNull()?.let { guardarModo(local.id, it) }
+        }
+
+        val seg = e.optJSONObject("seguimiento")
+        if (seg != null && seguimientoDe(local.id) == null) {
+            runCatching {
+                Seguimiento(seg.getInt("media"), seg.getString("titulo"), seg.getBoolean("vol"), seg.getInt("numero"))
+            }.getOrNull()?.let { guardarSeguimiento(local.id, it) }
         }
 
         val arreglo = e.optJSONArray("categorias")
@@ -430,6 +577,9 @@ class Almacen(private val contexto: Context) {
             val nombrePaleta = a.optString("paleta")
             if (nombrePaleta.isNotEmpty()) elegirPaleta(nombrePaleta)
             if (a.has("color_portada")) elegirColorPortada(a.getBoolean("color_portada"))
+            if (a.has("zonas_toque")) elegirZonasToque(a.getBoolean("zonas_toque"))
+            if (a.has("teclas_volumen")) elegirTeclasVolumen(a.getBoolean("teclas_volumen"))
+            if (a.has("mantener_encendida")) elegirMantenerEncendida(a.getBoolean("mantener_encendida"))
         }
 
         val cats = categorias().toMutableList()
@@ -475,7 +625,8 @@ class Almacen(private val contexto: Context) {
     fun eliminar(id: String) {
         archivoDe(id).delete()
         portadaDe(id).delete()
-        prefs.edit().remove("modo_$id").apply()
+        prefs.edit().remove("modo_$id").remove("seg_$id").apply()
+        marcarSincronizacion(id, false)
         if (ultimoAbierto == id) ultimoAbierto = null
         guardarAsignaciones(asignaciones() - id)
         guardar(cargar().filter { it.id != id })

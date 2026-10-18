@@ -1,6 +1,8 @@
 package com.example.lector
 
+import android.content.Intent
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -52,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +66,9 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -102,11 +108,15 @@ fun BibliotecaScreen(
     var dialogoApariencia by remember { mutableStateOf(false) }
     var categoriaNueva by remember { mutableStateOf(false) }
     var renombrando by remember { mutableStateOf<Categoria?>(null) }
+    var dialogoLector by remember { mutableStateOf(false) }
+    var dialogoAnilist by remember { mutableStateOf(false) }
+    var comicSeguimiento by remember { mutableStateOf<Comic?>(null) }
     var dialogoAnadir by remember { mutableStateOf(false) }
     var dialogoCopia by remember { mutableStateOf(false) }
     var resultadoCopia by remember { mutableStateOf<String?>(null) }
 
     val contexto = LocalContext.current
+    val ambito = rememberCoroutineScope()
 
     fun recargar() {
         categorias = almacen.categorias()
@@ -255,6 +265,12 @@ fun BibliotecaScreen(
                             contentPadding = margen,
                         ) { Text("Eliminar") }
                     }
+                    if (seleccionados.size == 1) {
+                        TextButton(
+                            onClick = { comicSeguimiento = seleccionados.first() },
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                        ) { Text("Seguimiento…") }
+                    }
                 }
             } else {
                 // ---- Cabecera normal ----
@@ -315,6 +331,20 @@ fun BibliotecaScreen(
                                 onClick = {
                                     menuAbierto = false
                                     dialogoApariencia = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Lector") },
+                                onClick = {
+                                    menuAbierto = false
+                                    dialogoLector = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Seguimiento (AniList)") },
+                                onClick = {
+                                    menuAbierto = false
+                                    dialogoAnilist = true
                                 },
                             )
                             DropdownMenuItem(
@@ -643,6 +673,235 @@ fun BibliotecaScreen(
         )
     }
 
+    // ---- Ajustes del lector ----
+    if (dialogoLector) {
+        AlertDialog(
+            onDismissRequest = { dialogoLector = false },
+            title = { Text("Lector") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    FilaInterruptor(
+                        titulo = "Tocar los bordes para pasar de página",
+                        detalle = "Izquierda y derecha cambian de página; el centro muestra " +
+                            "u oculta la barra.",
+                        activado = almacen.zonasToque,
+                        alCambiar = { almacen.elegirZonasToque(it) },
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    FilaInterruptor(
+                        titulo = "Teclas de volumen",
+                        detalle = "Bajar el volumen avanza y subirlo retrocede.",
+                        activado = almacen.teclasVolumen,
+                        alCambiar = { almacen.elegirTeclasVolumen(it) },
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    FilaInterruptor(
+                        titulo = "Mantener la pantalla encendida",
+                        detalle = null,
+                        activado = almacen.mantenerEncendida,
+                        alCambiar = { almacen.elegirMantenerEncendida(it) },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { dialogoLector = false }) { Text("Listo") }
+            },
+        )
+    }
+
+    // ---- Cuenta de AniList ----
+    if (dialogoAnilist) {
+        var clientId by remember { mutableStateOf(almacen.anilistClientId) }
+        AlertDialog(
+            onDismissRequest = { dialogoAnilist = false },
+            title = { Text("Seguimiento (AniList)") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    if (almacen.anilistToken != null) {
+                        Text("Conectado como ${almacen.anilistUsuario ?: "…"}")
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Vincula un cómic a su serie manteniéndolo pulsado y eligiendo " +
+                                "«Seguimiento…». Al llegar a su última página, se sube el progreso.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        TextButton(onClick = { almacen.cerrarSesionAnilist() }) {
+                            Text("Cerrar sesión")
+                        }
+                    } else {
+                        Text(
+                            "1. En anilist.co → Settings → Developer, crea una aplicación " +
+                                "con la URL de redirección  lector://anilist\n" +
+                                "2. Pega aquí su Client ID (un número) y pulsa «Iniciar sesión».",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = clientId,
+                            onValueChange = { clientId = it.filter { c -> c.isDigit() } },
+                            singleLine = true,
+                            label = { Text("Client ID") },
+                        )
+                        TextButton(
+                            enabled = clientId.isNotEmpty(),
+                            onClick = {
+                                almacen.guardarClientId(clientId)
+                                contexto.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(Anilist.urlDeLogin(clientId))),
+                                )
+                            },
+                        ) { Text("Iniciar sesión") }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { dialogoAnilist = false }) { Text("Cerrar") }
+            },
+        )
+    }
+
+    // ---- Vincular un cómic con una serie de AniList ----
+    comicSeguimiento?.let { comic ->
+        val vinculoInicial = remember(comic.id) { almacen.seguimientoDe(comic.id) }
+        var elegido by remember(comic.id) {
+            mutableStateOf(vinculoInicial?.let { it.mediaId to it.titulo })
+        }
+        var porVolumenes by remember(comic.id) { mutableStateOf(vinculoInicial?.volumenes ?: true) }
+        var numero by remember(comic.id) {
+            mutableStateOf((vinculoInicial?.numero ?: numeroDeTitulo(comic.titulo))?.toString() ?: "")
+        }
+        var busqueda by remember(comic.id) { mutableStateOf(comic.titulo) }
+        var resultados by remember(comic.id) { mutableStateOf(emptyList<ResultadoAnilist>()) }
+        var cargandoBusqueda by remember(comic.id) { mutableStateOf(false) }
+        var errorBusqueda by remember(comic.id) { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { comicSeguimiento = null },
+            title = { Text("Seguimiento") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        comic.titulo,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val serie = elegido
+                    if (serie != null) {
+                        Text("Serie en AniList", fontWeight = FontWeight.Bold)
+                        Text(serie.second)
+                        TextButton(onClick = { elegido = null }) { Text("Cambiar serie") }
+                        Spacer(Modifier.height(8.dp))
+                        Text("Este archivo es un…", fontWeight = FontWeight.Bold)
+                        FilaOpcion(etiqueta = "Volumen", marcada = porVolumenes) {
+                            porVolumenes = true
+                        }
+                        FilaOpcion(etiqueta = "Capítulo", marcada = !porVolumenes) {
+                            porVolumenes = false
+                        }
+                        OutlinedTextField(
+                            value = numero,
+                            onValueChange = { numero = it.filter { c -> c.isDigit() }.take(5) },
+                            singleLine = true,
+                            label = { Text("Número") },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Al terminarlo, AniList marcará hasta ese " +
+                                (if (porVolumenes) "volumen." else "capítulo."),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (almacen.anilistToken == null) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Aún no has iniciado sesión: ⋮ → Seguimiento (AniList).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = busqueda,
+                            onValueChange = { busqueda = it },
+                            singleLine = true,
+                            label = { Text("Buscar en AniList") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Button(
+                            enabled = busqueda.isNotBlank() && !cargandoBusqueda,
+                            onClick = {
+                                ambito.launch {
+                                    cargandoBusqueda = true
+                                    errorBusqueda = null
+                                    val respuesta = withContext(Dispatchers.IO) {
+                                        runCatching { Anilist.buscar(busqueda) }
+                                    }
+                                    respuesta
+                                        .onSuccess { resultados = it }
+                                        .onFailure {
+                                            errorBusqueda = "No se pudo buscar. Revisa tu conexión."
+                                        }
+                                    cargandoBusqueda = false
+                                }
+                            },
+                        ) { Text(if (cargandoBusqueda) "Buscando…" else "Buscar") }
+                        errorBusqueda?.let {
+                            Text(it, color = MaterialTheme.colorScheme.error)
+                        }
+                        resultados.forEach { r ->
+                            Text(
+                                r.titulo + (r.formato?.let { " · $it" } ?: ""),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { elegido = r.id to r.titulo }
+                                    .padding(vertical = 8.dp),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = elegido != null && numero.isNotEmpty(),
+                    onClick = {
+                        val serie = elegido
+                        val n = numero.toIntOrNull()
+                        if (serie != null && n != null) {
+                            almacen.guardarSeguimiento(
+                                comic.id,
+                                Seguimiento(serie.first, serie.second, porVolumenes, n),
+                            )
+                            // Si ya lo habías terminado, sube el progreso ahora.
+                            if (comic.ultimaPagina >= comic.paginas - 1) {
+                                almacen.marcarSincronizacion(comic.id, true)
+                                ambito.launch {
+                                    withContext(Dispatchers.IO) { almacen.sincronizarAnilist(comic.id) }
+                                }
+                            }
+                            comicSeguimiento = null
+                        }
+                    },
+                ) { Text("Guardar") }
+            },
+            dismissButton = {
+                Row {
+                    if (vinculoInicial != null) {
+                        TextButton(onClick = {
+                            almacen.guardarSeguimiento(comic.id, null)
+                            comicSeguimiento = null
+                        }) { Text("Desvincular") }
+                    }
+                    TextButton(onClick = { comicSeguimiento = null }) { Text("Cancelar") }
+                }
+            },
+        )
+    }
+
     // ---- Añadir: archivo o carpeta ----
     if (dialogoAnadir) {
         AlertDialog(
@@ -839,6 +1098,38 @@ private fun FilaOpcion(etiqueta: String, marcada: Boolean, alElegir: () -> Unit)
         Spacer(Modifier.width(8.dp))
         Text(etiqueta)
     }
+}
+
+@Composable
+private fun FilaInterruptor(
+    titulo: String,
+    detalle: String?,
+    activado: Boolean,
+    alCambiar: (Boolean) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(titulo)
+            if (detalle != null) {
+                Text(
+                    detalle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Switch(checked = activado, onCheckedChange = alCambiar)
+    }
+}
+
+// Intenta adivinar el número de volumen o capítulo a partir del título ("Vol. 3", "Cap 12"...).
+// Es solo una sugerencia: se puede corregir a mano.
+private fun numeroDeTitulo(titulo: String): Int? {
+    val conPrefijo = Regex("(?i)(?:vol(?:umen|ume)?|cap(?:[ií]tulo)?|ch(?:apter)?|[vc#])[ .]*0*(\\d+)")
+        .find(titulo)
+    if (conPrefijo != null) return conPrefijo.groupValues[1].toIntOrNull()
+    return Regex("(\\d+)").findAll(titulo).lastOrNull()?.groupValues?.get(1)?.toIntOrNull()
 }
 
 private fun nombreOrden(o: Orden): String = when (o) {

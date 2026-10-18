@@ -1,12 +1,14 @@
 package com.example.lector
 
 import android.app.Activity
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -32,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -45,6 +48,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -52,6 +56,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -59,8 +65,17 @@ import java.io.File
 private const val ZOOM_MAXIMO = 5f
 private const val ZOOM_DOBLE_TOQUE = 2.5f
 
+// Las teclas de volumen las recibe la actividad y las reenvía al lector.
+// +1 = página siguiente (bajar volumen), -1 = anterior (subir volumen).
+object Teclas {
+    @Volatile
+    var activo = false
+    val eventos = MutableSharedFlow<Int>(extraBufferCapacity = 8)
+}
+
 @Composable
 fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
+    val contexto = LocalContext.current
     val archivo = remember(comic.id) { almacen.archivoDe(comic.id) }
     var paginas by remember(comic.id) { mutableStateOf<List<String>?>(null) }
     var modo by remember(comic.id) { mutableStateOf(Modo.MANGA) }
@@ -69,6 +84,8 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
 
     // Oculta o muestra las barras del sistema junto con nuestra barra inferior.
     PantallaCompleta(oculta = !barraVisible)
+    PantallaEncendida(activa = almacen.mantenerEncendida)
+    TeclasVolumen(activas = almacen.teclasVolumen)
 
     LaunchedEffect(comic.id) {
         val lista = withContext(Dispatchers.IO) { Cbz.paginas(archivo) }
@@ -92,6 +109,22 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
                     almacen.guardarProgreso(comic.id, paginaActual)
                 }
 
+                // Al llegar a la última página, sube el progreso a AniList (si está vinculado).
+                // Si no hay conexión, queda pendiente y se reintenta más tarde.
+                LaunchedEffect(paginaActual) {
+                    if (paginaActual >= lista.size - 1 && almacen.seguimientoDe(comic.id) != null) {
+                        almacen.marcarSincronizacion(comic.id, true)
+                        val subido = withContext(Dispatchers.IO) {
+                            almacen.sincronizarAnilist(comic.id)
+                        }
+                        Toast.makeText(
+                            contexto,
+                            if (subido) "AniList actualizado" else "AniList: se reintentará más tarde",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
+
                 val alTocar = { barraVisible = !barraVisible }
 
                 if (modo == Modo.VERTICAL) {
@@ -108,6 +141,7 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
                         lista = lista,
                         inicial = inicial,
                         rtl = modo == Modo.MANGA,
+                    zonas = almacen.zonasToque,
                         alCambiarPagina = { paginaActual = it },
                         alTocar = alTocar,
                     )
@@ -157,19 +191,30 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
 }
 
 // Modo paginado: una página por pantalla, con zoom.
+// Con "zonas" activadas, tocar el borde izquierdo o derecho cambia de página
+// y el centro muestra u oculta la barra.
 @Composable
 private fun LectorPaginado(
     archivo: File,
     lista: List<String>,
     inicial: Int,
     rtl: Boolean,
+    zonas: Boolean,
     alCambiarPagina: (Int) -> Unit,
     alTocar: () -> Unit,
 ) {
     val estado = rememberPagerState(initialPage = inicial) { lista.size }
+    val ambito = rememberCoroutineScope()
 
     LaunchedEffect(estado.currentPage) {
         alCambiarPagina(estado.currentPage)
+    }
+
+    // Teclas de volumen (si están activadas): bajar = siguiente, subir = anterior.
+    LaunchedEffect(estado) {
+        Teclas.eventos.collect { delta ->
+            estado.animateScrollToPage((estado.currentPage + delta).coerceIn(0, lista.size - 1))
+        }
     }
 
     HorizontalPager(
@@ -177,7 +222,20 @@ private fun LectorPaginado(
         reverseLayout = rtl,
         modifier = Modifier.fillMaxSize(),
     ) { indice ->
-        Pagina(archivo, lista[indice], alTocar)
+        Pagina(archivo, lista[indice]) { fraccion ->
+            // En modo manga (derecha a izquierda), el borde izquierdo avanza.
+            val avanzar = if (rtl) fraccion < 0.3f else fraccion > 0.7f
+            val retroceder = if (rtl) fraccion > 0.7f else fraccion < 0.3f
+            when {
+                zonas && avanzar -> ambito.launch {
+                    estado.animateScrollToPage((estado.currentPage + 1).coerceAtMost(lista.size - 1))
+                }
+                zonas && retroceder -> ambito.launch {
+                    estado.animateScrollToPage((estado.currentPage - 1).coerceAtLeast(0))
+                }
+                else -> alTocar()
+            }
+        }
     }
 }
 
@@ -194,6 +252,13 @@ private fun LectorVertical(
 
     LaunchedEffect(estado) {
         snapshotFlow { estado.firstVisibleItemIndex }.collect { alCambiarPagina(it) }
+    }
+
+    // Teclas de volumen (si están activadas): desplazan casi una pantalla.
+    LaunchedEffect(estado) {
+        Teclas.eventos.collect { delta ->
+            estado.animateScrollBy(estado.layoutInfo.viewportSize.height * 0.9f * delta)
+        }
     }
 
     LazyColumn(
@@ -245,7 +310,7 @@ private fun PaginaVertical(archivo: File, nombre: String) {
 }
 
 @Composable
-private fun Pagina(archivo: File, nombre: String, alTocar: () -> Unit) {
+private fun Pagina(archivo: File, nombre: String, alToque: (Float) -> Unit) {
     var imagen by remember(nombre) { mutableStateOf<ImageBitmap?>(null) }
     var escala by remember(nombre) { mutableFloatStateOf(1f) }
     var desplazamiento by remember(nombre) { mutableStateOf(Offset.Zero) }
@@ -264,7 +329,7 @@ private fun Pagina(archivo: File, nombre: String, alTocar: () -> Unit) {
             // tocado o vuelve al tamaño normal.
             .pointerInput(nombre) {
                 detectTapGestures(
-                    onTap = { alTocar() },
+                    onTap = { toque -> alToque(toque.x / size.width.toFloat()) },
                     onDoubleTap = { toque ->
                         if (escala > 1f) {
                             escala = 1f
@@ -361,5 +426,24 @@ private fun PantallaCompleta(oculta: Boolean) {
         onDispose {
             control?.show(WindowInsetsCompat.Type.systemBars())
         }
+    }
+}
+
+// Mantiene la pantalla encendida mientras lees.
+@Composable
+private fun PantallaEncendida(activa: Boolean) {
+    val vista = LocalView.current
+    DisposableEffect(activa) {
+        vista.keepScreenOn = activa
+        onDispose { vista.keepScreenOn = false }
+    }
+}
+
+// Avisa a la actividad de que debe interceptar las teclas de volumen.
+@Composable
+private fun TeclasVolumen(activas: Boolean) {
+    DisposableEffect(activas) {
+        Teclas.activo = activas
+        onDispose { Teclas.activo = false }
     }
 }
