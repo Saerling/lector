@@ -29,11 +29,15 @@ import com.example.lector.Comic
 enum class Ruta {
     Categorias, Estadisticas, Datos, Ajustes, Apariencia, AjBiblioteca, AjSeguimiento,
     // Explorar / extensiones (paso 3)
-    ListadosExt, ExtDetalle, FuenteDetalle
+    ListadosExt, ExtDetalle, FuenteDetalle,
+    // Ficha de un manga de una fuente + lector online (paso 5)
+    Ficha, LeerOnline
 }
 
 fun Ruta.padre(): Ruta? = when (this) {
     Ruta.Apariencia, Ruta.AjBiblioteca, Ruta.AjSeguimiento -> Ruta.Ajustes
+    Ruta.Ficha -> Ruta.FuenteDetalle
+    Ruta.LeerOnline -> Ruta.Ficha
     else -> null
 }
 

@@ -139,6 +139,29 @@ portadas (`NavegarFuente` en `ui/ExtPantallas.kt`, ya existía) y la pestaña *N
 
 ---
 
+## 2c. PASO 5 — Ficha del manga, capítulos, leer online y descargar .cbz (escrito 2026-10-18, **SIN compilar ni probar**)
+Estado de partida: el paso 4 compila y corre; las fuentes (p. ej. AnzManga, CapibaraTraductor) listan Populares con portadas.
+Los títulos no se abrían. Ahora sí.
+
+| Archivo | Qué hace |
+|---|---|
+| `ext/Motor.kt` | + modelos `DetalleManga`, `CapituloFuente`, `FichaManga`; `MotorFuentes` gana `ficha()`, `cantidadPaginas()`, `imagenPagina()`, `descargarCbz()` |
+| `ext/MotorExt.kt` | implementa lo anterior con `Source.getMangaUpdate(manga, [], true, true)`, `getPageList`, `HttpSource.getImageUrl/getImage` (cliente de la propia fuente, así valen cookies/Cloudflare/descifrado). Caché de páginas por `fuenteId|capítulo`. `descargarCbz` empaqueta `0001.jpg…` en un zip |
+| `Data.kt` | + `Almacen.importarArchivo(File, titulo)` (copia un .cbz del disco a la biblioteca y lo registra) |
+| `ui/FuenteManga.kt` | **NUEVO.** `FichaMangaScreen` (portada, autor, estado, descripción, géneros, lista de capítulos, botón «Empezar a leer», botón **CBZ** por capítulo → descarga e importa a la biblioteca) y `LeerOnlineScreen` (tira vertical tipo webtoon con carga perezosa por página, reintento al tocar, caché por bytes, botones Anterior/Siguiente) |
+| `ui/Mas.kt` | `enum Ruta` + `Ficha`, `LeerOnline` (`padre()`: LeerOnline→Ficha→FuenteDetalle) |
+| `ui/ExtPantallas.kt` | tocar una portada llama a `onManga(MangaFuente)` |
+| `ui/LectorApp.kt` | estado `mangaSel`, `capsLectura`, `capIndice` (en `remember`, no sobreviven a muerte de proceso) y las dos ramas nuevas |
+
+Supuestos / límites (léelos):
+- «Siguiente» = capítulo de índice menor, asumiendo que la fuente lista lo más nuevo primero. Si una fuente lo invierte, los botones salen al revés. «Empezar a leer» abre el último de la lista.
+- No hay progreso de lectura online, ni biblioteca vinculada a la fuente, ni marcar leído, ni modo paginado/RTL en el lector online (solo tira vertical).
+- Al volver de la ficha a la lista de la fuente, la lista se recarga desde la página 1.
+- Descargar es capítulo a capítulo (no hay «descargar todo» ni cola).
+- Solo fuentes `HttpSource` (las demás darán error).
+
+---
+
 ## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.

@@ -456,6 +456,14 @@ class Almacen(private val contexto: Context) {
         return registrar(id, archivo, nombre.substringBeforeLast('.'))
     }
 
+    // Añade a la biblioteca un .cbz que ya tenemos en disco (p. ej. un capítulo descargado de una fuente).
+    fun importarArchivo(origen: File, titulo: String): Comic? {
+        val id = UUID.randomUUID().toString()
+        val archivo = archivoDe(id)
+        origen.copyTo(archivo, overwrite = true)
+        return registrar(id, archivo, titulo)
+    }
+
     // Convierte una carpeta de imágenes (elegida con el selector de carpetas) en un cómic.
     // Por dentro la empaqueta como .cbz, así el resto de la app funciona igual.
     fun importarCarpeta(arbol: Uri): Comic? {

@@ -11,6 +11,9 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.source.model.SChapter
+import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.ChildFirstPathClassLoader
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +24,10 @@ import uy.kohesive.injekt.api.InjektModule
 import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addSingleton
 import uy.kohesive.injekt.api.addSingletonFactory
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * Motor de fuentes real: carga el APK de una extensión (de confianza) con el source-api de Komikku
@@ -104,6 +110,83 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         withContext(Dispatchers.IO) {
             fuenteReal(fuente).getSearchManga(pagina, consulta, FilterList()).aPagina()
         }
+
+    // ---- Ficha, capítulos y páginas ----
+
+    private val paginasCache = ConcurrentHashMap<String, List<Page>>()
+
+    private fun sManga(m: MangaFuente) = SManga.create().apply { url = m.url; title = m.titulo }
+
+    private fun sCapitulo(c: CapituloFuente) = SChapter.create().apply {
+        url = c.url; name = c.nombre; date_upload = c.fecha; chapter_number = c.numero; scanlator = c.scanlator
+    }
+
+    override suspend fun ficha(fuente: FuenteUI, manga: MangaFuente): FichaManga = withContext(Dispatchers.IO) {
+        val s = fuenteReal(fuente)
+        val r = s.getMangaUpdate(sManga(manga), emptyList(), fetchDetails = true, fetchChapters = true)
+        val m = r.manga
+        FichaManga(
+            detalle = DetalleManga(
+                titulo = m.title.ifBlank { manga.titulo },
+                autor = m.author?.takeIf { it.isNotBlank() },
+                artista = m.artist?.takeIf { it.isNotBlank() },
+                descripcion = m.description?.takeIf { it.isNotBlank() },
+                generos = m.getGenres().orEmpty(),
+                estado = m.status,
+                portadaUrl = m.thumbnail_url ?: manga.portadaUrl,
+            ),
+            capitulos = r.chapters.map {
+                CapituloFuente(it.url, it.name, it.date_upload, it.scanlator?.takeIf { x -> x.isNotBlank() }, it.chapter_number)
+            },
+        )
+    }
+
+    private suspend fun paginasDe(fuente: FuenteUI, capitulo: CapituloFuente): List<Page> {
+        val clave = "${fuente.id}|${capitulo.url}"
+        paginasCache[clave]?.let { return it }
+        val lista = fuenteReal(fuente).getPageList(sCapitulo(capitulo))
+        paginasCache[clave] = lista
+        return lista
+    }
+
+    override suspend fun cantidadPaginas(fuente: FuenteUI, capitulo: CapituloFuente): Int =
+        withContext(Dispatchers.IO) { paginasDe(fuente, capitulo).size }
+
+    override suspend fun imagenPagina(fuente: FuenteUI, capitulo: CapituloFuente, indice: Int): ByteArray =
+        withContext(Dispatchers.IO) {
+            val src = fuenteReal(fuente) as? HttpSource ?: error("${fuente.nombre} no es una fuente web")
+            val pagina = paginasDe(fuente, capitulo).getOrNull(indice) ?: error("Página $indice fuera de rango")
+            if (pagina.imageUrl.isNullOrEmpty()) pagina.imageUrl = src.getImageUrl(pagina)
+            src.getImage(pagina).use { it.body.bytes() }
+        }
+
+    override suspend fun descargarCbz(
+        fuente: FuenteUI, capitulo: CapituloFuente, destino: File, progreso: (Int, Int) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val total = paginasDe(fuente, capitulo).size
+        require(total > 0) { "El capítulo no tiene páginas" }
+        val tmp = File(destino.parentFile, destino.name + ".tmp")
+        try {
+            ZipOutputStream(tmp.outputStream().buffered()).use { zip ->
+                for (i in 0 until total) {
+                    val bytes = imagenPagina(fuente, capitulo, i)
+                    val ext = when {
+                        bytes.size > 4 && bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() -> "png"
+                        bytes.size > 12 && bytes[0] == 'R'.code.toByte() && bytes[8] == 'W'.code.toByte() -> "webp"
+                        else -> "jpg"
+                    }
+                    zip.putNextEntry(ZipEntry("%04d.%s".format(i + 1, ext)))
+                    zip.write(bytes)
+                    zip.closeEntry()
+                    progreso(i + 1, total)
+                }
+            }
+            destino.delete()
+            check(tmp.renameTo(destino)) { "No se pudo guardar el archivo" }
+        } finally {
+            tmp.delete()
+        }
+    }
 
     override fun cabeceras(fuente: FuenteUI): Map<String, String> = runCatching {
         val h = (fuenteReal(fuente) as? HttpSource)?.headers ?: return emptyMap()

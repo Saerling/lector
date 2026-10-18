@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import com.example.lector.Almacen
 import com.example.lector.BibliotecaScreen
 import com.example.lector.Comic
+import com.example.lector.ext.CapituloFuente
+import com.example.lector.ext.MangaFuente
 import com.example.lector.HistorialScreen
 import com.example.lector.ext.ExtManager
 
@@ -58,6 +60,10 @@ fun Inicio(
     val ext = remember { ExtManager.obtener(contexto) }
     var extPkg by rememberSaveable { mutableStateOf<String?>(null) }
     var fuenteId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Manga abierto desde una fuente y capítulos que se están leyendo online.
+    var mangaSel by remember { mutableStateOf<MangaFuente?>(null) }
+    var capsLectura by remember { mutableStateOf<List<CapituloFuente>>(emptyList()) }
+    var capIndice by remember { mutableStateOf(0) }
     val hayCapa = ruta != null || detalleId != null
 
     BackHandler(enabled = ruta != null && detalleId == null) { ruta = ruta?.padre() }
@@ -144,7 +150,22 @@ fun Inicio(
                     Ruta.AjSeguimiento -> AjSeguimientoScreen(almacen) { ruta = Ruta.Ajustes }
                     Ruta.ListadosExt -> ListadosExtScreen(ext) { ruta = null }
                     Ruta.ExtDetalle -> ExtDetalleScreen(ext, extPkg.orEmpty()) { ruta = null }
-                    Ruta.FuenteDetalle -> FuenteDetalleScreen(ext, fuenteId ?: 0L) { ruta = null }
+                    Ruta.FuenteDetalle -> FuenteDetalleScreen(
+                        ext, fuenteId ?: 0L,
+                        onManga = { mangaSel = it; ruta = Ruta.Ficha },
+                    ) { ruta = null }
+                    Ruta.Ficha -> {
+                        val m = mangaSel
+                        if (m == null) Box(Modifier.fillMaxSize().background(LectorColors.Bg))
+                        else FichaMangaScreen(
+                            ext, fuenteId ?: 0L, m, almacen, alRecargar,
+                            onBack = { ruta = Ruta.FuenteDetalle },
+                            onLeer = { caps, i -> capsLectura = caps; capIndice = i; ruta = Ruta.LeerOnline },
+                        )
+                    }
+                    Ruta.LeerOnline -> LeerOnlineScreen(
+                        ext, fuenteId ?: 0L, capsLectura, capIndice,
+                    ) { ruta = Ruta.Ficha }
                 }
             }
         }

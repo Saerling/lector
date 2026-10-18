@@ -228,7 +228,7 @@ private fun Dato(etiqueta: String, valor: String) {
 // ───────────────────── Una fuente ─────────────────────
 
 @Composable
-fun FuenteDetalleScreen(ext: ExtManager, fuenteId: Long, onBack: () -> Unit) {
+fun FuenteDetalleScreen(ext: ExtManager, fuenteId: Long, onManga: (MangaFuente) -> Unit, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val f = ext.fuentes.firstOrNull { it.id == fuenteId }
     val motor = Motor.actual
@@ -250,12 +250,12 @@ fun FuenteDetalleScreen(ext: ExtManager, fuenteId: Long, onBack: () -> Unit) {
                 LectorType.Label, Modifier.padding(24.dp), color = LectorColors.Muted
             )
         }
-        else -> NavegarFuente(f, motor, onBack)
+        else -> NavegarFuente(f, motor, onManga, onBack)
     }
 }
 
 @Composable
-private fun NavegarFuente(f: FuenteUI, motor: MotorFuentes, onBack: () -> Unit) {
+private fun NavegarFuente(f: FuenteUI, motor: MotorFuentes, onManga: (MangaFuente) -> Unit, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var modo by rememberSaveable { mutableStateOf(0) } // 0 populares · 1 recientes · 2 búsqueda
     var consulta by rememberSaveable { mutableStateOf("") }
@@ -306,7 +306,7 @@ private fun NavegarFuente(f: FuenteUI, motor: MotorFuentes, onBack: () -> Unit) 
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             items(lista) { m ->
-                Column {
+                Column(Modifier.pressable { onManga(m) }) {
                     ImagenRemota(
                         m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)),
                         motor.cabeceras(f)
