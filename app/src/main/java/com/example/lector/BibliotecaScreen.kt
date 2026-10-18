@@ -90,8 +90,12 @@ fun BibliotecaScreen(
     alAbrir: (Comic) -> Unit,
     alEliminar: (Comic) -> Unit,
     alRecargar: () -> Unit,
-    pestana: Int, // 0 = biblioteca, 1 = historial (la guarda la actividad para no perderla al leer)
-    alCambiarPestana: (Int) -> Unit,
+    // 0 = biblioteca, 1 = historial (la guarda la actividad para no perderla al leer).
+    pestana: Int = 0,
+    alCambiarPestana: (Int) -> Unit = {},
+    // Con false se oculta la barra Biblioteca/Historial (la app ya tiene su propia barra)
+    // y el historial se abre desde el menú ⋮.
+    conNavegacion: Boolean = true,
 ) {
     var categorias by remember { mutableStateOf(almacen.categorias()) }
     var asignaciones by remember { mutableStateOf(almacen.asignaciones()) }
@@ -227,7 +231,7 @@ fun BibliotecaScreen(
             }
         },
         bottomBar = {
-            if (!modoSeleccion) {
+            if (!modoSeleccion && conNavegacion) {
                 NavigationBar {
                     NavigationBarItem(
                         selected = pestana == 0,
@@ -247,12 +251,14 @@ fun BibliotecaScreen(
     ) { padding ->
         if (pestana == 1) {
             // Los cómics de categorías ocultas tampoco aparecen en el historial.
+            val volverABiblioteca: () -> Unit = { alCambiarPestana(0) }
             HistorialScreen(
                 comics = visibles,
                 almacen = almacen,
                 alAbrir = alAbrir,
                 alCambiar = alRecargar,
                 modifier = Modifier.padding(padding),
+                alVolver = if (conNavegacion) null else volverABiblioteca,
             )
         } else Column(Modifier.padding(padding)) {
             if (modoSeleccion) {
@@ -362,6 +368,15 @@ fun BibliotecaScreen(
                                     dialogoCategorias = true
                                 },
                             )
+                            if (!conNavegacion) {
+                                DropdownMenuItem(
+                                    text = { Text("Historial") },
+                                    onClick = {
+                                        menuAbierto = false
+                                        alCambiarPestana(1)
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Vista de la biblioteca") },
                                 onClick = {
