@@ -109,6 +109,7 @@ Se **vendorizó** (copió de Komikku, Apache-2.0) el `source-api` y la red, con 
 ```kotlin
 // settings.gradle(.kts) → dependencyResolutionManagement { repositories { ... maven("https://jitpack.io") } }
 implementation("com.squareup.okhttp3:okhttp:5.3.2")          // OkHttp 5 (el código usa response.body sin "?")
+implementation("com.squareup.okhttp3:okhttp-brotli:5.3.2")   // + okhttp-dnsoverhttps, logging-interceptor, okhttp-zstd (mismas 5.3.2): las extensiones los usan por nombre; sin brotli: "Failed resolution of: Lokhttp3/brotli/Brotli;"
 implementation("io.reactivex:rxjava:1.3.8")                  // RxJava 1: lo exige el source-api
 implementation("org.jsoup:jsoup:1.23.2")
 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")

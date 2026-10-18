@@ -46,6 +46,11 @@ dependencies {
     // --- Motor de fuentes (paso 4): source-api de Komikku/Mihon ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:5.3.2")
+    // Módulos de OkHttp que las extensiones usan por nombre (Brotli, DoH, logging, zstd), como en Komikku.
+    implementation("com.squareup.okhttp3:okhttp-brotli:5.3.2")
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:5.3.2")
+    implementation("com.squareup.okhttp3:logging-interceptor:5.3.2")
+    implementation("com.squareup.okhttp3:okhttp-zstd:5.3.2")
     implementation("io.reactivex:rxjava:1.3.8")
     implementation("org.jsoup:jsoup:1.23.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
