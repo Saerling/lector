@@ -107,6 +107,7 @@ private fun Contenido(almacen: Almacen) {
     var comics by remember { mutableStateOf(almacen.cargar()) }
     var abierto by remember { mutableStateOf<Comic?>(null) }
     var importando by remember { mutableStateOf(false) }
+    var pestana by remember { mutableStateOf(0) }
 
     // Con sesión de AniList: averigua el nombre de usuario y sube lo que quedó pendiente.
     // Se repite al volver a la biblioteca.
@@ -189,7 +190,9 @@ private fun Contenido(almacen: Almacen) {
                 almacen.eliminar(it.id)
                 comics = almacen.cargar()
             },
-            alRestaurar = { comics = almacen.cargar() },
+            alRecargar = { comics = almacen.cargar() },
+            pestana = pestana,
+            alCambiarPestana = { pestana = it },
         )
     } else {
         val cerrar = {

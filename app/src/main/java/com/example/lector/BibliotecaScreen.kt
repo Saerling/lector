@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -43,6 +45,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -85,7 +89,9 @@ fun BibliotecaScreen(
     alAnadirCarpeta: () -> Unit,
     alAbrir: (Comic) -> Unit,
     alEliminar: (Comic) -> Unit,
-    alRestaurar: () -> Unit,
+    alRecargar: () -> Unit,
+    pestana: Int, // 0 = biblioteca, 1 = historial (la guarda la actividad para no perderla al leer)
+    alCambiarPestana: (Int) -> Unit,
 ) {
     var categorias by remember { mutableStateOf(almacen.categorias()) }
     var asignaciones by remember { mutableStateOf(almacen.asignaciones()) }
@@ -108,6 +114,7 @@ fun BibliotecaScreen(
     var dialogoApariencia by remember { mutableStateOf(false) }
     var categoriaNueva by remember { mutableStateOf(false) }
     var renombrando by remember { mutableStateOf<Categoria?>(null) }
+    var dialogoVista by remember { mutableStateOf(false) }
     var dialogoLector by remember { mutableStateOf(false) }
     var dialogoAnilist by remember { mutableStateOf(false) }
     var comicSeguimiento by remember { mutableStateOf<Comic?>(null) }
@@ -152,7 +159,7 @@ fun BibliotecaScreen(
                 recargar()
                 orden = almacen.orden
                 ascendente = almacen.ordenAscendente
-                alRestaurar()
+                alRecargar()
                 "Copia restaurada: ${r.actualizados} cómics actualizados" +
                     if (r.pendientes > 0) {
                         " y ${r.pendientes} pendientes. Su progreso y categorías se aplicarán " +
@@ -203,11 +210,13 @@ fun BibliotecaScreen(
 
     // El botón "atrás" cierra la selección en vez de salir.
     BackHandler(enabled = modoSeleccion) { seleccion = emptySet() }
+    // En el historial, "atrás" vuelve a la biblioteca.
+    BackHandler(enabled = pestana == 1 && !modoSeleccion) { alCambiarPestana(0) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
-            if (!modoSeleccion) {
+            if (!modoSeleccion && pestana == 0) {
                 FloatingActionButton(
                     onClick = { dialogoAnadir = true },
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -217,8 +226,35 @@ fun BibliotecaScreen(
                 }
             }
         },
+        bottomBar = {
+            if (!modoSeleccion) {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = pestana == 0,
+                        onClick = { alCambiarPestana(0) },
+                        icon = { Text("▦") },
+                        label = { Text("Biblioteca") },
+                    )
+                    NavigationBarItem(
+                        selected = pestana == 1,
+                        onClick = { alCambiarPestana(1) },
+                        icon = { Text("◷") },
+                        label = { Text("Historial") },
+                    )
+                }
+            }
+        },
     ) { padding ->
-        Column(Modifier.padding(padding)) {
+        if (pestana == 1) {
+            // Los cómics de categorías ocultas tampoco aparecen en el historial.
+            HistorialScreen(
+                comics = visibles,
+                almacen = almacen,
+                alAbrir = alAbrir,
+                alCambiar = alRecargar,
+                modifier = Modifier.padding(padding),
+            )
+        } else Column(Modifier.padding(padding)) {
             if (modoSeleccion) {
                 // ---- Barra de selección ----
                 Column(
@@ -327,6 +363,13 @@ fun BibliotecaScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text("Vista de la biblioteca") },
+                                onClick = {
+                                    menuAbierto = false
+                                    dialogoVista = true
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Apariencia") },
                                 onClick = {
                                     menuAbierto = false
@@ -432,17 +475,38 @@ fun BibliotecaScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(130.dp),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
+            } else if (almacen.vista == Vista.LISTA) {
+                LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
                     items(lista, key = { it.id }) { comic ->
-                        Tarjeta(
+                        FilaLista(
                             comic = comic,
                             almacen = almacen,
+                            seleccionado = comic.id in seleccion,
+                            // Con la selección activa, tocar marca o desmarca.
+                            alAbrir = {
+                                if (modoSeleccion) alternar(comic.id) else alAbrir(comic)
+                            },
+                            alMantener = { alternar(comic.id) },
+                        )
+                    }
+                }
+            } else {
+                val comoda = almacen.vista == Vista.CUADRICULA_COMODA
+                LazyVerticalGrid(
+                    columns = if (almacen.columnas == 0) {
+                        GridCells.Adaptive(130.dp)
+                    } else {
+                        GridCells.Fixed(almacen.columnas)
+                    },
+                    contentPadding = PaddingValues(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (comoda) 12.dp else 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (comoda) 16.dp else 8.dp),
+                ) {
+                    items(lista, key = { it.id }) { comic ->
+                        TarjetaPortada(
+                            comic = comic,
+                            almacen = almacen,
+                            vista = almacen.vista,
                             seleccionado = comic.id in seleccion,
                             // Con la selección activa, tocar marca o desmarca.
                             alAbrir = {
@@ -669,6 +733,59 @@ fun BibliotecaScreen(
             },
             confirmButton = {
                 TextButton(onClick = { dialogoApariencia = false }) { Text("Listo") }
+            },
+        )
+    }
+
+    // ---- Vista de la biblioteca ----
+    if (dialogoVista) {
+        AlertDialog(
+            onDismissRequest = { dialogoVista = false },
+            title = { Text("Vista de la biblioteca") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("Modo", fontWeight = FontWeight.Bold)
+                    Vista.entries.forEach { v ->
+                        FilaOpcion(etiqueta = nombreVista(v), marcada = almacen.vista == v) {
+                            almacen.elegirVista(v)
+                        }
+                    }
+                    if (almacen.vista != Vista.LISTA) {
+                        Spacer(Modifier.height(12.dp))
+                        Text("Columnas", fontWeight = FontWeight.Bold)
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(0, 2, 3, 4, 5).forEach { n ->
+                                FilterChip(
+                                    selected = almacen.columnas == n,
+                                    onClick = { almacen.elegirColumnas(n) },
+                                    label = { Text(if (n == 0) "Auto" else n.toString()) },
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    FilaInterruptor(
+                        titulo = "Mostrar la página actual",
+                        detalle = "«Pág. X de Y» junto a cada cómic.",
+                        activado = almacen.mostrarPagina,
+                        alCambiar = { almacen.elegirMostrarPagina(it) },
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    FilaInterruptor(
+                        titulo = "Insignia de progreso",
+                        detalle = "Porcentaje sobre la portada, o ✓ si está terminado.",
+                        activado = almacen.insigniaProgreso,
+                        alCambiar = { almacen.elegirInsigniaProgreso(it) },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { dialogoVista = false }) { Text("Listo") }
             },
         )
     }
@@ -1147,85 +1264,11 @@ private fun nombreFiltro(f: Filtro): String = when (f) {
 }
 
 // Sin leer = en la primera página; terminado = en la última; el resto, en curso.
-private fun estadoDe(c: Comic): Filtro = when {
+fun estadoDe(c: Comic): Filtro = when {
     c.ultimaPagina == 0 -> Filtro.SIN_LEER
     c.ultimaPagina >= c.paginas - 1 -> Filtro.TERMINADOS
     else -> Filtro.EN_CURSO
 }
 
-private fun progresoDe(c: Comic): Float =
+fun progresoDe(c: Comic): Float =
     if (c.paginas > 1) c.ultimaPagina.toFloat() / (c.paginas - 1) else 0f
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun Tarjeta(
-    comic: Comic,
-    almacen: Almacen,
-    seleccionado: Boolean,
-    alAbrir: () -> Unit,
-    alMantener: () -> Unit,
-) {
-    val portada = remember(comic.id) {
-        BitmapFactory.decodeFile(almacen.portadaDe(comic.id).path)?.asImageBitmap()
-    }
-    Column(Modifier.combinedClickable(onClick = alAbrir, onLongClick = alMantener)) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .then(
-                    if (seleccionado) {
-                        Modifier.border(
-                            3.dp,
-                            MaterialTheme.colorScheme.primary,
-                            RoundedCornerShape(12.dp),
-                        )
-                    } else {
-                        Modifier
-                    },
-                ),
-        ) {
-            if (portada != null) {
-                Image(
-                    bitmap = portada,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-            if (seleccionado) {
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "✓",
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            comic.titulo,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-        )
-        Text(
-            "Pág. ${comic.ultimaPagina + 1} de ${comic.paginas}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}

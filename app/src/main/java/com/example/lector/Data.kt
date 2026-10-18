@@ -94,6 +94,43 @@ class Almacen(private val contexto: Context) {
         prefs.edit().putBoolean("mantener_encendida", valor).apply()
     }
 
+    // ---- Vista de la biblioteca ----
+    var vista by mutableStateOf(
+        prefs.getString("vista", null)?.let { runCatching { Vista.valueOf(it) }.getOrNull() }
+            ?: Vista.CUADRICULA_COMODA,
+    )
+        private set
+
+    fun elegirVista(valor: Vista) {
+        vista = valor
+        prefs.edit().putString("vista", valor.name).apply()
+    }
+
+    // 0 = automático (según el ancho de la pantalla).
+    var columnas by mutableStateOf(prefs.getInt("columnas", 0))
+        private set
+
+    fun elegirColumnas(valor: Int) {
+        columnas = valor
+        prefs.edit().putInt("columnas", valor).apply()
+    }
+
+    var mostrarPagina by mutableStateOf(prefs.getBoolean("mostrar_pagina", true))
+        private set
+
+    fun elegirMostrarPagina(valor: Boolean) {
+        mostrarPagina = valor
+        prefs.edit().putBoolean("mostrar_pagina", valor).apply()
+    }
+
+    var insigniaProgreso by mutableStateOf(prefs.getBoolean("insignia_progreso", true))
+        private set
+
+    fun elegirInsigniaProgreso(valor: Boolean) {
+        insigniaProgreso = valor
+        prefs.edit().putBoolean("insignia_progreso", valor).apply()
+    }
+
     // ---- Seguimiento con AniList ----
     var anilistClientId by mutableStateOf(prefs.getString("anilist_client", "") ?: "")
         private set
@@ -454,7 +491,11 @@ class Almacen(private val contexto: Context) {
                 .put("color_portada", colorPortada)
                 .put("zonas_toque", zonasToque)
                 .put("teclas_volumen", teclasVolumen)
-                .put("mantener_encendida", mantenerEncendida),
+                .put("mantener_encendida", mantenerEncendida)
+                .put("vista", vista.name)
+                .put("columnas", columnas)
+                .put("mostrar_pagina", mostrarPagina)
+                .put("insignia_progreso", insigniaProgreso),
         )
 
         val cats = JSONArray()
@@ -580,6 +621,13 @@ class Almacen(private val contexto: Context) {
             if (a.has("zonas_toque")) elegirZonasToque(a.getBoolean("zonas_toque"))
             if (a.has("teclas_volumen")) elegirTeclasVolumen(a.getBoolean("teclas_volumen"))
             if (a.has("mantener_encendida")) elegirMantenerEncendida(a.getBoolean("mantener_encendida"))
+            val nombreVista = a.optString("vista")
+            if (nombreVista.isNotEmpty()) {
+                runCatching { Vista.valueOf(nombreVista) }.getOrNull()?.let { elegirVista(it) }
+            }
+            if (a.has("columnas")) elegirColumnas(a.getInt("columnas"))
+            if (a.has("mostrar_pagina")) elegirMostrarPagina(a.getBoolean("mostrar_pagina"))
+            if (a.has("insignia_progreso")) elegirInsigniaProgreso(a.getBoolean("insignia_progreso"))
         }
 
         val cats = categorias().toMutableList()
@@ -615,6 +663,16 @@ class Almacen(private val contexto: Context) {
         guardarCategorias(cats)
         prefs.edit().putString("pendientes", pend.toString()).apply()
         return ResultadoRestauracion(actualizados, sinArchivo)
+    }
+
+    // ---- Historial ----
+    // Quitar un cómic del historial borra solo la fecha de lectura; la página se conserva.
+    fun quitarDelHistorial(id: String) {
+        guardar(cargar().map { if (it.id == id) it.copy(leido = 0L) else it })
+    }
+
+    fun limpiarHistorial() {
+        guardar(cargar().map { it.copy(leido = 0L) })
     }
 
     fun guardarProgreso(id: String, pagina: Int) {
