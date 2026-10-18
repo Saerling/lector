@@ -37,6 +37,7 @@ fun HomeScreen(
     comics: List<Comic>,
     almacen: Almacen,
     onOpen: (Comic) -> Unit,
+    onRead: (Comic) -> Unit,
     onAdd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -65,7 +66,7 @@ fun HomeScreen(
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(state = list, contentPadding = PaddingValues(bottom = 190.dp)) {
-            item { Hero(featured, comics, almacen, onOpen, onAdd) }
+            item { Hero(featured, comics, almacen, onOpen, onRead, onAdd) }
             if (recientes.isNotEmpty()) item {
                 Spacer(Modifier.height(24.dp)); SectionHeader("Leídos recientemente")
                 Spacer(Modifier.height(12.dp)); CoverCarousel(recientes, almacen, onOpen)
@@ -95,7 +96,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (Comic) -> Unit, onAdd: () -> Unit) {
+private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (Comic) -> Unit, onRead: (Comic) -> Unit, onAdd: () -> Unit) {
     Box(Modifier.fillMaxWidth().height(520.dp)) {
         // Cruce con desenfoque al cambiar de cómic (blur real en Android 12+).
         AnimatedContent(
@@ -118,7 +119,7 @@ private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (C
                     LText(s.titulo, LectorType.Hero, maxLines = 2)
                     LText(s.textoPagina(), LectorType.Label, color = Color(0xB3FFFFFF))
                     Spacer(Modifier.height(14.dp))
-                    PillButton("Leer", Icons.Rounded.PlayArrow, { onOpen(s) })
+                    PillButton("Leer", Icons.Rounded.PlayArrow, { onRead(s) })
                 }
             }
         }

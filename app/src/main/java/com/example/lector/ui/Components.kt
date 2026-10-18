@@ -126,7 +126,8 @@ enum class LectorTab(val label: String, val icon: ImageVector) {
     Home("Inicio", Icons.Rounded.Home),
     Search("Buscar", Icons.Rounded.Search),
     Library("Biblioteca", Icons.Rounded.List),
-    Profile("Perfil", Icons.Rounded.Person)
+    History("Historial", Icons.Rounded.DateRange),
+    More("Más", Icons.Rounded.MoreVert)
 }
 
 /** Barra flotante en píldora; el indicador de la pestaña activa cambia con resorte. */
