@@ -162,6 +162,31 @@ Supuestos / límites (léelos):
 
 ---
 
+## 2d. PASO 6 — Lector online estilo Komikku + Novedades gestionables (2026-10-18, **SIN compilar ni probar**)
+Pedido del usuario (con capturas de Komikku): (1) al abrir un capítulo, barras con avance y demás; (2) en Novedades poder
+abrir un título, añadir las fuentes que quiera y ordenarlas.
+
+**Lector online (`ui/FuenteManga.kt → LeerOnlineScreen`)** — firma nueva: `(ext, fuenteId, titulo, capitulos, indiceInicial, onBack)`.
+- Barra superior: atrás + título del manga + nombre del capítulo. Barra inferior: botón capítulo anterior · píldora con
+  `página [Slider con marcas] total` · botón capítulo siguiente; debajo, acciones: Capítulos (diálogo para saltar), Navegador
+  (ACTION_VIEW), Compartir, Recargar, Ajustes (modo de lectura).
+- Un toque en el centro muestra/oculta barras; oculto, sale «n / total» abajo.
+- Modos (persisten en `ExtManager.modoLector`): 0 tira vertical · 1 paginado → · 2 paginado ← (manga, `reverseLayout`). En paginado,
+  tocar el tercio izquierdo/derecho pasa de página.
+- Marca capítulo leído al llegar a la última página (`ExtManager.marcarLeido`); en la ficha los leídos salen atenuados.
+- Iconos: solo set core de Material (no hay SkipPrevious/Bookmark/etc.), por eso las acciones llevan texto debajo.
+- No hecho: zoom, marcador (bookmark), recortar bordes, rotación, brillo, recordar página dentro del capítulo.
+
+**Novedades (`ui/Explorar.kt`)** — `ExplorarScreen` gana `onManga(FuenteUI, MangaFuente)`.
+- Cabecera de Novedades: «+» abre el diálogo «Novedades» (buscador, casilla + icono + nombre + bandera, «Aceptar»); «≡» entra en
+  modo ordenar (arrastrar el icono ≡ para mover, papelera para quitar, «X» para salir).
+- Orden y selección en `ExtManager.novedades` (clave `novedades`; si nunca se tocó arranca con las fuentes ancladas).
+- Cada fuente es un carrusel (recientes; si la fuente no los tiene, populares). Tocar una portada abre la ficha
+  (`desdeNovedades=true` en `LectorApp`: al volver desde la ficha se regresa a Explorar, no a la lista de la fuente); la flecha abre la fuente.
+- El arrastre es propio (pointerInput + detectDragGestures, filas de 72dp+12dp), sin librería. Sin probar.
+
+---
+
 ## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.

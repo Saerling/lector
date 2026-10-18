@@ -62,11 +62,14 @@ fun Inicio(
     var fuenteId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Manga abierto desde una fuente y capítulos que se están leyendo online.
     var mangaSel by remember { mutableStateOf<MangaFuente?>(null) }
+    var desdeNovedades by remember { mutableStateOf(false) } // la ficha se abrió desde Explorar → Novedades
     var capsLectura by remember { mutableStateOf<List<CapituloFuente>>(emptyList()) }
     var capIndice by remember { mutableStateOf(0) }
     val hayCapa = ruta != null || detalleId != null
 
-    BackHandler(enabled = ruta != null && detalleId == null) { ruta = ruta?.padre() }
+    BackHandler(enabled = ruta != null && detalleId == null) {
+        ruta = if (ruta == Ruta.Ficha && desdeNovedades) null else ruta?.padre()
+    }
     BackHandler(enabled = detalleId != null) { detalleId = null }
 
     val abrirDetalle: (Comic) -> Unit = { detalleId = it.id }
@@ -84,8 +87,9 @@ fun Inicio(
                 LectorTab.Search -> ExplorarScreen(
                     ext = ext,
                     onRuta = { ruta = it },
-                    onFuente = { fuenteId = it.id; ruta = Ruta.FuenteDetalle },
+                    onFuente = { fuenteId = it.id; desdeNovedades = false; ruta = Ruta.FuenteDetalle },
                     onExt = { extPkg = it.pkg; ruta = Ruta.ExtDetalle },
+                    onManga = { f, m -> fuenteId = f.id; mangaSel = m; desdeNovedades = true; ruta = Ruta.Ficha },
                 )
                 LectorTab.Library -> Box(Modifier.padding(bottom = 76.dp)) {
                     BibliotecaScreen(
@@ -152,19 +156,19 @@ fun Inicio(
                     Ruta.ExtDetalle -> ExtDetalleScreen(ext, extPkg.orEmpty()) { ruta = null }
                     Ruta.FuenteDetalle -> FuenteDetalleScreen(
                         ext, fuenteId ?: 0L,
-                        onManga = { mangaSel = it; ruta = Ruta.Ficha },
+                        onManga = { mangaSel = it; desdeNovedades = false; ruta = Ruta.Ficha },
                     ) { ruta = null }
                     Ruta.Ficha -> {
                         val m = mangaSel
                         if (m == null) Box(Modifier.fillMaxSize().background(LectorColors.Bg))
                         else FichaMangaScreen(
                             ext, fuenteId ?: 0L, m, almacen, alRecargar,
-                            onBack = { ruta = Ruta.FuenteDetalle },
+                            onBack = { ruta = if (desdeNovedades) null else Ruta.FuenteDetalle },
                             onLeer = { caps, i -> capsLectura = caps; capIndice = i; ruta = Ruta.LeerOnline },
                         )
                     }
                     Ruta.LeerOnline -> LeerOnlineScreen(
-                        ext, fuenteId ?: 0L, capsLectura, capIndice,
+                        ext, fuenteId ?: 0L, mangaSel?.titulo.orEmpty(), capsLectura, capIndice,
                     ) { ruta = Ruta.Ficha }
                 }
             }

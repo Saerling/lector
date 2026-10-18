@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -33,6 +34,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -63,8 +69,11 @@ fun ExplorarScreen(
     onRuta: (Ruta) -> Unit,
     onFuente: (FuenteUI) -> Unit,
     onExt: (ExtInstalada) -> Unit,
+    onManga: (FuenteUI, MangaFuente) -> Unit,
 ) {
     var sub by rememberSaveable { mutableStateOf(0) }
+    var reordenar by rememberSaveable { mutableStateOf(false) }
+    var dialogoNovedades by remember { mutableStateOf(false) }
     var consulta by rememberSaveable { mutableStateOf("") }
     var buscando by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -78,6 +87,14 @@ fun ExplorarScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             LText("Explorar", LectorType.Display, Modifier.weight(1f))
+            if (sub == 1) {
+                if (reordenar) {
+                    IconButton(onClick = { reordenar = false }) { Icon(Icons.Rounded.Close, "Terminar", tint = LectorColors.Text) }
+                } else {
+                    IconButton(onClick = { dialogoNovedades = true }) { Icon(Icons.Rounded.Add, "Añadir fuente", tint = LectorColors.Text) }
+                    IconButton(onClick = { reordenar = true }) { Icon(Icons.Rounded.Menu, "Ordenar", tint = LectorColors.Text) }
+                }
+            }
             if (sub == 2) {
                 IconButton(onClick = { buscando = !buscando; if (!buscando) consulta = "" }) {
                     Icon(Icons.Rounded.Search, "Buscar", tint = LectorColors.Text)
@@ -107,7 +124,7 @@ fun ExplorarScreen(
             listOf("Fuentes", "Novedades", "Extensiones", "Migrar").forEachIndexed { i, titulo ->
                 val sel = i == sub
                 Column(
-                    Modifier.weight(1f).clickable { sub = i; consulta = ""; buscando = false },
+                    Modifier.weight(1f).clickable { sub = i; consulta = ""; buscando = false; reordenar = false },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     LText(
@@ -126,7 +143,7 @@ fun ExplorarScreen(
         Box(Modifier.weight(1f)) {
             when (sub) {
                 0 -> FuentesTab(ext, consulta, { consulta = it }, onFuente) { sub = 2 }
-                1 -> NovedadesTab(ext, onFuente)
+                1 -> NovedadesTab(ext, reordenar, onManga, onFuente) { dialogoNovedades = true }
                 2 -> ExtensionesTab(
                     ext, consulta, buscando, { consulta = it }, onExt,
                     onConfiar = { porConfiar = it }, onRepos = { onRuta(Ruta.ListadosExt) }
@@ -135,6 +152,8 @@ fun ExplorarScreen(
             }
         }
     }
+
+    if (dialogoNovedades) DialogoNovedades(ext) { dialogoNovedades = false }
 
     porConfiar?.let { e ->
         AlertDialog(
@@ -241,26 +260,40 @@ private fun FilaFuente(f: FuenteUI, ext: ExtManager, onFuente: (FuenteUI) -> Uni
 // ───────────────────────── Novedades ─────────────────────────
 
 @Composable
-private fun NovedadesTab(ext: ExtManager, onFuente: (FuenteUI) -> Unit) {
+private fun NovedadesTab(
+    ext: ExtManager,
+    reordenar: Boolean,
+    onManga: (FuenteUI, MangaFuente) -> Unit,
+    onFuente: (FuenteUI) -> Unit,
+    onAnadir: () -> Unit,
+) {
     val motor = Motor.actual
-    val fijas = ext.fuentes.filter { it.id.toString() in ext.fijadas && (ext.mostrarNsfw || !it.nsfw) }
+    val todas = ext.novedades.mapNotNull { id -> ext.fuentes.firstOrNull { it.id == id } }
+    val lista = todas.filter { ext.mostrarNsfw || !it.nsfw }
     when {
-        fijas.isEmpty() -> Vacio("Ancla fuentes con la estrella (pestaña Fuentes) para ver aquí sus novedades.")
-        motor == null -> Vacio("Las novedades necesitan el motor de fuentes, que se conecta en el siguiente paso del proyecto (mira HANDOFF.md).")
+        todas.isEmpty() -> Vacio("Aquí salen las novedades de las fuentes que elijas.", "Añadir fuentes", onAnadir)
+        motor == null -> Vacio("El motor de fuentes no está disponible.")
+        reordenar -> OrdenarNovedades(ext)
         else -> LazyColumn(contentPadding = PaddingValues(bottom = 190.dp)) {
-            items(fijas) { NovedadesFuente(it, motor, onFuente) }
+            items(lista) { NovedadesFuente(it, motor, onManga, onFuente) }
         }
     }
 }
 
 @Composable
-private fun NovedadesFuente(f: FuenteUI, motor: MotorFuentes, onFuente: (FuenteUI) -> Unit) {
+private fun NovedadesFuente(
+    f: FuenteUI, motor: MotorFuentes,
+    onManga: (FuenteUI, MangaFuente) -> Unit, onFuente: (FuenteUI) -> Unit,
+) {
     var estado by remember(f.id) { mutableStateOf<List<MangaFuente>?>(null) }
-    var fallo by remember(f.id) { mutableStateOf(false) }
-    LaunchedEffect(f.id) {
-        runCatching { motor.recientes(f, 1).mangas.take(12) }
+    var fallo by remember(f.id) { mutableStateOf<String?>(null) }
+    var intento by remember(f.id) { mutableStateOf(0) }
+    LaunchedEffect(f.id, intento) {
+        fallo = null
+        // Si la fuente no tiene "recientes", se usan los populares.
+        runCatching { runCatching { motor.recientes(f, 1) }.getOrElse { motor.populares(f, 1) }.mangas.take(15) }
             .onSuccess { estado = it }
-            .onFailure { fallo = true }
+            .onFailure { fallo = it.message ?: "No se pudieron cargar las novedades" }
     }
     Column(Modifier.padding(bottom = 12.dp)) {
         Row(
@@ -273,13 +306,16 @@ private fun NovedadesFuente(f: FuenteUI, motor: MotorFuentes, onFuente: (FuenteU
             }
             Icon(Icons.Rounded.KeyboardArrowRight, null, tint = LectorColors.Text, modifier = Modifier.size(32.dp))
         }
-        val lista = estado
+        val lst = estado
         when {
-            fallo -> LText("No se pudieron cargar las novedades", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = Rojo)
-            lista == null -> Box(Modifier.fillMaxWidth().height(120.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp)) }
+            fallo != null -> Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                LText(fallo!!, LectorType.Label, Modifier.weight(1f), color = Rojo, maxLines = 2)
+                IconButton(onClick = { intento++ }) { Icon(Icons.Rounded.Refresh, "Reintentar", tint = LectorColors.Text) }
+            }
+            lst == null -> Box(Modifier.fillMaxWidth().height(120.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp)) }
             else -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(lista) { m ->
-                    Column(Modifier.width(124.dp).pressable { onFuente(f) }) {
+                items(lst) { m ->
+                    Column(Modifier.width(124.dp).pressable { onManga(f, m) }) {
                         ImagenRemota(
                             m.portadaUrl,
                             Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(12.dp)),
@@ -292,6 +328,98 @@ private fun NovedadesFuente(f: FuenteUI, motor: MotorFuentes, onFuente: (FuenteU
             }
         }
     }
+}
+
+/** Modo "ordenar": arrastra el icono ≡ para mover una fuente, o quítala con la papelera. */
+@Composable
+private fun OrdenarNovedades(ext: ExtManager) {
+    val orden = remember { mutableStateListOf<Long>().apply { addAll(ext.novedades) } }
+    var arrastrando by remember { mutableStateOf<Long?>(null) }
+    var desplaz by remember { mutableStateOf(0f) }
+    val paso = with(LocalDensity.current) { (72 + 12).dp.toPx() }
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp).padding(bottom = 190.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        orden.toList().forEach { id ->
+            val f = ext.fuentes.firstOrNull { it.id == id }
+            key(id) {
+                Row(
+                    Modifier.fillMaxWidth().height(72.dp)
+                        .zIndex(if (arrastrando == id) 1f else 0f)
+                        .offset { IntOffset(0, if (arrastrando == id) desplaz.roundToInt() else 0) }
+                        .clip(RoundedCornerShape(20.dp)).background(LectorColors.CardHigh),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.padding(start = 12.dp).size(48.dp).pointerInput(id) {
+                            detectDragGestures(
+                                onDragStart = { arrastrando = id; desplaz = 0f },
+                                onDragEnd = { arrastrando = null; desplaz = 0f; ext.fijarNovedades(orden.toList()) },
+                                onDragCancel = { arrastrando = null; desplaz = 0f; ext.fijarNovedades(orden.toList()) },
+                            ) { change, d ->
+                                change.consume()
+                                desplaz += d.y
+                                val i = orden.indexOf(id)
+                                if (desplaz > paso / 2 && i < orden.lastIndex) {
+                                    orden.add(i + 1, orden.removeAt(i)); desplaz -= paso
+                                } else if (desplaz < -paso / 2 && i > 0) {
+                                    orden.add(i - 1, orden.removeAt(i)); desplaz += paso
+                                }
+                            }
+                        },
+                        Alignment.Center,
+                    ) { Icon(Icons.Rounded.Menu, "Arrastrar", tint = LectorColors.Text) }
+                    Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                        LText(f?.nombre ?: "Fuente no disponible", LectorType.Section.copy(fontSize = 17.sp), maxLines = 1)
+                        if (f != null) LText(nombreIdioma(f.lang), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+                    }
+                    IconButton(onClick = { orden.remove(id); ext.fijarNovedades(orden.toList()) }) {
+                        Icon(Icons.Rounded.Delete, "Quitar", tint = LectorColors.Text)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Diálogo "Novedades": marca las fuentes que quieres ver en la pestaña. */
+@Composable
+private fun DialogoNovedades(ext: ExtManager, onCerrar: () -> Unit) {
+    var q by remember { mutableStateOf("") }
+    val todas = ext.fuentes
+        .filter { (ext.mostrarNsfw || !it.nsfw) && (q.isBlank() || it.nombre.contains(q.trim(), ignoreCase = true)) }
+        .sortedWith(compareBy({ it.nombre.lowercase() }, { it.lang }))
+    AlertDialog(
+        onDismissRequest = onCerrar,
+        title = { Text("Novedades") },
+        text = {
+            Column {
+                CampoBusqueda(q, { q = it }, "Buscar…")
+                Spacer(Modifier.height(8.dp))
+                if (todas.isEmpty()) {
+                    Text("No hay fuentes. Instala una extensión y pulsa «Confiar».")
+                } else {
+                    LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                        items(todas) { f ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable { ext.alternarNovedad(f.id) }.padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = f.id in ext.novedades, onCheckedChange = { ext.alternarNovedad(f.id) })
+                                IconoExt(f.pkg, null, Modifier.size(40.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Text("${f.nombre} (${bandera(f.lang)})", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onCerrar) { Text("Aceptar") } },
+    )
 }
 
 // ───────────────────────── Extensiones ─────────────────────────

@@ -67,6 +67,14 @@ class ExtManager private constructor(private val app: Context) {
         (prefs.getString("recientes", "") ?: "").split(',').filter { it.isNotBlank() }
     ); private set
 
+    // Fuentes que salen en la pestaña Novedades, en el orden que elige el usuario.
+    // Si nunca se tocó, arranca con las fuentes ancladas.
+    var novedades by mutableStateOf(cargarNovedades()); private set
+
+    // Capítulos leídos online ("fuenteId|urlCapítulo") y modo del lector online (0 tira · 1 paginado → · 2 paginado ←).
+    var leidos by mutableStateOf(prefs.getStringSet("leidos", emptySet())?.toSet() ?: emptySet()); private set
+    var modoLector by mutableStateOf(prefs.getInt("modo_lector", 0)); private set
+
     private val confiadas: MutableSet<String> =
         (prefs.getStringSet("confiadas", emptySet()) ?: emptySet()).toMutableSet()
     private var confiadasVersion by mutableStateOf(0) // fuerza repintar al cambiar la confianza
@@ -398,6 +406,33 @@ class ExtManager private constructor(private val app: Context) {
         val s = id.toString()
         fijadas = if (s in fijadas) fijadas - s else fijadas + s
         prefs.edit().putStringSet("fijadas", fijadas).apply()
+    }
+
+    private fun cargarNovedades(): List<Long> {
+        val guardado = prefs.getString("novedades", null)
+        return if (guardado != null) guardado.split(',').mapNotNull { it.toLongOrNull() }
+        else (prefs.getStringSet("fijadas", emptySet()) ?: emptySet()).mapNotNull { it.toLongOrNull() }
+    }
+
+    fun fijarNovedades(lista: List<Long>) {
+        novedades = lista.distinct()
+        prefs.edit().putString("novedades", novedades.joinToString(",")).apply()
+    }
+
+    fun alternarNovedad(id: Long) = fijarNovedades(if (id in novedades) novedades - id else novedades + id)
+
+    fun marcarLeido(fuenteId: Long, url: String) {
+        val k = "$fuenteId|$url"
+        if (k in leidos) return
+        leidos = leidos + k
+        prefs.edit().putStringSet("leidos", leidos).apply()
+    }
+
+    fun esLeido(fuenteId: Long, url: String) = "$fuenteId|$url" in leidos
+
+    fun cambiarModoLector(m: Int) {
+        modoLector = m
+        prefs.edit().putInt("modo_lector", m).apply()
     }
 
     fun marcarReciente(id: Long) {
