@@ -210,6 +210,13 @@ fun FichaMangaScreen(
         almacen.actualizarProgresoEnLinea(
             f.id, manga.url, cargada.capitulos.count { ext.esLeido(f.id, it.url) }, cargada.capitulos.size,
         )
+        // Si está en la biblioteca, anota los capítulos nuevos (pestaña Actualizaciones).
+        if (almacen.comicEnLinea(f.id, manga.url) != null) {
+            almacen.registrarCapitulos(
+                f.id, manga.url, cargada.detalle.titulo.ifBlank { manga.titulo },
+                cargada.detalle.portadaUrl ?: manga.portadaUrl, cargada.capitulos,
+            )
+        }
         // Venimos del historial: abre directamente el capítulo donde lo dejaste.
         if (reanudarCap != null) {
             alConsumirReanudar()
@@ -254,7 +261,10 @@ fun FichaMangaScreen(
             }
             val leidos = fi?.capitulos?.count { ext.esLeido(f.id, it.url) } ?: 0
             val comic = withContext(Dispatchers.IO) {
-                almacen.anadirEnLinea(f.id, manga.url, titulo, urlPortada, portada, fi?.capitulos?.size ?: 0, leidos)
+                val c = almacen.anadirEnLinea(f.id, manga.url, titulo, urlPortada, portada, fi?.capitulos?.size ?: 0, leidos)
+                // Los capítulos que hay ahora son la base: solo lo que salga después contará como novedad.
+                fi?.let { almacen.registrarCapitulos(f.id, manga.url, titulo, urlPortada, it.capitulos) }
+                c
             }
             enBiblioteca = comic
             guardando = false

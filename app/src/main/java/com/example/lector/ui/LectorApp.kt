@@ -134,6 +134,21 @@ fun Inicio(
                         conNavegacion = false,
                     )
                 }
+                LectorTab.Updates -> Box(Modifier.statusBarsPadding().padding(bottom = 76.dp)) {
+                    ActualizacionesScreen(
+                        almacen = almacen, ext = ext,
+                        // Abre el capítulo nuevo directamente (la ficha carga y salta al lector).
+                        alAbrir = { a ->
+                            abrirEnLinea(
+                                a.fuenteId, a.urlManga, a.titulo, a.portadaUrl,
+                                a.capUrl to ext.paginaDe(a.fuenteId, a.capUrl),
+                            )
+                        },
+                        cabecerasDe = { id ->
+                            ext.fuentes.firstOrNull { it.id == id }?.let { Motor.actual?.cabeceras(it) }.orEmpty()
+                        },
+                    )
+                }
                 LectorTab.History -> Box(Modifier.statusBarsPadding().padding(bottom = 76.dp)) {
                     HistorialScreen(
                         comics = visibles, almacen = almacen,

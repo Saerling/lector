@@ -228,6 +228,13 @@ pero partiendo de la versión anterior al paso 7b. Se conservó su diseño y se 
 Se quitó `AccionFicha` (ya no se usa). Ojo: `TemaPortada` existe como clase en `ui/Movimiento.kt` y como función composable en `Theme.kt` (paquetes distintos, sin choque hoy; no importar ambos con `*`).
 **Sigue sin compilarse**: primer paso al retomar = compilar y corregir.
 
+## 2h. PASO 8 — Listados que no se dejaban añadir + pestaña Actualizaciones + comparación con Komikku (2026-10-18, **SIN compilar ni probar**)
+- **Añadir listados (404):** la app pegaba `/index.min.json` detrás de lo escrito (p. ej. detrás de `…/repo.json`). Ahora `ExtRepos.candidatos()` acepta índice (`index.min.json/index.json/index.pb`), `repo.json`, carpeta, páginas de GitHub (`blob/raw/tree`), `usuario/repo` y enlaces `tachiyomi://add-repo?url=`; prueba varias direcciones y `ExtRepos.meta()` toma nombre/web de `repo.json`. `ExtRepos.carpeta()` evita duplicados. El diálogo ofrece atajos (Keiyoushi, Suwayomi, Yūzōnō, Cursed Yūzōnō, Kavita; el de Kavita sale de la captura del usuario, `Kareadita/tach-extension`; **Nyora**: no se encontró dirección oficial).
+- **Pestaña Actualizaciones** (entre Biblioteca e Historial, `LectorTab.Updates`): `ui/Actualizaciones.kt` (`Actualizador` + `ActualizacionesScreen`). `Almacen.registrarCapitulos()` compara con los capítulos ya conocidos (clave `cc|fuente|manga`; la primera vez solo guarda la base). Se revisa al abrir la pestaña si pasaron 6 h, con el botón, y cada vez que se abre una ficha de la biblioteca. Quitar un manga de la biblioteca olvida su base y sus novedades.
+- **No hay** revisión en segundo plano ni notificaciones (haría falta WorkManager).
+- `FUNCIONES_KOMIKKU.md`: tabla de funciones de Komikku (README oficial) frente a las nuestras, con orden sugerido.
+- Pendiente de verificar: el esquema de `repo.json` (`meta.name`, `meta.website`) y el «formato de índice más nuevo» que menciona el changelog de Komikku 1.14 (no está soportado: un índice que empiece por `{` se interpreta como protobuf y falla).
+
 ## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.

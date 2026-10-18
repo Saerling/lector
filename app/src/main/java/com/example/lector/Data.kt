@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.lector.ext.CapituloFuente
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -39,6 +40,20 @@ data class Comic(
             "Pág. ${ultimaPagina + 1} de $paginas"
         }
 }
+
+// Un capítulo nuevo detectado al revisar la biblioteca (pestaña Actualizaciones).
+data class ActualizacionCap(
+    val fuenteId: Long,
+    val urlManga: String,
+    val titulo: String,
+    val portadaUrl: String?,
+    val capUrl: String,
+    val capNombre: String,
+    val capNumero: Float,
+    val capFecha: Long,
+    val scanlator: String?,
+    val detectado: Long,
+)
 
 // Una entrada del historial de lectura online: el último capítulo que abriste de cada manga.
 data class EntradaHistorial(
@@ -933,6 +948,88 @@ class Almacen(private val contexto: Context) {
         guardar(cargar().map { if (it.id == c.id) it.copy(paginas = total, ultimaPagina = leidos) else it })
     }
 
+    // ---- Actualizaciones: capítulos nuevos de los mangas en línea de la biblioteca ----
+    var actualizaciones by mutableStateOf(leerActualizaciones())
+        private set
+    var ultimaActualizacion by mutableStateOf(prefs.getLong("ult_actualizacion", 0L))
+        private set
+
+    private fun leerActualizaciones(): List<ActualizacionCap> = runCatching {
+        val a = JSONArray(prefs.getString("actualizaciones", "[]"))
+        List(a.length()) { i ->
+            val o = a.getJSONObject(i)
+            ActualizacionCap(
+                fuenteId = o.getLong("fuente"), urlManga = o.getString("manga"), titulo = o.getString("titulo"),
+                portadaUrl = o.optString("portada").ifBlank { null },
+                capUrl = o.getString("cap"), capNombre = o.optString("nombre"),
+                capNumero = o.optDouble("numero", -1.0).toFloat(), capFecha = o.optLong("fecha", 0L),
+                scanlator = o.optString("scan").ifBlank { null }, detectado = o.optLong("detectado", 0L),
+            )
+        }
+    }.getOrDefault(emptyList())
+
+    private fun guardarActualizaciones(lista: List<ActualizacionCap>) {
+        val a = JSONArray()
+        lista.forEach {
+            a.put(
+                JSONObject().put("fuente", it.fuenteId).put("manga", it.urlManga).put("titulo", it.titulo)
+                    .put("portada", it.portadaUrl ?: "").put("cap", it.capUrl).put("nombre", it.capNombre)
+                    .put("numero", it.capNumero.toDouble()).put("fecha", it.capFecha)
+                    .put("scan", it.scanlator ?: "").put("detectado", it.detectado),
+            )
+        }
+        prefs.edit().putString("actualizaciones", a.toString()).apply()
+    }
+
+    /**
+     * Compara los capítulos que ofrece la fuente con los que ya conocíamos de ese manga.
+     * La primera vez solo guarda la lista (no hay "nuevos"); después, lo que falte se anota como novedad.
+     * Devuelve cuántos capítulos nuevos había.
+     */
+    @Synchronized
+    fun registrarCapitulos(
+        fuenteId: Long, urlManga: String, titulo: String, portadaUrl: String?, caps: List<CapituloFuente>,
+    ): Int {
+        if (caps.isEmpty()) return 0
+        val clave = "cc|$fuenteId|$urlManga"
+        val actuales = caps.map { it.url }.toSet()
+        val conocidos = prefs.getStringSet(clave, null)
+        if (conocidos == null) {
+            prefs.edit().putStringSet(clave, actuales).apply()
+            return 0
+        }
+        val nuevos = caps.filter { it.url !in conocidos }
+        if (nuevos.isEmpty()) return 0
+        prefs.edit().putStringSet(clave, conocidos + actuales).apply()
+        val ahora = System.currentTimeMillis()
+        val entradas = nuevos.map {
+            ActualizacionCap(fuenteId, urlManga, titulo, portadaUrl, it.url, it.nombre, it.numero, it.fecha, it.scanlator, ahora)
+        }
+        val lista = (entradas + actualizaciones).distinctBy { it.fuenteId to it.capUrl }.take(400)
+        actualizaciones = lista
+        guardarActualizaciones(lista)
+        return nuevos.size
+    }
+
+    private fun olvidarCapitulos(fuenteId: Long, urlManga: String) {
+        prefs.edit().remove("cc|$fuenteId|$urlManga").apply()
+        val lista = actualizaciones.filterNot { it.fuenteId == fuenteId && it.urlManga == urlManga }
+        if (lista.size != actualizaciones.size) {
+            actualizaciones = lista
+            guardarActualizaciones(lista)
+        }
+    }
+
+    fun limpiarActualizaciones() {
+        actualizaciones = emptyList()
+        guardarActualizaciones(emptyList())
+    }
+
+    fun marcarActualizado() {
+        ultimaActualizacion = System.currentTimeMillis()
+        prefs.edit().putLong("ult_actualizacion", ultimaActualizacion).apply()
+    }
+
     // ---- Capítulos descargados ----
     // Como en Komikku, una descarga pertenece al capítulo de su manga: NO es un cómic aparte de la
     // biblioteca. Se guarda como .cbz en su propia carpeta y el lector online la usa en vez de la red.
@@ -982,6 +1079,7 @@ class Almacen(private val contexto: Context) {
     }
 
     fun eliminar(id: String) {
+        cargar().firstOrNull { it.id == id && it.enLinea }?.let { olvidarCapitulos(it.fuenteId, it.urlManga.orEmpty()) }
         archivoDe(id).delete()
         portadaDe(id).delete()
         prefs.edit().remove("modo_$id").remove("seg_$id").apply()

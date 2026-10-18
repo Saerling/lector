@@ -1,6 +1,7 @@
 package com.example.lector.ext
 
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -11,13 +12,71 @@ object ExtRepos {
     private const val UA = "Mozilla/5.0 (Linux; Android 14) Lector/1.0"
     private val terminaciones = listOf("index.min.json", "index.json", "index.pb")
 
-    /** Devuelve la URL del índice, o null si lo escrito no es una dirección web. */
-    fun normalizar(entrada: String): String? {
-        val u = entrada.trim()
-        if (!u.startsWith("http://") && !u.startsWith("https://")) return null
-        if (terminaciones.any { u.endsWith("/$it") }) return u
-        return u.trimEnd('/') + "/index.min.json"
+    /** Primera dirección que se probaría para lo escrito (null si no es una dirección válida). */
+    fun normalizar(entrada: String): String? = candidatos(entrada).firstOrNull()
+
+    private fun indicesEn(carpeta: String) = terminaciones.map { "$carpeta/$it" }
+
+    // Convierte una dirección de la web de GitHub en la de raw.githubusercontent.com.
+    // Devuelve la lista de carpetas posibles (si no se sabe la rama se prueban las habituales).
+    private fun carpetasGitHub(u: String): List<String>? {
+        val m = Regex("^https?://(?:www\\.)?github\\.com/([^/]+)/([^/]+?)(?:\\.git)?(?:/(tree|blob|raw)/([^/]+)(/.*)?)?$")
+            .matchEntire(u) ?: return null
+        val (owner, repo, tipo, rama, resto) = m.destructured
+        if (tipo.isEmpty()) {
+            return listOf("repo", "main", "master").map { "https://raw.githubusercontent.com/$owner/$repo/$it" }
+        }
+        val ruta = resto.trimEnd('/')
+        val base = "https://raw.githubusercontent.com/$owner/$repo/$rama"
+        return listOf(if (ruta.isEmpty() || tipo == "tree") base else base + ruta)
     }
+
+    /**
+     * Direcciones posibles del índice para lo que escribió el usuario, de la más probable a la menos.
+     * Acepta: la dirección del índice (index.min.json / index.json / index.pb), la de repo.json,
+     * la carpeta del listado, páginas de GitHub, "usuario/repositorio" y enlaces tachiyomi://add-repo?url=...
+     */
+    fun candidatos(entrada: String): List<String> {
+        var u = entrada.trim().trim('"', '\'', '<', '>').trim()
+        if (u.isEmpty()) return emptyList()
+        // Enlaces de "añadir repositorio" de Mihon/Tachiyomi/Komikku.
+        if (u.contains("add-repo", ignoreCase = true) && u.contains("url=")) {
+            u = runCatching { java.net.URLDecoder.decode(u.substringAfter("url=").substringBefore('&'), "UTF-8") }
+                .getOrDefault(u)
+        }
+        // Atajo estilo TachiyomiSY: usuario/repositorio
+        if (!u.startsWith("http") && Regex("[\\w.-]+/[\\w.-]+").matches(u)) u = "https://github.com/$u"
+        if (!u.startsWith("http://") && !u.startsWith("https://")) return emptyList()
+        u = u.substringBefore('#').trimEnd('/')
+
+        val gh = carpetasGitHub(u)
+        if (gh != null) {
+            // Si la página de GitHub ya apunta a un fichero (…/blob/rama/repo.json), se trabaja con su carpeta.
+            val primera = gh[0]
+            val esFichero = gh.size == 1 && (terminaciones + "repo.json").any { primera.endsWith("/$it") }
+            return if (esFichero) candidatos(primera) else gh.flatMap { indicesEn(it) }.distinct()
+        }
+        if (terminaciones.any { u.endsWith("/$it") }) {
+            val carpeta = u.substringBeforeLast('/')
+            return (listOf(u) + indicesEn(carpeta)).distinct()
+        }
+        if (u.endsWith("/repo.json")) return indicesEn(u.removeSuffix("/repo.json"))
+        return indicesEn(u)
+    }
+
+    /** Identifica un listado por su carpeta, para no añadirlo dos veces aunque se escriba distinto. */
+    fun carpeta(url: String): String {
+        val c = carpetasGitHub(url.trimEnd('/'))?.firstOrNull() ?: url
+        val sin = if (c.substringAfterLast('/').contains('.')) c.substringBeforeLast('/') else c
+        return sin.trimEnd('/').lowercase()
+    }
+
+    /** Nombre y web del listado según su repo.json (como hace Komikku). Null si no lo tiene. */
+    fun meta(carpeta: String): Pair<String, String?>? = runCatching {
+        val o = JSONObject(String(descargar("$carpeta/repo.json"), Charsets.UTF_8)).getJSONObject("meta")
+        val nombre = o.optString("name").ifBlank { o.optString("shortName") }
+        if (nombre.isBlank()) null else nombre to o.optString("website").ifBlank { null }
+    }.getOrNull()
 
     fun base(urlIndice: String) = urlIndice.substringBeforeLast('/')
 

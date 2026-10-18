@@ -193,24 +193,45 @@ class ExtManager private constructor(private val app: Context) {
         prefs.edit().putString("repos", a.toString()).apply()
     }
 
-    /** Comprueba el listado descargándolo; si es válido lo añade. [alTerminar] recibe el error o null. */
+    /**
+     * Comprueba el listado descargándolo (probando las direcciones habituales); si es válido lo añade.
+     * [alTerminar] recibe el error o null.
+     */
     fun anadirRepo(entrada: String, alTerminar: (String?) -> Unit) {
-        val url = ExtRepos.normalizar(entrada)
-        if (url == null) { alTerminar("Escribe una dirección que empiece por https://"); return }
-        if (repos.any { it.url == url }) { alTerminar("Ese listado ya está añadido"); return }
+        val candidatos = ExtRepos.candidatos(entrada)
+        if (candidatos.isEmpty()) {
+            alTerminar("Escribe una dirección https://… o «usuario/repositorio» de GitHub"); return
+        }
+        val carpeta = ExtRepos.carpeta(candidatos[0])
+        if (repos.any { ExtRepos.carpeta(it.url) == carpeta }) { alTerminar("Ese listado ya está añadido"); return }
         scope.launch {
-            val repo = RepoExt(url, ExtRepos.nombreDe(url), true, ExtRepos.webDe(url))
-            val error = runCatching {
-                val lista = ExtRepos.leerIndice(ExtRepos.descargar(url), url, repo)
-                if (lista.isEmpty()) "El listado está vacío o no tiene un formato conocido" else null
-            }.getOrElse { "No se pudo leer el listado: ${it.message ?: it.javaClass.simpleName}" }
+            var hallado: RepoExt? = null
+            var primerError: String? = null
+            for (url in candidatos) {
+                val prueba = RepoExt(url, ExtRepos.nombreDe(url), true, ExtRepos.webDe(url))
+                val r = runCatching {
+                    val lista = ExtRepos.leerIndice(ExtRepos.descargar(url), url, prueba)
+                    check(lista.isNotEmpty()) { "El listado está vacío o no tiene un formato conocido" }
+                }
+                if (r.isSuccess) { hallado = prueba; break }
+                if (primerError == null) primerError = r.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName }
+            }
+            // Nombre y web bonitos desde repo.json (p. ej. «Kavita Extension Repo»).
+            val repo = hallado?.let { h ->
+                ExtRepos.meta(ExtRepos.base(h.url))?.let { (n, w) -> h.copy(nombre = n, web = w ?: h.web) } ?: h
+            }
             withContext(Dispatchers.Main) {
-                if (error == null) {
+                if (repo != null) {
                     repos = repos + repo
                     guardarRepos(repos)
                     actualizarLista()
+                    alTerminar(null)
+                } else {
+                    alTerminar(
+                        "No se pudo leer el listado (${primerError ?: "sin respuesta"}). Prueba con la dirección " +
+                            "del índice, por ejemplo https://raw.githubusercontent.com/usuario/repo/repo/index.min.json",
+                    )
                 }
-                alTerminar(error)
             }
         }
     }

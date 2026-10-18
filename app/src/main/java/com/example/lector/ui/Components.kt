@@ -128,6 +128,7 @@ enum class LectorTab(val label: String, val icon: ImageVector) {
     Home("Inicio", Icons.Rounded.Home),
     Search("Explorar", Icons.Rounded.Search),
     Library("Biblioteca", Icons.Rounded.List),
+    Updates("Actualizaciones", Icons.Rounded.Notifications),
     History("Historial", Icons.Rounded.DateRange),
     More("Más", Icons.Rounded.MoreVert)
 }

@@ -8,6 +8,8 @@ import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -121,6 +123,16 @@ private fun AccionTexto(texto: String, onClick: () -> Unit) {
 
 @Composable
 private fun DialogoAnadirRepo(ext: ExtManager, cerrar: () -> Unit) {
+    // Listados conocidos (direcciones publicadas por sus autores). Salen solo los que aún no tienes.
+    val sugeridos = remember(ext.repos) {
+        listOf(
+            "Keiyoushi" to "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json",
+            "Suwayomi" to "https://raw.githubusercontent.com/suwayomi/tachiyomi-extension/repo/index.min.json",
+            "Yūzōnō" to "https://github.com/yuzono/manga-repo/raw/repo/index.pb",
+            "Cursed Yūzōnō" to "https://raw.githubusercontent.com/yuzono/cursed-manga-repo/repo/index.min.json",
+            "Kavita" to "https://raw.githubusercontent.com/Kareadita/tach-extension/repo/index.min.json",
+        ).filter { (_, u) -> ext.repos.none { ExtRepos.carpeta(it.url) == ExtRepos.carpeta(ExtRepos.normalizar(u) ?: u) } }
+    }
     var url by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var trabajando by remember { mutableStateOf(false) }
@@ -133,8 +145,18 @@ private fun DialogoAnadirRepo(ext: ExtManager, cerrar: () -> Unit) {
                     value = url, onValueChange = { url = it; error = null }, singleLine = true,
                     enabled = !trabajando, isError = error != null,
                     label = { Text("Dirección URL del listado") },
-                    supportingText = { Text(error ?: "*necesaria · acepta index.min.json, index.json o index.pb") },
+                    supportingText = {
+                        Text(error ?: "Acepta la dirección del índice, repo.json, un enlace de GitHub o usuario/repositorio")
+                    },
                 )
+                if (sugeridos.isNotEmpty() && !trabajando) {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Listados conocidos", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        sugeridos.forEach { (nombre, u) -> ChipSel(nombre, url == u) { url = u; error = null } }
+                    }
+                }
                 if (trabajando) {
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
