@@ -85,7 +85,7 @@ engranaje, y **"Listados de extensiones"** con diálogo *"Añadir listado de ext
 
 ---
 
-## 2b. PASO 4 — Motor de fuentes (escrito el 2026-10-18, **SIN compilar ni probar**)
+## 2b. PASO 4 (compila y corre en el móvil; fuente AnzManga cargó y pidió datos) — Motor de fuentes (escrito el 2026-10-18, **SIN compilar ni probar**)
 Estado de partida: el paso 3 ya compila y corre en el móvil (se arregló `LocalContext.current` dentro de `remember`).
 Las pantallas decían "el motor de fuentes se conecta en el siguiente paso". Este paso lo conecta.
 
@@ -99,7 +99,7 @@ Se **vendorizó** (copió de Komikku, Apache-2.0) el `source-api` y la red, con 
 | `eu/kanade/tachiyomi/source/online/{HttpSource,ParsedHttpSource}.kt` | `HttpSource` sin delegados EXH/SY: `network = Injekt.get<NetworkHelper>()` |
 | `eu/kanade/tachiyomi/util/{JsoupExtensions,system/ChildFirstPathClassLoader}.kt` | tal cual |
 | `eu/kanade/tachiyomi/network/*` | `AndroidCookieJar, HttpException, OkHttpExtensions, ProgressListener, ProgressResponseBody, Requests, interceptor/{UserAgent,UncaughtException,RateLimit,SpecificHostRateLimit}`. En `OkHttpExtensions`: atomics de Kotlin → `java.util.concurrent.atomic`; `context(Json)` → parámetro normal `json` **primero** (misma firma binaria `decodeFromJsonResponse(Json, DeserializationStrategy, Response)`) |
-| `eu/kanade/tachiyomi/network/NetworkHelper.kt` | **Reescrito, reducido** (sin preferencias, sin DoH, sin logging, **sin interceptor de Cloudflare/WebView**) |
+| `eu/kanade/tachiyomi/network/NetworkHelper.kt` | **Reescrito, reducido** (sin preferencias, sin DoH, sin logging; incluye CloudflareInterceptor) |
 | `eu/kanade/tachiyomi/network/JavaScriptEngine.kt` | **Stub**: existe para que carguen las extensiones que lo nombran; evaluar JS lanza `UnsupportedOperationException` (falta QuickJS) |
 | `tachiyomi/core/common/util/{QuerySanitizer,lang/RxCoroutineBridge}.kt`, `mihon/core/common/extensions/JsonObject.kt` | tal cual (shims que pide el source-api) |
 | `com/example/lector/ext/MotorExt.kt` | **NUEVO.** Implementa `MotorFuentes`: registra en Injekt `Application`, `NetworkHelper`, `JavaScriptEngine`, `Json`; carga el APK de la extensión con `ChildFirstPathClassLoader` (lee `tachiyomi.extension.class`, soporta `SourceFactory`), cachea por `pkg:versionCode:firma`; **solo carga extensiones con `confiable == true`**; busca la fuente por `id`, si no por nombre+idioma; `populares/recientes/buscar` en `Dispatchers.IO`; `cabeceras()` = `HttpSource.headers` (para portadas) |
@@ -127,7 +127,7 @@ Instalar extensión → **Confiar** → su fuente sale en *Fuentes* → al abrir
 portadas (`NavegarFuente` en `ui/ExtPantallas.kt`, ya existía) y la pestaña *Novedades*.
 
 ### Qué NO existe / límites conocidos
-- **Cloudflare**: no hay interceptor con WebView; las fuentes protegidas darán error 403/503.
+- **Cloudflare**: `CloudflareInterceptor` + `WebViewInterceptor` restaurados (resuelven el desafío con un WebView oculto, 30 s). Sin ellos las extensiones fallaban con «CloudflareInterceptor must be present in default client». Sin probar contra un sitio protegido real.
 - **QuickJS**: `JavaScriptEngine` es stub.
 - **Ficha del manga, lista de capítulos, leer online, descargar → .cbz**: no existen (el motor solo lista y busca).
   `MotorFuentes` hay que ampliarlo (`detalle`, `capitulos`, `paginas`) usando `Source.getMangaUpdate(...)` y `getPageList(...)`.
