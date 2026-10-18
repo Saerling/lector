@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import android.graphics.BitmapFactory
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -24,15 +25,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.lector.Almacen
+import com.example.lector.Comic
 
 @Composable
 fun LText(
@@ -40,7 +43,7 @@ fun LText(
     color: Color = LectorColors.Text, maxLines: Int = Int.MAX_VALUE
 ) = Text(text, modifier, color, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
 
-/** Rebote suave al presionar (el "feel" del video). */
+/** Rebote suave al presionar. */
 @Composable
 fun Modifier.pressable(onClick: () -> Unit): Modifier {
     val src = remember { MutableInteractionSource() }
@@ -54,15 +57,26 @@ fun Modifier.pressable(onClick: () -> Unit): Modifier {
         .clickable(interactionSource = src, indication = null, onClick = onClick)
 }
 
-/** Portada. TODO: cambia el contenido por AsyncImage (Coil) con el primer cuadro del CBZ. */
+/** Portada real (la que ya guarda tu Almacen); si no hay, muestra la inicial del título. */
 @Composable
-fun Cover(series: Series, modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(20.dp)) {
-    Box(
-        modifier.clip(shape).background(
-            Brush.verticalGradient(listOf(series.color, series.color.copy(alpha = 0.35f), Color.Black))
-        ),
-        contentAlignment = Alignment.Center
-    ) { LText(series.title.take(1), LectorType.Display.copy(fontSize = 44.sp), color = Color(0x55FFFFFF)) }
+fun ComicCover(comic: Comic, almacen: Almacen, modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(20.dp)) {
+    val portada = remember(comic.id) {
+        BitmapFactory.decodeFile(almacen.portadaDe(comic.id).path)?.asImageBitmap()
+    }
+    Box(modifier.clip(shape).background(LectorColors.CardHigh), contentAlignment = Alignment.Center) {
+        if (portada != null) {
+            Image(bitmap = portada, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            LText(comic.titulo.take(1).uppercase(), LectorType.Display, color = LectorColors.Muted)
+        }
+    }
+}
+
+@Composable
+fun ProgressLine(progress: Float, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(LectorColors.PillFill)) {
+        Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(LectorColors.Text))
+    }
 }
 
 @Composable
@@ -86,9 +100,10 @@ fun SectionHeader(title: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Carrusel con "snap" y la última portada cortada para sugerir scroll. */
+/** Carrusel con "snap"; la última portada queda cortada para sugerir scroll. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun CoverCarousel(items: List<Series>, onClick: (Series) -> Unit, modifier: Modifier = Modifier) {
+fun CoverCarousel(items: List<Comic>, almacen: Almacen, onClick: (Comic) -> Unit, modifier: Modifier = Modifier) {
     val state = rememberLazyListState()
     LazyRow(
         modifier, state = state,
@@ -96,22 +111,22 @@ fun CoverCarousel(items: List<Series>, onClick: (Series) -> Unit, modifier: Modi
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         flingBehavior = rememberSnapFlingBehavior(state)
     ) {
-        items(items, key = { it.id }) { s ->
-            Column(Modifier.width(140.dp).pressable { onClick(s) }) {
-                Cover(s, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+        items(items, key = { it.id }) { c ->
+            Column(Modifier.width(140.dp).pressable { onClick(c) }) {
+                ComicCover(c, almacen, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
                 Spacer(Modifier.height(8.dp))
-                LText(s.title, LectorType.Body, maxLines = 1)
-                LText(s.subtitle, LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+                LText(c.titulo, LectorType.Body, maxLines = 1)
+                LText(c.textoPagina(), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
             }
         }
     }
 }
 
 enum class LectorTab(val label: String, val icon: ImageVector) {
-    Home("Home", Icons.Rounded.Home),
-    Search("Search", Icons.Rounded.Search),
-    Library("Library", Icons.Rounded.List),
-    Profile("Profile", Icons.Rounded.Person)
+    Home("Inicio", Icons.Rounded.Home),
+    Search("Buscar", Icons.Rounded.Search),
+    Library("Biblioteca", Icons.Rounded.List),
+    Profile("Perfil", Icons.Rounded.Person)
 }
 
 /** Barra flotante en píldora; el indicador de la pestaña activa cambia con resorte. */
@@ -123,7 +138,7 @@ fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier:
             .border(1.dp, LectorColors.GlassBorder, shape).padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        LectorTab.entries.forEach { tab ->
+        LectorTab.values().forEach { tab ->
             val sel = tab == selected
             val bg by animateColorAsState(
                 if (sel) LectorColors.PillFill else Color.Transparent,
@@ -139,20 +154,20 @@ fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier:
     }
 }
 
-/** Equivalente al mini reproductor: "continuar leyendo". */
+/** "Continuar leyendo": el último cómic que abriste. */
 @Composable
-fun MiniReader(series: Series, progress: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun MiniReader(comic: Comic, almacen: Almacen, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(24.dp)
     Row(
         modifier.pressable(onClick).fillMaxWidth().height(64.dp).clip(shape)
             .background(LectorColors.Glass).border(1.dp, LectorColors.GlassBorder, shape).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Cover(series, Modifier.fillMaxHeight().aspectRatio(1f), RoundedCornerShape(12.dp))
+        ComicCover(comic, almacen, Modifier.fillMaxHeight().aspectRatio(1f), RoundedCornerShape(12.dp))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            LText(series.title, LectorType.Body, maxLines = 1)
-            LText(progress, LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+            LText(comic.titulo, LectorType.Body, maxLines = 1)
+            LText(comic.textoPagina(), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
         }
         Icon(Icons.Rounded.PlayArrow, "Continuar", tint = LectorColors.Text, modifier = Modifier.size(28.dp))
         Spacer(Modifier.width(8.dp))

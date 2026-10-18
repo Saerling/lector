@@ -1,16 +1,12 @@
 package com.example.lector.ui
 
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// TODO: pon aquí tu Inter, por ejemplo:
-// FontFamily(Font(R.font.inter_regular), Font(R.font.inter_bold, FontWeight.Bold))
+// TODO: pon aquí tu Inter si quieres, p. ej. FontFamily(Font(R.font.inter_regular), Font(R.font.inter_bold, FontWeight.Bold))
 val LectorFont: FontFamily = FontFamily.Default
 
 object LectorColors {
@@ -31,16 +27,4 @@ object LectorType {
     val Body = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.Medium, fontSize = 14.sp)
     val Label = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.Normal, fontSize = 12.sp)
     val Mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-}
-
-@Composable
-fun LectorTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            background = LectorColors.Bg, surface = LectorColors.Bg,
-            onBackground = LectorColors.Text, onSurface = LectorColors.Text,
-            primary = LectorColors.Text
-        ),
-        content = content
-    )
 }

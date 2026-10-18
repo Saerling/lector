@@ -22,11 +22,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.lector.ui.Inicio
+import com.example.lector.ui.LectorTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -59,6 +62,7 @@ private fun Contenido(almacen: Almacen) {
     var comics by remember { mutableStateOf(almacen.cargar()) }
     var abierto by remember { mutableStateOf<Comic?>(null) }
     var importando by remember { mutableStateOf(false) }
+    var pestana by rememberSaveable { mutableStateOf(LectorTab.Home) }
 
     // Añadir un archivo .cbz.
     val selector = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -116,7 +120,9 @@ private fun Contenido(almacen: Almacen) {
 
     val actual = abierto
     if (actual == null) {
-        BibliotecaScreen(
+        Inicio(
+            tab = pestana,
+            onTab = { pestana = it },
             comics = comics,
             almacen = almacen,
             alAnadir = { selector.launch(arrayOf("*/*")) },

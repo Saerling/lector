@@ -1,17 +1,24 @@
 package com.example.lector.ui
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
@@ -22,42 +29,54 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.example.lector.Almacen
+import com.example.lector.Comic
 
 @Composable
 fun HomeScreen(
-    featured: Series,
-    recent: List<Series>,
-    mostRead: List<Series>,
-    similar: List<Series>,
-    similarTo: String,
-    onOpen: (Series) -> Unit,
-    onContinue: () -> Unit,
+    comics: List<Comic>,
+    almacen: Almacen,
+    onOpen: (Comic) -> Unit,
+    onAdd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (comics.isEmpty()) {
+        Column(
+            modifier.fillMaxSize().padding(32.dp),
+            verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            LText("Tu biblioteca está vacía", LectorType.Hero)
+            Spacer(Modifier.height(16.dp))
+            PillButton("Añadir cómic", Icons.Rounded.Add, onAdd)
+        }
+        return
+    }
+
+    val featured = remember(comics) {
+        comics.firstOrNull { it.id == almacen.ultimoAbierto } ?: comics.maxByOrNull { it.leido } ?: comics.first()
+    }
+    val recientes = remember(comics) { comics.filter { it.leido > 0 }.sortedByDescending { it.leido }.take(12) }
+    val enCurso = remember(comics) { comics.filter { it.enCurso() }.sortedByDescending { it.leido }.take(3) }
+    val sinLeer = remember(comics) { comics.filter { it.leido == 0L } }
+
     val list = rememberLazyListState()
-    // El título "Home" aparece fijo arriba cuando el héroe ya salió de pantalla.
+    // El título "Inicio" aparece fijo arriba cuando la cabecera ya salió de pantalla.
     val collapsed by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(state = list, contentPadding = PaddingValues(bottom = 190.dp)) {
-            item { Hero(featured, onContinue) }
-            item {
-                Spacer(Modifier.height(24.dp))
-                SectionHeader("Recently Read")
-                Spacer(Modifier.height(12.dp))
-                CoverCarousel(recent, onOpen)
+            item { Hero(featured, comics, almacen, onOpen, onAdd) }
+            if (recientes.isNotEmpty()) item {
+                Spacer(Modifier.height(24.dp)); SectionHeader("Leídos recientemente")
+                Spacer(Modifier.height(12.dp)); CoverCarousel(recientes, almacen, onOpen)
             }
-            item {
-                Spacer(Modifier.height(28.dp))
-                SectionHeader("Most Read")
-                Spacer(Modifier.height(8.dp))
+            if (enCurso.isNotEmpty()) {
+                item { Spacer(Modifier.height(28.dp)); SectionHeader("En curso"); Spacer(Modifier.height(8.dp)) }
+                items(enCurso, key = { it.id }) { FilaProgreso(it, almacen, onOpen) }
             }
-            itemsIndexed(mostRead.take(3)) { i, s -> RankRow(i + 1, s, onOpen) }
-            item {
-                Spacer(Modifier.height(28.dp))
-                SectionHeader("More like $similarTo")
-                Spacer(Modifier.height(12.dp))
-                CoverCarousel(similar, onOpen)
+            if (sinLeer.isNotEmpty()) item {
+                Spacer(Modifier.height(28.dp)); SectionHeader("Sin leer")
+                Spacer(Modifier.height(12.dp)); CoverCarousel(sinLeer, almacen, onOpen)
             }
         }
 
@@ -70,34 +89,36 @@ fun HomeScreen(
                 Modifier.fillMaxWidth()
                     .background(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(0.92f), Color.Transparent)))
                     .statusBarsPadding().padding(horizontal = 24.dp, vertical = 12.dp)
-            ) { LText("Home", LectorType.Display) }
+            ) { LText("Inicio", LectorType.Display) }
         }
     }
 }
 
 @Composable
-private fun Hero(featured: Series, onContinue: () -> Unit) {
+private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (Comic) -> Unit, onAdd: () -> Unit) {
     Box(Modifier.fillMaxWidth().height(520.dp)) {
-        // Cruce con desenfoque al cambiar de serie destacada (blur real en Android 12+).
+        // Cruce con desenfoque al cambiar de cómic (blur real en Android 12+).
         AnimatedContent(
-            featured, label = "hero",
-            transitionSpec = { fadeIn(tween(500)) togetherWith fadeOut(tween(500)) }
-        ) { s ->
+            targetState = featured.id, label = "hero",
+            transitionSpec = { ContentTransform(fadeIn(tween(500)), fadeOut(tween(500))) }
+        ) { id ->
+            val s = all.firstOrNull { it.id == id } ?: featured
             val blur by transition.animateDp(label = "heroBlur") {
                 if (it == EnterExitState.Visible) 0.dp else 28.dp
             }
             Box(Modifier.fillMaxSize().blur(blur)) {
-                Cover(s, Modifier.fillMaxSize(), RoundedCornerShape(0.dp))
+                ComicCover(s, almacen, Modifier.fillMaxSize(), RoundedCornerShape(0.dp))
                 Box(
                     Modifier.fillMaxSize().background(
                         Brush.verticalGradient(0.40f to Color.Transparent, 1f to Color.Black)
                     )
                 )
                 Column(Modifier.align(Alignment.BottomStart).padding(24.dp)) {
-                    LText("Continue", LectorType.Label, color = Color(0xB3FFFFFF))
-                    LText("${s.title} - ${s.subtitle}", LectorType.Hero, maxLines = 2)
+                    LText("Continuar", LectorType.Label, color = Color(0xB3FFFFFF))
+                    LText(s.titulo, LectorType.Hero, maxLines = 2)
+                    LText(s.textoPagina(), LectorType.Label, color = Color(0xB3FFFFFF))
                     Spacer(Modifier.height(14.dp))
-                    PillButton("Read", Icons.Rounded.PlayArrow, onContinue)
+                    PillButton("Leer", Icons.Rounded.PlayArrow, { onOpen(s) })
                 }
             }
         }
@@ -110,27 +131,26 @@ private fun Hero(featured: Series, onContinue: () -> Unit) {
                 LText("L", LectorType.Section)
             }
             Box(
-                Modifier.size(36.dp).clip(CircleShape).background(
-                    Brush.linearGradient(listOf(Color(0xFF7C4DFF), Color(0xFF2A1B5E)))
-                )
-            )
+                Modifier.size(36.dp).clip(CircleShape).background(LectorColors.PillFill).pressable(onAdd),
+                Alignment.Center
+            ) { Icon(Icons.Rounded.Add, "Añadir", tint = LectorColors.Text, modifier = Modifier.size(20.dp)) }
         }
     }
 }
 
 @Composable
-private fun RankRow(rank: Int, s: Series, onOpen: (Series) -> Unit) {
+private fun FilaProgreso(c: Comic, almacen: Almacen, onOpen: (Comic) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().pressable { onOpen(s) }.padding(horizontal = 24.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().pressable { onOpen(c) }.padding(horizontal = 24.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        LText("$rank", LectorType.Body, Modifier.width(28.dp))
-        Cover(s, Modifier.size(48.dp), RoundedCornerShape(10.dp))
-        Spacer(Modifier.width(12.dp))
+        ComicCover(c, almacen, Modifier.size(width = 44.dp, height = 60.dp), RoundedCornerShape(10.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            LText(s.title, LectorType.Body, maxLines = 1)
-            LText(s.subtitle, LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+            LText(c.titulo, LectorType.Body, maxLines = 1)
+            LText(c.textoPagina(), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+            Spacer(Modifier.height(8.dp))
+            ProgressLine(c.progresoLectura())
         }
-        Icon(Icons.Rounded.MoreVert, null, tint = LectorColors.Muted)
     }
 }
