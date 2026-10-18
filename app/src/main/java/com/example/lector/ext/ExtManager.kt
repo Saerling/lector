@@ -75,6 +75,14 @@ class ExtManager private constructor(private val app: Context) {
     var leidos by mutableStateOf(prefs.getStringSet("leidos", emptySet())?.toSet() ?: emptySet()); private set
     var modoLector by mutableStateOf(prefs.getInt("modo_lector", 0)); private set
 
+    // Página por la que vas en cada capítulo SIN terminar ("fuenteId|url" -> página, desde 0).
+    private val paginasCap = mutableStateMapOf<String, Int>().also { m ->
+        runCatching {
+            val o = JSONObject(prefs.getString("paginas_cap", "{}") ?: "{}")
+            o.keys().forEach { k -> m[k] = o.getInt(k) }
+        }
+    }
+
     private val confiadas: MutableSet<String> =
         (prefs.getStringSet("confiadas", emptySet()) ?: emptySet()).toMutableSet()
     private var confiadasVersion by mutableStateOf(0) // fuerza repintar al cambiar la confianza
@@ -423,9 +431,27 @@ class ExtManager private constructor(private val app: Context) {
 
     fun marcarLeido(fuenteId: Long, url: String) {
         val k = "$fuenteId|$url"
+        if (paginasCap.remove(k) != null) guardarPaginasCap() // terminado: ya no hay "página por la que vas"
         if (k in leidos) return
         leidos = leidos + k
         prefs.edit().putStringSet("leidos", leidos).apply()
+    }
+
+    /** Página por la que ibas en un capítulo (0 si no lo empezaste o ya está leído). */
+    fun paginaDe(fuenteId: Long, url: String): Int =
+        if (esLeido(fuenteId, url)) 0 else paginasCap["$fuenteId|$url"] ?: 0
+
+    fun guardarPagina(fuenteId: Long, url: String, pagina: Int) {
+        val k = "$fuenteId|$url"
+        if (esLeido(fuenteId, url) || pagina <= 0 || paginasCap[k] == pagina) return
+        paginasCap[k] = pagina
+        guardarPaginasCap()
+    }
+
+    private fun guardarPaginasCap() {
+        val o = JSONObject()
+        paginasCap.forEach { (k, v) -> o.put(k, v) }
+        prefs.edit().putString("paginas_cap", o.toString()).apply()
     }
 
     fun esLeido(fuenteId: Long, url: String) = "$fuenteId|$url" in leidos

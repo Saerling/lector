@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lector.Almacen
 import com.example.lector.ext.*
+import com.example.lector.Cbz
 import com.example.lector.EntradaHistorial
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -79,6 +80,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.zip.ZipFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -111,7 +113,7 @@ object GestorDescargas {
     /** "fuenteId|urlCapítulo" → fracción descargada (0f = preparando). Las pantallas lo leen y se repintan. */
     val progreso = mutableStateMapOf<String, Float>()
 
-    /** Sube cada vez que termina o se borra una descarga, para que las pantallas relean `almacen.descargas()`. */
+    /** Sube cada vez que termina o se borra una descarga, para que las pantallas vuelvan a mirar cuáles hay. */
     val version = mutableStateOf(0)
 
     fun clave(f: FuenteUI, c: CapituloFuente) = "${f.id}|${c.url}"
@@ -129,15 +131,8 @@ object GestorDescargas {
             val archivo = File(app.cacheDir, "cap_${System.nanoTime()}.cbz")
             try {
                 motor.descargarCbz(f, c, archivo) { h, t -> if (t > 0) progreso[clave] = h.toFloat() / t }
-                val titulo = "$tituloManga - ${c.nombre.ifBlank { numeroTexto(c.numero) }}"
-                    .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                val comic = withContext(Dispatchers.IO) { almacen.importarArchivo(archivo, titulo) }
-                if (comic != null) {
-                    almacen.registrarDescarga(f.id, c.url, comic.id)
-                    Toast.makeText(app, "Añadido a la biblioteca", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(app, "No se pudo descargar: archivo vacío", Toast.LENGTH_LONG).show()
-                }
+                withContext(Dispatchers.IO) { almacen.guardarDescarga(archivo, f.id, c.url) }
+                Toast.makeText(app, "Capítulo descargado", Toast.LENGTH_SHORT).show()
             } catch (e: CancellationException) {
                 throw e // el aviso de "cancelada" lo da cancelar()
             } catch (e: Exception) {
@@ -167,24 +162,6 @@ private fun urlManga(f: FuenteUI, m: MangaFuente): String? =
     if (m.url.startsWith("http")) m.url
     else if (f.baseUrl.isBlank()) null
     else f.baseUrl.trimEnd('/') + "/" + m.url.trimStart('/')
-
-@Composable
-private fun AccionFicha(
-    icono: androidx.compose.ui.graphics.vector.ImageVector, texto: String, activa: Boolean,
-    acento: Color, onClick: () -> Unit,
-) {
-    Column(
-        Modifier.pressable(onClick).padding(horizontal = 14.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icono, texto, tint = if (activa) acento else LectorColors.Muted, modifier = Modifier.size(26.dp))
-        Spacer(Modifier.height(4.dp))
-        LText(
-            texto, LectorType.Label.copy(fontSize = 12.sp),
-            color = if (activa) acento else LectorColors.Muted, maxLines = 1,
-        )
-    }
-}
 
 // ───────────────────── Ficha del manga (online) ─────────────────────
 
@@ -218,8 +195,7 @@ fun FichaMangaScreen(
     var guardando by remember { mutableStateOf(false) }
     var dialogoCats by remember { mutableStateOf(false) }
     var editandoCats by remember { mutableStateOf(false) }
-    // Descargas ya hechas ("fuenteId|capítulo" → id del cómic) y capítulo cuya descarga se quiere borrar.
-    val hechas = remember(GestorDescargas.version.value) { almacen.descargas() }
+    // Capítulo cuya descarga se quiere borrar.
     var quitarDescarga by remember { mutableStateOf<CapituloFuente?>(null) }
 
     LaunchedEffect(fuenteId, manga.url, recarga) {
@@ -306,6 +282,7 @@ fun FichaMangaScreen(
     val tituloFicha = fi?.detalle?.titulo ?: manga.titulo
     // La mayoría de fuentes listan el capítulo más nuevo primero: el primero a leer es el último sin leer.
     val sig = fi?.let { x -> (x.capitulos.lastIndex downTo 0).firstOrNull { !ext.esLeido(f.id, x.capitulos[it].url) } ?: 0 } ?: 0
+    val paginaSig = fi?.capitulos?.getOrNull(sig)?.let { ext.paginaDe(f.id, it.url) } ?: 0
     val hayLeidos = fi?.capitulos?.any { ext.esLeido(f.id, it.url) } == true
     val abrirNavegador: () -> Unit = {
         val u = urlManga(f, manga)
@@ -329,7 +306,7 @@ fun FichaMangaScreen(
                     onCargada = { portadaLista = true; if (conTema) paleta = temaDe(it) },
                     enBiblioteca = enBiblioteca != null,
                     textoPildora = if (enBiblioteca != null) "Categorías" else "Añadir a biblioteca",
-                    onLeer = { fi?.let { onLeer(it.capitulos, sig, 0) } },
+                    onLeer = { fi?.let { onLeer(it.capitulos, sig, paginaSig) } },
                     onCorazon = { alternarBiblioteca() },
                     onPildora = { if (enBiblioteca != null) dialogoCats = true else alternarBiblioteca() },
                 )
@@ -347,7 +324,7 @@ fun FichaMangaScreen(
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
                             if (ultimo != null) item {
-                                TarjetaVidrio(Modifier.width(ancho).entrada(0), { onLeer(fi.capitulos, 0, 0) }) {
+                                TarjetaVidrio(Modifier.width(ancho).entrada(0), { onLeer(fi.capitulos, 0, ext.paginaDe(f.id, fi.capitulos[0].url)) }) {
                                     Row(Modifier.padding(start = 22.dp, end = 22.dp, top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                                         LText("Último capítulo", LectorType.Section.copy(fontSize = 18.sp), Modifier.weight(1f), maxLines = 1)
                                         LText(fechaTexto(ultimo.fecha), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
@@ -369,7 +346,7 @@ fun FichaMangaScreen(
                                             )
                                         }
                                         Spacer(Modifier.width(10.dp))
-                                        CirculoClaro(Icons.Rounded.PlayArrow, "Leer último capítulo", ClaroBtn, 48.dp) { onLeer(fi.capitulos, 0, 0) }
+                                        CirculoClaro(Icons.Rounded.PlayArrow, "Leer último capítulo", ClaroBtn, 48.dp) { onLeer(fi.capitulos, 0, ext.paginaDe(f.id, fi.capitulos[0].url)) }
                                     }
                                 }
                             }
@@ -410,16 +387,18 @@ fun FichaMangaScreen(
                     val i = iv.index
                     val c = iv.value
                     val clave = GestorDescargas.clave(f, c)
+                    val paginaGuardada = ext.paginaDe(f.id, c.url)
                     val fraccion = GestorDescargas.progreso[clave]
+                    val version = GestorDescargas.version.value // al cambiar, se vuelve a mirar el disco
                     val estado: EstadoDescarga = when {
                         fraccion != null -> EstadoDescarga.Descargando(fraccion)
-                        clave in hechas -> EstadoDescarga.Listo
+                        version >= 0 && almacen.estaDescargado(f.id, c.url) -> EstadoDescarga.Listo
                         else -> EstadoDescarga.Libre
                     }
                     val leido = ext.esLeido(f.id, c.url)
                     val numero = numeroTexto(c.numero).ifEmpty { "#" }
                     Row(
-                        Modifier.fillMaxWidth().entrada(pos).pressable { onLeer(fi.capitulos, i, 0) }
+                        Modifier.fillMaxWidth().entrada(pos).pressable { onLeer(fi.capitulos, i, paginaGuardada) }
                             .padding(start = 24.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -441,9 +420,13 @@ fun FichaMangaScreen(
                                 color = if (leido) LectorColors.Muted else LectorColors.Text,
                             )
                             val sub = listOfNotNull(
+                                if (paginaGuardada > 0) "Pág: ${paginaGuardada + 1}" else null,
                                 fechaTexto(c.fecha).takeIf { it.isNotEmpty() }, c.scanlator,
                             ).joinToString(" · ")
-                            if (sub.isNotEmpty()) LText(sub, LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+                            if (sub.isNotEmpty()) LText(
+                                sub, LectorType.Label, maxLines = 1,
+                                color = if (paginaGuardada > 0) acento else LectorColors.Muted,
+                            )
                         }
                         Spacer(Modifier.width(6.dp))
                         // Descargar el capítulo como .cbz y meterlo en la biblioteca.
@@ -484,7 +467,7 @@ fun FichaMangaScreen(
                     Box(
                         Modifier.size(44.dp)
                             .graphicsLayer { alpha = ((scrollPx() - 560f) / 160f).coerceIn(0f, 1f) }
-                            .pressable { if (scrollPx() > 560f) onLeer(fi.capitulos, sig, 0) }
+                            .pressable { if (scrollPx() > 560f) onLeer(fi.capitulos, sig, paginaSig) }
                             .clip(CircleShape).background(acento),
                         Alignment.Center,
                     ) { Icon(Icons.Rounded.PlayArrow, if (hayLeidos) "Reanudar" else "Leer", tint = TintaBtn) }
@@ -536,11 +519,10 @@ fun FichaMangaScreen(
             AlertDialog(
                 onDismissRequest = { quitarDescarga = null },
                 title = { Text("¿Quitar la descarga?") },
-                text = { Text("Se borrará «${c.nombre.ifBlank { "Capítulo ${numeroTexto(c.numero)}" }}» de tu biblioteca.") },
+                text = { Text("Se borrará el archivo descargado de «${c.nombre.ifBlank { "Capítulo ${numeroTexto(c.numero)}" }}». Podrás seguir leyéndolo online.") },
                 confirmButton = {
                     TextButton(onClick = {
-                        hechas[GestorDescargas.clave(f, c)]?.let { almacen.eliminar(it) }
-                        almacen.olvidarDescarga(f.id, c.url)
+                        almacen.borrarDescarga(f.id, c.url)
                         GestorDescargas.version.value++
                         quitarDescarga = null
                         alRecargar()
@@ -672,6 +654,30 @@ private suspend fun decodificar(bytes: ByteArray, anchoMax: Int = 1440): ImageBi
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, op)?.asImageBitmap()
 }
 
+// Si el capítulo está descargado se lee del archivo; si no, de la red (misma pantalla, mismo progreso).
+private suspend fun paginasDeCap(almacen: Almacen?, motor: MotorFuentes, f: FuenteUI, cap: CapituloFuente): Int {
+    val local = almacen?.archivoDescarga(f.id, cap.url)
+    if (local != null && local.exists()) {
+        val n = runCatching { withContext(Dispatchers.IO) { Cbz.paginas(local).size } }.getOrDefault(0)
+        if (n > 0) return n
+    }
+    return motor.cantidadPaginas(f, cap)
+}
+
+private suspend fun bytesDePagina(almacen: Almacen?, motor: MotorFuentes, f: FuenteUI, cap: CapituloFuente, i: Int): ByteArray {
+    val local = almacen?.archivoDescarga(f.id, cap.url)
+    if (local != null && local.exists()) {
+        val bytes = runCatching {
+            withContext(Dispatchers.IO) {
+                val nombre = Cbz.paginas(local).getOrNull(i) ?: error("Página $i fuera de rango")
+                ZipFile(local).use { z -> z.getInputStream(z.getEntry(nombre)).use { it.readBytes() } }
+            }
+        }.getOrNull()
+        if (bytes != null) return bytes
+    }
+    return motor.imagenPagina(f, cap, i)
+}
+
 private fun urlCapitulo(f: FuenteUI, c: CapituloFuente): String? =
     if (c.url.startsWith("http")) c.url
     else if (f.baseUrl.isBlank()) null
@@ -726,7 +732,7 @@ fun LeerOnlineScreen(
 
     LaunchedEffect(cap.url, recarga) {
         paginas = null; error = null; actual = 0
-        runCatching { motor.cantidadPaginas(f, cap) }
+        runCatching { paginasDeCap(almacen, motor, f, cap) }
             .onSuccess { paginas = it }
             .onFailure { error = it.message ?: "No se pudieron cargar las páginas" }
     }
@@ -735,7 +741,8 @@ fun LeerOnlineScreen(
     var paginaInicialUsada by remember { mutableStateOf(false) }
     LaunchedEffect(cap.url, total) {
         if (total != null && total > 0) {
-            val destino = if (!paginaInicialUsada && indice == indiceInicial) paginaInicial.coerceIn(0, total - 1) else 0
+            val destino = (if (!paginaInicialUsada && indice == indiceInicial) paginaInicial else ext.paginaDe(f.id, cap.url))
+                .coerceIn(0, total - 1)
             paginaInicialUsada = true
             runCatching { listState.scrollToItem(destino) }
             runCatching { pagerState.scrollToPage(destino) }
@@ -761,15 +768,18 @@ fun LeerOnlineScreen(
     // Historial: anota el capítulo y la página que estás leyendo (con una pequeña espera para no
     // escribir en cada fotograma del desplazamiento).
     LaunchedEffect(cap.url, actual, total) {
-        if (almacen == null || manga == null || total == null || total <= 0) return@LaunchedEffect
+        if (total == null || total <= 0) return@LaunchedEffect
         delay(600)
+        // Guarda por qué página vas en este capítulo (si ya lo terminaste, se marca leído y no hace falta).
+        if (actual >= total - 1) ext.marcarLeido(f.id, cap.url) else ext.guardarPagina(f.id, cap.url, actual)
+        if (almacen == null || manga == null) return@LaunchedEffect
         almacen.registrarHistorialLinea(
             EntradaHistorial(
                 fuenteId = f.id, urlManga = manga.url,
                 titulo = titulo.ifBlank { manga.titulo },
                 portadaUrl = manga.portadaUrl,
                 capUrl = cap.url,
-                capNombre = cap.nombre.ifBlank { "Capítulo ${numeroTexto(cap.numero)}" },
+                capNombre = cap.nombre.trim().trimEnd(':').trim().ifBlank { "Capítulo ${numeroTexto(cap.numero)}" },
                 pagina = actual.coerceIn(0, total - 1), total = total,
                 leido = System.currentTimeMillis(),
             ),
@@ -799,7 +809,7 @@ fun LeerOnlineScreen(
                 state = listState,
                 modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { barras = !barras } },
             ) {
-                items(total) { i -> PaginaOnline(f, cap, i, motor, ajustar = false) }
+                items(total) { i -> PaginaOnline(f, cap, i, motor, almacen, ajustar = false) }
                 item {
                     Row(
                         Modifier.fillMaxWidth().navigationBarsPadding().padding(24.dp),
@@ -829,7 +839,7 @@ fun LeerOnlineScreen(
                     modifier = Modifier.fillMaxSize(),
                     reverseLayout = modo == 2,
                     beyondViewportPageCount = 1,
-                ) { i -> PaginaOnline(f, cap, i, motor, ajustar = true) }
+                ) { i -> PaginaOnline(f, cap, i, motor, almacen, ajustar = true) }
             }
         }
 
@@ -990,7 +1000,7 @@ private fun AccionLector(icono: androidx.compose.ui.graphics.vector.ImageVector,
 }
 
 @Composable
-private fun PaginaOnline(f: FuenteUI, cap: CapituloFuente, i: Int, motor: MotorFuentes, ajustar: Boolean) {
+private fun PaginaOnline(f: FuenteUI, cap: CapituloFuente, i: Int, motor: MotorFuentes, almacen: Almacen?, ajustar: Boolean) {
     val clave = "${f.id}|${cap.url}|$i"
     var img by remember(clave) { mutableStateOf(CachePaginas.cache.get(clave)) }
     var fallo by remember(clave) { mutableStateOf<String?>(null) }
@@ -999,7 +1009,7 @@ private fun PaginaOnline(f: FuenteUI, cap: CapituloFuente, i: Int, motor: MotorF
     LaunchedEffect(clave, intento) {
         if (img != null) return@LaunchedEffect
         fallo = null
-        runCatching { decodificar(motor.imagenPagina(f, cap, i)) ?: error("Imagen no válida") }
+        runCatching { decodificar(bytesDePagina(almacen, motor, f, cap, i)) ?: error("Imagen no válida") }
             .onSuccess { img = it; CachePaginas.cache.put(clave, it) }
             .onFailure { fallo = it.message ?: "Error al cargar la página" }
     }

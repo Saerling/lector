@@ -78,6 +78,7 @@ class Almacen(private val contexto: Context) {
     private val prefs = contexto.getSharedPreferences("lector", Context.MODE_PRIVATE)
     private val carpetaComics = File(contexto.filesDir, "comics").apply { mkdirs() }
     private val carpetaPortadas = File(contexto.filesDir, "portadas").apply { mkdirs() }
+    private val carpetaDescargas = File(contexto.filesDir, "descargas").apply { mkdirs() }
 
     // ---- Apariencia (son "estado" de Compose: al cambiarlos, la app se repinta sola) ----
     var paleta by mutableStateOf(
@@ -932,24 +933,47 @@ class Almacen(private val contexto: Context) {
         guardar(cargar().map { if (it.id == c.id) it.copy(paginas = total, ultimaPagina = leidos) else it })
     }
 
-    // ---- Capítulos descargados como .cbz: "fuenteId|urlCapítulo" -> id del cómic ----
-    fun descargas(): Map<String, String> = runCatching {
-        val o = JSONObject(prefs.getString("descargas", "{}"))
-        o.keys().asSequence().associateWith { o.getString(it) }.filterValues { archivoDe(it).exists() }
-    }.getOrDefault(emptyMap())
-
-    @Synchronized
-    fun registrarDescarga(fuenteId: Long, capUrl: String, comicId: String) {
-        val o = JSONObject(prefs.getString("descargas", "{}"))
-        o.put("$fuenteId|$capUrl", comicId)
-        prefs.edit().putString("descargas", o.toString()).apply()
+    // ---- Capítulos descargados ----
+    // Como en Komikku, una descarga pertenece al capítulo de su manga: NO es un cómic aparte de la
+    // biblioteca. Se guarda como .cbz en su propia carpeta y el lector online la usa en vez de la red.
+    fun archivoDescarga(fuenteId: Long, capUrl: String): File {
+        val h = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("$fuenteId|$capUrl".toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
+        return File(carpetaDescargas, "$h.cbz")
     }
 
-    @Synchronized
-    fun olvidarDescarga(fuenteId: Long, capUrl: String) {
-        val o = JSONObject(prefs.getString("descargas", "{}"))
-        o.remove("$fuenteId|$capUrl")
-        prefs.edit().putString("descargas", o.toString()).apply()
+    fun estaDescargado(fuenteId: Long, capUrl: String): Boolean = archivoDescarga(fuenteId, capUrl).exists()
+
+    // Mueve (o copia) el .cbz recién bajado a su sitio definitivo.
+    fun guardarDescarga(origen: File, fuenteId: Long, capUrl: String) {
+        val destino = archivoDescarga(fuenteId, capUrl)
+        destino.delete()
+        if (!origen.renameTo(destino)) {
+            origen.copyTo(destino, overwrite = true)
+            origen.delete()
+        }
+    }
+
+    fun borrarDescarga(fuenteId: Long, capUrl: String) {
+        archivoDescarga(fuenteId, capUrl).delete()
+    }
+
+    // Versiones anteriores guardaban cada capítulo descargado como un cómic suelto de la biblioteca
+    // (el "duplicado"). Aquí se convierten en descargas del capítulo y se quitan de la biblioteca.
+    private fun migrarDescargasViejas() {
+        val texto = prefs.getString("descargas", null) ?: return
+        val viejas = JSONObject(texto)
+        for (clave in viejas.keys().asSequence().toList()) {
+            val id = viejas.optString(clave)
+            val origen = archivoDe(id)
+            val sep = clave.indexOf('|')
+            val fuente = clave.substring(0, sep.coerceAtLeast(0)).toLongOrNull()
+            if (id.isNotEmpty() && origen.exists() && sep > 0 && fuente != null) {
+                guardarDescarga(origen, fuente, clave.substring(sep + 1))
+            }
+            if (id.isNotEmpty()) eliminar(id)
+        }
+        prefs.edit().remove("descargas").apply()
     }
 
     fun guardarProgreso(id: String, pagina: Int) {
@@ -965,5 +989,9 @@ class Almacen(private val contexto: Context) {
         if (ultimoAbierto == id) ultimoAbierto = null
         guardarAsignaciones(asignaciones() - id)
         guardar(cargar().filter { it.id != id })
+    }
+
+    init {
+        runCatching { migrarDescargasViejas() }
     }
 }

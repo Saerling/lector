@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.lector.ui.ImagenRemota
+import com.example.lector.ui.LectorColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
@@ -93,6 +94,7 @@ fun HistorialScreen(
             }
             Text(
                 "Historial",
+                color = LectorColors.Text,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
@@ -230,6 +232,7 @@ private fun FilaHistorial(
         Column(Modifier.weight(1f)) {
             Text(
                 comic.titulo,
+                color = LectorColors.Text,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,
@@ -297,12 +300,13 @@ private fun FilaHistorialEnLinea(
         Column(Modifier.weight(1f)) {
             Text(
                 e.titulo,
+                color = LectorColors.Text,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
             )
-            val cap = e.capNombre.ifBlank { "Capítulo" }
+            val cap = e.capNombre.trim().trimEnd(':').trim().ifBlank { "Capítulo" }
             val pagina = if (e.total > 0) " · Pág. ${e.pagina + 1} de ${e.total}" else ""
             Text(
                 "$cap$pagina · $hora",

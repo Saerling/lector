@@ -213,6 +213,21 @@ Supuestos / límites:
 
 ---
 
+## 2f. PASO 7b — Corrección: descargas sin duplicado + progreso por capítulo (2026-10-18, **SIN compilar ni probar**)
+Problemas reportados: (1) al descargar un capítulo aparecía como cómic suelto («One Punch-Man - Capítulo 305_») duplicando al manga en Home/Historial/mini-lector;
+(2) al leer un capítulo no se guardaba el avance; (3) en Historial los títulos salían negros sobre negro.
+- **Descargas = archivo del capítulo, no cómic.** `Almacen.archivoDescarga / estaDescargado / guardarDescarga / borrarDescarga` (carpeta `filesDir/descargas`). `GestorDescargas` ya no llama a `importarArchivo`.
+  Al arrancar, `migrarDescargasViejas()` convierte las descargas antiguas (cómics sueltos) en descargas del capítulo y las quita de la biblioteca.
+- **Lectura sin conexión:** `LeerOnlineScreen` usa el .cbz descargado si existe (`paginasDeCap` / `bytesDePagina`), así leer una descarga también da historial y progreso del manga.
+- **Progreso por capítulo (como Komikku):** `ExtManager.paginaDe / guardarPagina` (prefs `paginas_cap`); `marcarLeido` lo borra. El lector guarda la página (espera 600 ms) y marca leído en la última; la ficha muestra «Pág: N» en los capítulos empezados y al tocarlos (o «Reanudar») sigue por esa página.
+- `Historial.kt`: color de texto explícito (`LectorColors.Text`) y nombre de capítulo sin «:» sobrante.
+
+## 2g. Fusión con los cambios del usuario (2026-10-18)
+El usuario devolvió el proyecto con un rediseño de la ficha (`FuenteManga.kt`: cabecera a pantalla completa teñida con el color de la portada, tarjetas «Último capítulo / Sinopsis», lista de capítulos con número y orden más nuevos/antiguos, botón leer/corazón/píldora, `TemaPortada` + `temaDe` en `Movimiento.kt`, `ImagenRemota(onCargada)` en `Explorar.kt`),
+pero partiendo de la versión anterior al paso 7b. Se conservó su diseño y se re-aplicó encima el 7b: descargas por capítulo (`estaDescargado/guardarDescarga/borrarDescarga`), «Pág: N» y reanudar por página guardada (también en cabecera, barra superior y tarjeta «Último capítulo»), lectura de descargas sin conexión y guardado de página en el lector.
+Se quitó `AccionFicha` (ya no se usa). Ojo: `TemaPortada` existe como clase en `ui/Movimiento.kt` y como función composable en `Theme.kt` (paquetes distintos, sin choque hoy; no importar ambos con `*`).
+**Sigue sin compilarse**: primer paso al retomar = compilar y corregir.
+
 ## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.
