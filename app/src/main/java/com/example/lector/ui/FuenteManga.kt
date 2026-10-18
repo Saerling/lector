@@ -1,10 +1,12 @@
 package com.example.lector.ui
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.LruCache
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -52,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -59,7 +62,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lector.Almacen
 import com.example.lector.ext.*
+import com.example.lector.EntradaHistorial
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -84,6 +93,92 @@ private fun fechaTexto(ms: Long): String =
 private fun numeroTexto(n: Float): String =
     if (n < 0) "" else if (n % 1f == 0f) n.toInt().toString() else n.toString()
 
+/**
+ * Descargas de capítulos (.cbz → biblioteca). Viven fuera de las pantallas: si sales de la ficha la descarga
+ * sigue, y al volver ves su progreso. Tocar otra vez el botón de un capítulo que se está descargando la CANCELA.
+ */
+object GestorDescargas {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val trabajos = HashMap<String, Job>()
+
+    /** "fuenteId|urlCapítulo" → fracción descargada (0f = preparando). Las pantallas lo leen y se repintan. */
+    val progreso = mutableStateMapOf<String, Float>()
+
+    /** Sube cada vez que termina o se borra una descarga, para que las pantallas relean `almacen.descargas()`. */
+    val version = mutableStateOf(0)
+
+    fun clave(f: FuenteUI, c: CapituloFuente) = "${f.id}|${c.url}"
+
+    fun iniciar(
+        ctx: Context, almacen: Almacen, motor: MotorFuentes, f: FuenteUI, c: CapituloFuente,
+        tituloManga: String, alTerminar: () -> Unit,
+    ) {
+        val clave = clave(f, c)
+        if (trabajos.containsKey(clave)) return
+        val app = ctx.applicationContext
+        progreso[clave] = 0f
+        trabajos[clave] = scope.launch {
+            val yo = coroutineContext[Job]
+            val archivo = File(app.cacheDir, "cap_${System.nanoTime()}.cbz")
+            try {
+                motor.descargarCbz(f, c, archivo) { h, t -> if (t > 0) progreso[clave] = h.toFloat() / t }
+                val titulo = "$tituloManga - ${c.nombre.ifBlank { numeroTexto(c.numero) }}"
+                    .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val comic = withContext(Dispatchers.IO) { almacen.importarArchivo(archivo, titulo) }
+                if (comic != null) {
+                    almacen.registrarDescarga(f.id, c.url, comic.id)
+                    Toast.makeText(app, "Añadido a la biblioteca", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(app, "No se pudo descargar: archivo vacío", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: CancellationException) {
+                throw e // el aviso de "cancelada" lo da cancelar()
+            } catch (e: Exception) {
+                Toast.makeText(app, "No se pudo descargar: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
+            } finally {
+                archivo.delete()
+                // Solo limpia si nadie ha cancelado y reiniciado mientras tanto.
+                if (trabajos[clave] === yo) {
+                    trabajos.remove(clave)
+                    progreso.remove(clave)
+                }
+                version.value++
+                alTerminar()
+            }
+        }
+    }
+
+    fun cancelar(ctx: Context, clave: String) {
+        val t = trabajos.remove(clave) ?: return
+        progreso.remove(clave) // el botón vuelve a "descargar" al instante
+        t.cancel()
+        Toast.makeText(ctx.applicationContext, "Descarga cancelada", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun urlManga(f: FuenteUI, m: MangaFuente): String? =
+    if (m.url.startsWith("http")) m.url
+    else if (f.baseUrl.isBlank()) null
+    else f.baseUrl.trimEnd('/') + "/" + m.url.trimStart('/')
+
+@Composable
+private fun AccionFicha(
+    icono: androidx.compose.ui.graphics.vector.ImageVector, texto: String, activa: Boolean,
+    acento: Color, onClick: () -> Unit,
+) {
+    Column(
+        Modifier.pressable(onClick).padding(horizontal = 14.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icono, texto, tint = if (activa) acento else LectorColors.Muted, modifier = Modifier.size(26.dp))
+        Spacer(Modifier.height(4.dp))
+        LText(
+            texto, LectorType.Label.copy(fontSize = 12.sp),
+            color = if (activa) acento else LectorColors.Muted, maxLines = 1,
+        )
+    }
+}
+
 // ───────────────────── Ficha del manga (online) ─────────────────────
 
 @Composable
@@ -94,7 +189,11 @@ fun FichaMangaScreen(
     almacen: Almacen,
     alRecargar: () -> Unit,
     onBack: () -> Unit,
-    onLeer: (List<CapituloFuente>, Int) -> Unit,
+    // (capítulos, índice del capítulo, página por la que seguir)
+    onLeer: (List<CapituloFuente>, Int, Int) -> Unit,
+    // Si viene del historial: capítulo y página que hay que abrir en cuanto cargue la ficha.
+    reanudarCap: Pair<String, Int>? = null,
+    alConsumirReanudar: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -104,22 +203,73 @@ fun FichaMangaScreen(
     var ficha by remember { mutableStateOf<FichaManga?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var cargando by remember { mutableStateOf(true) }
-    var descargando by remember { mutableStateOf<Map<String, String>>(emptyMap()) } // url capítulo -> texto de progreso
     var descExpandida by remember { mutableStateOf(false) }
     var recarga by remember { mutableStateOf(0) }
+
+    // Biblioteca y categorías
+    var enBiblioteca by remember { mutableStateOf(almacen.comicEnLinea(fuenteId, manga.url)) }
+    var guardando by remember { mutableStateOf(false) }
+    var dialogoCats by remember { mutableStateOf(false) }
+    var editandoCats by remember { mutableStateOf(false) }
+    // Descargas ya hechas ("fuenteId|capítulo" → id del cómic) y capítulo cuya descarga se quiere borrar.
+    val hechas = remember(GestorDescargas.version.value) { almacen.descargas() }
+    var quitarDescarga by remember { mutableStateOf<CapituloFuente?>(null) }
 
     LaunchedEffect(fuenteId, manga.url, recarga) {
         if (f == null || motor == null) return@LaunchedEffect
         cargando = true; error = null
-        runCatching { motor.ficha(f, manga) }
-            .onSuccess { ficha = it }
+        val r = runCatching { motor.ficha(f, manga) }
+        r.onSuccess { ficha = it }
             .onFailure { error = it.message ?: "No se pudo cargar la ficha" }
         cargando = false
+        val cargada = r.getOrNull() ?: return@LaunchedEffect
+        // Si está en la biblioteca, deja al día "capítulos leídos / totales".
+        almacen.actualizarProgresoEnLinea(
+            f.id, manga.url, cargada.capitulos.count { ext.esLeido(f.id, it.url) }, cargada.capitulos.size,
+        )
+        // Venimos del historial: abre directamente el capítulo donde lo dejaste.
+        if (reanudarCap != null) {
+            alConsumirReanudar()
+            val i = cargada.capitulos.indexOfFirst { it.url == reanudarCap.first }
+            if (i >= 0) onLeer(cargada.capitulos, i, reanudarCap.second)
+        }
     }
 
     val lista = rememberLazyListState()
     val fi = ficha
     val acento = MaterialTheme.colorScheme.primary
+
+    // Corazón "En biblioteca": añade (descargando la portada) o quita el manga.
+    fun alternarBiblioteca() {
+        if (f == null || motor == null || guardando) return
+        if (enBiblioteca != null) {
+            almacen.quitarEnLinea(f.id, manga.url)
+            enBiblioteca = null
+            alRecargar()
+            Toast.makeText(ctx, "Quitado de la biblioteca", Toast.LENGTH_SHORT).show()
+            return
+        }
+        guardando = true
+        scope.launch {
+            val titulo = fi?.detalle?.titulo ?: manga.titulo
+            val urlPortada = fi?.detalle?.portadaUrl ?: manga.portadaUrl
+            val portada = withContext(Dispatchers.IO) {
+                urlPortada?.let {
+                    runCatching { Imagenes.cargar(it, motor.cabeceras(f), 400) }.getOrNull()?.asAndroidBitmap()
+                }
+            }
+            val leidos = fi?.capitulos?.count { ext.esLeido(f.id, it.url) } ?: 0
+            val comic = withContext(Dispatchers.IO) {
+                almacen.anadirEnLinea(f.id, manga.url, titulo, urlPortada, portada, fi?.capitulos?.size ?: 0, leidos)
+            }
+            enBiblioteca = comic
+            guardando = false
+            alRecargar()
+            Toast.makeText(ctx, "Añadido a la biblioteca", Toast.LENGTH_SHORT).show()
+            // Como en Komikku: al añadir, pregunta las categorías (si hay).
+            if (almacen.categorias().isNotEmpty()) dialogoCats = true
+        }
+    }
 
     if (f == null || motor == null) {
         Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
@@ -150,6 +300,24 @@ fun FichaMangaScreen(
                     fi?.detalle?.titulo ?: manga.titulo, lineas, acento, scrollPx,
                 )
             }
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    val en = enBiblioteca != null
+                    AccionFicha(
+                        if (en) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                        if (en) "En biblioteca" else "Añadir a biblioteca", en, acento,
+                    ) { alternarBiblioteca() }
+                    if (en) AccionFicha(Icons.Rounded.List, "Categorías", false, acento) { dialogoCats = true }
+                    AccionFicha(Icons.Rounded.ArrowForward, "Navegador", false, acento) {
+                        val u = urlManga(f, manga)
+                        if (u == null) Toast.makeText(ctx, "Esta fuente no da la dirección web", Toast.LENGTH_SHORT).show()
+                        else runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
+                }
+            }
             if (fi != null) {
                 fi.detalle.descripcion?.let { d ->
                     item {
@@ -176,13 +344,19 @@ fun FichaMangaScreen(
                     )
                 }
                 itemsIndexed(fi.capitulos) { i, c ->
-                    val prog = descargando[c.url]
+                    val clave = GestorDescargas.clave(f, c)
+                    val fraccion = GestorDescargas.progreso[clave]
+                    val estado: EstadoDescarga = when {
+                        fraccion != null -> EstadoDescarga.Descargando(fraccion)
+                        clave in hechas -> EstadoDescarga.Listo
+                        else -> EstadoDescarga.Libre
+                    }
                     Row(
-                        Modifier.fillMaxWidth().entrada(i).pressable { onLeer(fi.capitulos, i) }
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        Modifier.fillMaxWidth().entrada(i).pressable { onLeer(fi.capitulos, i, 0) }
+                            .padding(start = 24.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                             LText(
                                 c.nombre.ifBlank { "Capítulo ${numeroTexto(c.numero)}" }, LectorType.Body, maxLines = 2,
                                 color = if (ext.esLeido(f.id, c.url)) LectorColors.Muted else LectorColors.Text,
@@ -192,39 +366,18 @@ fun FichaMangaScreen(
                             ).joinToString(" · ")
                             if (sub.isNotEmpty()) LText(sub, LectorType.Label, color = LectorColors.Muted, maxLines = 1)
                         }
-                        Spacer(Modifier.width(10.dp))
-                        if (prog != null) {
-                            LText(prog, LectorType.Label, color = LectorColors.Muted)
-                        } else {
-                            // Descargar el capítulo como .cbz y meterlo en la biblioteca.
-                            Box(
-                                Modifier.pressable {
-                                    scope.launch {
-                                        descargando = descargando + (c.url to "0%")
-                                        val archivo = File(ctx.cacheDir, "cap_${System.nanoTime()}.cbz")
-                                        val resultado = runCatching {
-                                            motor.descargarCbz(f, c, archivo) { h, t ->
-                                                descargando = descargando + (c.url to "${h * 100 / t}%")
-                                            }
-                                            val titulo = "${fi.detalle.titulo} - ${c.nombre.ifBlank { numeroTexto(c.numero) }}"
-                                                .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                                            withContext(Dispatchers.IO) { almacen.importarArchivo(archivo, titulo) }
-                                        }
-                                        archivo.delete()
-                                        descargando = descargando - c.url
-                                        val ok = resultado.getOrNull() != null
-                                        if (ok) alRecargar()
-                                        Toast.makeText(
-                                            ctx,
-                                            if (ok) "Añadido a la biblioteca" else
-                                                "No se pudo descargar: ${resultado.exceptionOrNull()?.message ?: "archivo vacío"}",
-                                            Toast.LENGTH_LONG,
-                                        ).show()
-                                    }
-                                }.clip(CircleShape).background(LectorColors.PillFill).padding(horizontal = 12.dp, vertical = 6.dp),
-                                Alignment.Center,
-                            ) { LText("CBZ", LectorType.Label) }
-                        }
+                        Spacer(Modifier.width(6.dp))
+                        // Descargar el capítulo como .cbz y meterlo en la biblioteca.
+                        // Mientras descarga, volver a tocar el botón cancela la descarga.
+                        BotonDescarga(estado, onClick = {
+                            when (estado) {
+                                is EstadoDescarga.Libre -> GestorDescargas.iniciar(
+                                    ctx, almacen, motor, f, c, fi.detalle.titulo, alRecargar,
+                                )
+                                is EstadoDescarga.Descargando -> GestorDescargas.cancelar(ctx, clave)
+                                is EstadoDescarga.Listo -> quitarDescarga = c
+                            }
+                        })
                     }
                 }
             }
@@ -250,7 +403,50 @@ fun FichaMangaScreen(
             val hayLeidos = fi.capitulos.any { ext.esLeido(f.id, it.url) }
             BotonFlotante(
                 if (hayLeidos) "Reanudar" else "Empezar a leer", acento,
-                { onLeer(fi.capitulos, sig) }, Modifier.align(Alignment.BottomEnd),
+                { onLeer(fi.capitulos, sig, 0) }, Modifier.align(Alignment.BottomEnd),
+            )
+        }
+
+        // Asignar categorías (captura de Komikku): casillas + Editar / Cancelar / Aceptar.
+        if (dialogoCats) {
+            val cats = remember { almacen.categorias() }
+            val comicActual = enBiblioteca
+            DialogoAsignarCategorias(
+                categorias = cats,
+                seleccionInicial = comicActual?.let { almacen.asignaciones()[it.id] }.orEmpty(),
+                alEditar = { dialogoCats = false; editandoCats = true },
+                alCancelar = { dialogoCats = false },
+                alAceptar = { sel ->
+                    comicActual?.let { almacen.asignarCategorias(it.id, sel) }
+                    dialogoCats = false
+                    alRecargar()
+                },
+            )
+        }
+
+        // «Editar» abre la pantalla de editar categorías encima de la ficha; al volver reaparece el diálogo.
+        if (editandoCats) {
+            BackHandler { editandoCats = false; dialogoCats = true }
+            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
+                EditarCategoriasScreen(almacen) { editandoCats = false; dialogoCats = true }
+            }
+        }
+
+        quitarDescarga?.let { c ->
+            AlertDialog(
+                onDismissRequest = { quitarDescarga = null },
+                title = { Text("¿Quitar la descarga?") },
+                text = { Text("Se borrará «${c.nombre.ifBlank { "Capítulo ${numeroTexto(c.numero)}" }}» de tu biblioteca.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        hechas[GestorDescargas.clave(f, c)]?.let { almacen.eliminar(it) }
+                        almacen.olvidarDescarga(f.id, c.url)
+                        GestorDescargas.version.value++
+                        quitarDescarga = null
+                        alRecargar()
+                    }) { Text("Quitar") }
+                },
+                dismissButton = { TextButton(onClick = { quitarDescarga = null }) { Text("Cancelar") } },
             )
         }
     }
@@ -327,6 +523,11 @@ fun LeerOnlineScreen(
     titulo: String,
     capitulos: List<CapituloFuente>,
     indiceInicial: Int,
+    // Para el historial y el progreso de la biblioteca (null = no se anota nada).
+    almacen: Almacen? = null,
+    manga: MangaFuente? = null,
+    // Página por la que seguir en el primer capítulo (al reanudar desde el historial).
+    paginaInicial: Int = 0,
     onBack: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -362,11 +563,15 @@ fun LeerOnlineScreen(
             .onSuccess { paginas = it }
             .onFailure { error = it.message ?: "No se pudieron cargar las páginas" }
     }
-    // Al cambiar de capítulo (o terminar de cargar) se vuelve a la primera página.
+    // Al cambiar de capítulo (o terminar de cargar) se vuelve a la primera página;
+    // solo la primera vez, si venimos del historial, se salta a la página guardada.
+    var paginaInicialUsada by remember { mutableStateOf(false) }
     LaunchedEffect(cap.url, total) {
         if (total != null && total > 0) {
-            runCatching { listState.scrollToItem(0) }
-            runCatching { pagerState.scrollToPage(0) }
+            val destino = if (!paginaInicialUsada && indice == indiceInicial) paginaInicial.coerceIn(0, total - 1) else 0
+            paginaInicialUsada = true
+            runCatching { listState.scrollToItem(destino) }
+            runCatching { pagerState.scrollToPage(destino) }
         }
     }
     // Página actual según el modo.
@@ -375,9 +580,33 @@ fun LeerOnlineScreen(
         if (modo == 0) snapshotFlow { listState.firstVisibleItemIndex }.collect { actual = it.coerceIn(0, total - 1) }
         else snapshotFlow { pagerState.currentPage }.collect { actual = it.coerceIn(0, total - 1) }
     }
-    // Capítulo leído al llegar a la última página.
+    // Capítulo leído al llegar a la última página (y se actualiza "leídos / totales" en la biblioteca).
     LaunchedEffect(actual, total) {
-        if (total != null && total > 0 && actual >= total - 1) ext.marcarLeido(f.id, cap.url)
+        if (total != null && total > 0 && actual >= total - 1) {
+            ext.marcarLeido(f.id, cap.url)
+            if (almacen != null && manga != null) {
+                almacen.actualizarProgresoEnLinea(
+                    f.id, manga.url, capitulos.count { ext.esLeido(f.id, it.url) }, capitulos.size,
+                )
+            }
+        }
+    }
+    // Historial: anota el capítulo y la página que estás leyendo (con una pequeña espera para no
+    // escribir en cada fotograma del desplazamiento).
+    LaunchedEffect(cap.url, actual, total) {
+        if (almacen == null || manga == null || total == null || total <= 0) return@LaunchedEffect
+        delay(600)
+        almacen.registrarHistorialLinea(
+            EntradaHistorial(
+                fuenteId = f.id, urlManga = manga.url,
+                titulo = titulo.ifBlank { manga.titulo },
+                portadaUrl = manga.portadaUrl,
+                capUrl = cap.url,
+                capNombre = cap.nombre.ifBlank { "Capítulo ${numeroTexto(cap.numero)}" },
+                pagina = actual.coerceIn(0, total - 1), total = total,
+                leido = System.currentTimeMillis(),
+            ),
+        )
     }
 
     fun irA(p: Int) {

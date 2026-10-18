@@ -1249,10 +1249,18 @@ private fun nombreFiltro(f: Filtro): String = when (f) {
 
 // Sin leer = en la primera página; terminado = en la última; el resto, en curso.
 fun estadoDe(c: Comic): Filtro = when {
+    // Manga en línea: ultimaPagina = capítulos leídos, paginas = capítulos totales.
+    c.enLinea -> when {
+        c.ultimaPagina <= 0 -> Filtro.SIN_LEER
+        c.paginas > 0 && c.ultimaPagina >= c.paginas -> Filtro.TERMINADOS
+        else -> Filtro.EN_CURSO
+    }
     c.ultimaPagina == 0 -> Filtro.SIN_LEER
     c.ultimaPagina >= c.paginas - 1 -> Filtro.TERMINADOS
     else -> Filtro.EN_CURSO
 }
 
 fun progresoDe(c: Comic): Float =
-    if (c.paginas > 1) c.ultimaPagina.toFloat() / (c.paginas - 1) else 0f
+    if (c.enLinea) {
+        if (c.paginas > 0) c.ultimaPagina.toFloat() / c.paginas else 0f
+    } else if (c.paginas > 1) c.ultimaPagina.toFloat() / (c.paginas - 1) else 0f

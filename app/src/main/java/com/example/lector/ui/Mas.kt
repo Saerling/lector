@@ -68,7 +68,7 @@ fun MasScreen(onRuta: (Ruta) -> Unit, onAdd: () -> Unit, onAddFolder: () -> Unit
 
 @Composable
 fun EstadisticasScreen(comics: List<Comic>, onBack: () -> Unit) {
-    val leidas = comics.filter { it.leido > 0 }.sumOf { it.ultimaPagina + 1 }
+    val leidas = comics.filter { it.leido > 0 && !it.enLinea }.sumOf { it.ultimaPagina + 1 }
     PaginaAjustes("Estadísticas", onBack) {
         Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatCard("${comics.size}", "Cómics", Modifier.weight(1f))

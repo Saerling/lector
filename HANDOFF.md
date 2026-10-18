@@ -1,4 +1,4 @@
-# HANDOFF — Lector (app Android estilo Komikku) · Pasos 3 y 4: Explorar + Extensiones + Motor
+# HANDOFF — Lector (app Android estilo Komikku) · Pasos 3 a 7: Explorar, Extensiones, Motor, Ficha/Lector online, Biblioteca online
 
 > Este archivo es el "pasaporte" del proyecto. Se lo puedes pasar a cualquier IA junto con el zip.
 > Al final hay un bloque **"Para la IA que continúe"** con las reglas para devolverlo (a Claude u otra).
@@ -184,6 +184,32 @@ abrir un título, añadir las fuentes que quiera y ordenarlas.
 - Cada fuente es un carrusel (recientes; si la fuente no los tiene, populares). Tocar una portada abre la ficha
   (`desdeNovedades=true` en `LectorApp`: al volver desde la ficha se regresa a Explorar, no a la lista de la fuente); la flecha abre la fuente.
 - El arrastre es propio (pointerInput + detectDragGestures, filas de 72dp+12dp), sin librería. Sin probar.
+
+---
+
+## 2e. PASO 7 — Biblioteca con mangas online, categorías estilo Komikku, historial online y descarga cancelable (2026-10-18, **SIN compilar ni probar**)
+Pedido del usuario (con capturas de Komikku): (1) añadir un manga/manhwa/cómic de una fuente a la biblioteca con el corazón
+«En biblioteca» y poder **asignarle categorías** (diálogo con «Editar» → pantalla «Editar categorías»); (2) que lo que se lea online salga
+en el **Historial**; (3) mejorar el **botón de descarga**; (4) volver a tocarlo mientras descarga **cancela**.
+
+| Archivo | Cambio |
+|---|---|
+| `Data.kt` | `Comic` gana `fuenteId`, `urlManga`, `portadaUrl` (con valores por defecto) + `enLinea` + `etiquetaProgreso()`. Un manga en línea **no tiene .cbz**: `paginas` = capítulos totales, `ultimaPagina` = capítulos leídos. Nuevos en `Almacen`: `comicEnLinea / anadirEnLinea / quitarEnLinea / actualizarProgresoEnLinea`, historial online (`EntradaHistorial`, `historialLinea`, `registrarHistorialLinea`, `quitarHistorialLinea`; `limpiarHistorial` también lo vacía), `descargas() / registrarDescarga / olvidarDescarga`, `reordenarCategorias`. La copia de seguridad **omite** los mangas en línea. |
+| `ui/Iconos.kt` | **NUEVO.** `Iconos` (Descargar, Detener, Ojo, OjoTachado, Arrastrar: ImageVector con trazados Material, sin `material-icons-extended`), `EstadoDescarga` (Libre / Descargando(fracción) / Listo) y `BotonDescarga` (círculo+flecha → anillo de progreso con ■ en el centro → círculo con ✓). |
+| `ui/EditarCategorias.kt` | **NUEVO.** `EditarCategoriasScreen` (tarjetas con asa para **arrastrar y reordenar**, lápiz, ojo, papelera, botón «Añadir») y `DialogoAsignarCategorias` (casillas + Editar / Cancelar / Aceptar). Más → Categorías ahora abre esta pantalla (`CategoriasScreen` vieja de `Mas.kt` quedó sin usar). |
+| `ui/FuenteManga.kt` | `GestorDescargas` (object, sobrevive a salir de la ficha: `progreso`, `iniciar`, `cancelar`). `FichaMangaScreen`: fila de acciones (corazón **En biblioteca** / **Categorías** / Navegador), al añadir pregunta categorías si existen, «Editar» abre la pantalla encima y al volver reabre el diálogo; botón de descarga nuevo por capítulo (tocar mientras descarga = cancelar; tocar el ✓ = quitar descarga); si venía del historial abre el capítulo guardado. `LeerOnlineScreen` gana `almacen`, `manga`, `paginaInicial`: anota historial (con 600 ms de espera) y actualiza capítulos leídos de la biblioteca. `onLeer` ahora es `(caps, índice, página)`. |
+| `ext/MotorExt.kt` | `descargarCbz` llama a `ensureActive()` entre páginas (cancelación). |
+| `Historial.kt` | `HistorialScreen` mezcla cómics locales + lecturas online; nuevos parámetros `alAbrirOnline` y `cabecerasDe` (con valores por defecto). Mantener pulsado quita la fila. |
+| `ui/LectorApp.kt` | `abrirEnLinea(...)`: biblioteca/historial abren la ficha de un manga en línea (no `DetalleScreen`); `reanudar` y `paginaLectura`; relee la biblioteca al cerrar cualquier capa. |
+| `ui/Data.kt`, `Vistas.kt`, `BibliotecaScreen.kt` (`estadoDe`, `progresoDe`), `ui/Mas.kt` (estadísticas) | Entienden `enLinea` (progreso = capítulos). |
+
+Supuestos / límites:
+- Un manga en línea solo se lee online (desde su ficha). Los capítulos descargados siguen siendo cómics .cbz independientes («Manga - Capítulo N»).
+- «Siguiente/Anterior» y la lógica de «leído» siguen siendo las del paso 6.
+- La biblioteca de mangas en línea no se guarda en la copia de seguridad.
+- El historial online guarda un capítulo por manga (el último), hasta 300.
+- Cancelar espera a que termine la página que se está bajando (el botón vuelve a «descargar» al instante).
+- Sin probar: arrastre de categorías, diálogo con 3 botones, anillo de progreso, reanudar desde el historial.
 
 ---
 

@@ -24,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +34,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.lector.ui.ImagenRemota
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
@@ -47,11 +51,29 @@ fun HistorialScreen(
     alCambiar: () -> Unit,
     modifier: Modifier = Modifier,
     alVolver: (() -> Unit)? = null,
+    // Lo que se lee online (mangas de fuentes): tocar una fila abre ese manga en su capítulo.
+    alAbrirOnline: (EntradaHistorial) -> Unit = {},
+    // Cabeceras HTTP (Referer...) para cargar las portadas de cada fuente.
+    cabecerasDe: (Long) -> Map<String, String> = { emptyMap() },
 ) {
-    val entradas = comics.filter { it.leido > 0 }.sortedByDescending { it.leido }
-    val grupos = entradas.groupBy { inicioDelDia(it.leido) }
+    // Cómics locales (los mangas en línea de la biblioteca salen por el historial online, no aquí).
+    val locales = comics.filter { it.leido > 0 && !it.enLinea }
+        .map { ItemHistorial.Local(it) }
 
-    var quitar by remember { mutableStateOf<Comic?>(null) }
+    // Un manga online cuya categoría está oculta tampoco sale aquí.
+    val idsVisibles = comics.map { it.id }.toSet()
+    val ocultosEnLinea = remember(comics) {
+        almacen.cargar().filter { it.enLinea && it.id !in idsVisibles }
+            .map { it.fuenteId to it.urlManga }.toSet()
+    }
+    val enLinea = almacen.historialLinea
+        .filter { (it.fuenteId to it.urlManga) !in ocultosEnLinea }
+        .map { ItemHistorial.EnLinea(it) }
+
+    val entradas = (locales + enLinea).sortedByDescending { it.tiempo }
+    val grupos = entradas.groupBy { inicioDelDia(it.tiempo) }
+
+    var quitar by remember { mutableStateOf<ItemHistorial?>(null) }
     var confirmarTodo by remember { mutableStateOf(false) }
 
     val formatoDia = remember { DateFormat.getDateInstance(DateFormat.LONG) }
@@ -102,33 +124,46 @@ fun HistorialScreen(
                             modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp),
                         )
                     }
-                    items(lista, key = { it.id }) { comic ->
-                        FilaHistorial(
-                            comic = comic,
-                            almacen = almacen,
-                            hora = formatoHora.format(Date(comic.leido)),
-                            alAbrir = { alAbrir(comic) },
-                            alMantener = { quitar = comic },
-                        )
+                    items(lista, key = { it.clave }) { item ->
+                        when (item) {
+                            is ItemHistorial.Local -> FilaHistorial(
+                                comic = item.comic,
+                                almacen = almacen,
+                                hora = formatoHora.format(Date(item.tiempo)),
+                                alAbrir = { alAbrir(item.comic) },
+                                alMantener = { quitar = item },
+                            )
+                            is ItemHistorial.EnLinea -> FilaHistorialEnLinea(
+                                e = item.entrada,
+                                hora = formatoHora.format(Date(item.tiempo)),
+                                cabecerasDe = cabecerasDe,
+                                alAbrir = { alAbrirOnline(item.entrada) },
+                                alMantener = { quitar = item },
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    quitar?.let { comic ->
+    quitar?.let { item ->
         AlertDialog(
             onDismissRequest = { quitar = null },
             title = { Text("Quitar del historial") },
             text = {
                 Text(
-                    "«${comic.titulo}» dejará de aparecer aquí. " +
+                    "«${item.titulo}» dejará de aparecer aquí. " +
                         "Tu progreso de lectura no se borra.",
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    almacen.quitarDelHistorial(comic.id)
+                    when (item) {
+                        is ItemHistorial.Local -> almacen.quitarDelHistorial(item.comic.id)
+                        is ItemHistorial.EnLinea ->
+                            almacen.quitarHistorialLinea(item.entrada.fuenteId, item.entrada.urlManga)
+                    }
                     quitar = null
                     alCambiar()
                 }) { Text("Quitar") }
@@ -201,7 +236,78 @@ private fun FilaHistorial(
                 fontWeight = FontWeight.Medium,
             )
             Text(
-                "Pág. ${comic.ultimaPagina + 1} de ${comic.paginas} · $hora",
+                "${comic.etiquetaProgreso()} · $hora",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+// Una fila del historial: un cómic local o un manga leído online.
+private sealed class ItemHistorial {
+    abstract val tiempo: Long
+    abstract val clave: String
+    abstract val titulo: String
+
+    class Local(val comic: Comic) : ItemHistorial() {
+        override val tiempo get() = comic.leido
+        override val clave get() = "c_${comic.id}"
+        override val titulo get() = comic.titulo
+    }
+
+    class EnLinea(val entrada: EntradaHistorial) : ItemHistorial() {
+        override val tiempo get() = entrada.leido
+        override val clave get() = "o_${entrada.fuenteId}_${entrada.urlManga}"
+        override val titulo get() = entrada.titulo
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FilaHistorialEnLinea(
+    e: EntradaHistorial,
+    hora: String,
+    cabecerasDe: (Long) -> Map<String, String>,
+    alAbrir: () -> Unit,
+    alMantener: () -> Unit,
+) {
+    // Las cabeceras se piden fuera del hilo principal (puede cargar la extensión la primera vez).
+    val cabeceras by produceState<Map<String, String>?>(null, e.fuenteId) {
+        value = withContext(Dispatchers.IO) { runCatching { cabecerasDe(e.fuenteId) }.getOrDefault(emptyMap()) }
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = alAbrir, onLongClick = alMantener)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .width(48.dp)
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            val c = cabeceras
+            if (c != null) ImagenRemota(e.portadaUrl, Modifier.fillMaxSize(), c)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                e.titulo,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            val cap = e.capNombre.ifBlank { "Capítulo" }
+            val pagina = if (e.total > 0) " · Pág. ${e.pagina + 1} de ${e.total}" else ""
+            Text(
+                "$cap$pagina · $hora",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

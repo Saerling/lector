@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.ChildFirstPathClassLoader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import uy.kohesive.injekt.Injekt
@@ -169,6 +170,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         try {
             ZipOutputStream(tmp.outputStream().buffered()).use { zip ->
                 for (i in 0 until total) {
+                    ensureActive() // permite cancelar la descarga entre página y página
                     val bytes = imagenPagina(fuente, capitulo, i)
                     val ext = when {
                         bytes.size > 4 && bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() -> "png"

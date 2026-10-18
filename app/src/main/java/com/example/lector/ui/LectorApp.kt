@@ -26,6 +26,7 @@ import com.example.lector.BibliotecaScreen
 import com.example.lector.Comic
 import com.example.lector.ext.CapituloFuente
 import com.example.lector.ext.MangaFuente
+import com.example.lector.ext.Motor
 import com.example.lector.HistorialScreen
 import com.example.lector.ext.ExtManager
 
@@ -66,14 +67,33 @@ fun Inicio(
     var desdeNovedades by remember { mutableStateOf(false) } // la ficha se abrió desde Explorar → Novedades
     var capsLectura by remember { mutableStateOf<List<CapituloFuente>>(emptyList()) }
     var capIndice by remember { mutableStateOf(0) }
+    var paginaLectura by remember { mutableStateOf(0) }
+    // Capítulo y página que hay que abrir al cargar la ficha (cuando se entra desde el historial).
+    var reanudar by remember { mutableStateOf<Pair<String, Int>?>(null) }
     val hayCapa = ruta != null || detalleId != null
+
+    // Al cerrar cualquier página que estaba encima, relee la biblioteca (progreso, "último leído", etc.).
+    LaunchedEffect(hayCapa) { if (!hayCapa) alRecargar() }
 
     BackHandler(enabled = ruta != null && detalleId == null) {
         ruta = if (ruta == Ruta.Ficha && desdeNovedades) null else ruta?.padre()
     }
     BackHandler(enabled = detalleId != null) { detalleId = null }
 
-    val abrirDetalle: (Comic) -> Unit = { detalleId = it.id }
+    // Abre la ficha de un manga de una fuente (desde la biblioteca o el historial).
+    val abrirEnLinea: (Long, String, String, String?, Pair<String, Int>?) -> Unit = { fId, url, titulo, portada, cap ->
+        fuenteId = fId
+        mangaSel = MangaFuente(url, titulo, portada)
+        desdeNovedades = true // al volver se regresa a la pestaña desde la que se abrió
+        reanudar = cap
+        ruta = Ruta.Ficha
+    }
+    // Un manga en línea no tiene .cbz: se abre su ficha. Los cómics locales siguen como siempre.
+    val abrirDetalle: (Comic) -> Unit = {
+        if (it.enLinea) abrirEnLinea(it.fuenteId, it.urlManga.orEmpty(), it.titulo, it.portadaUrl, null)
+        else detalleId = it.id
+    }
+    val leerComic: (Comic) -> Unit = { if (it.enLinea) abrirDetalle(it) else alAbrir(it) }
     // Clave de la capa que está encima ("" = ninguna). Se usa como estado de la animación.
     val capa = when {
         detalleId != null -> "d:$detalleId"
@@ -92,13 +112,13 @@ fun Inicio(
             }
         ) { t ->
             when (t) {
-                LectorTab.Home -> HomeScreen(visibles, almacen, onOpen = abrirDetalle, onRead = alAbrir, onAdd = alAnadir)
+                LectorTab.Home -> HomeScreen(visibles, almacen, onOpen = abrirDetalle, onRead = leerComic, onAdd = alAnadir)
                 LectorTab.Search -> ExplorarScreen(
                     ext = ext,
                     onRuta = { ruta = it },
                     onFuente = { fuenteId = it.id; desdeNovedades = false; ruta = Ruta.FuenteDetalle },
                     onExt = { extPkg = it.pkg; ruta = Ruta.ExtDetalle },
-                    onManga = { f, m -> fuenteId = f.id; mangaSel = m; desdeNovedades = true; ruta = Ruta.Ficha },
+                    onManga = { f, m -> fuenteId = f.id; mangaSel = m; desdeNovedades = true; reanudar = null; ruta = Ruta.Ficha },
                 )
                 LectorTab.Library -> Box(Modifier.padding(bottom = 76.dp)) {
                     BibliotecaScreen(
@@ -117,7 +137,13 @@ fun Inicio(
                 LectorTab.History -> Box(Modifier.statusBarsPadding().padding(bottom = 76.dp)) {
                     HistorialScreen(
                         comics = visibles, almacen = almacen,
-                        alAbrir = alAbrir, alCambiar = alRecargar,
+                        alAbrir = leerComic, alCambiar = alRecargar,
+                        alAbrirOnline = { e ->
+                            abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, e.capUrl to e.pagina)
+                        },
+                        cabecerasDe = { id ->
+                            ext.fuentes.firstOrNull { it.id == id }?.let { Motor.actual?.cabeceras(it) }.orEmpty()
+                        },
                     )
                 }
                 LectorTab.More -> MasScreen(
@@ -154,7 +180,7 @@ fun Inicio(
                     }
                 }
                 else -> when (Ruta.valueOf(clave)) {
-                    Ruta.Categorias -> CategoriasScreen(almacen) { ruta = null }
+                    Ruta.Categorias -> EditarCategoriasScreen(almacen) { ruta = null }
                     Ruta.Estadisticas -> EstadisticasScreen(visibles) { ruta = null }
                     Ruta.Datos -> DatosScreen(almacen, alRecargar) { ruta = null }
                     Ruta.Ajustes -> AjustesScreen(almacen, { ruta = null }) { ruta = it }
@@ -165,7 +191,7 @@ fun Inicio(
                     Ruta.ExtDetalle -> ExtDetalleScreen(ext, extPkg.orEmpty()) { ruta = null }
                     Ruta.FuenteDetalle -> FuenteDetalleScreen(
                         ext, fuenteId ?: 0L,
-                        onManga = { mangaSel = it; desdeNovedades = false; ruta = Ruta.Ficha },
+                        onManga = { mangaSel = it; desdeNovedades = false; reanudar = null; ruta = Ruta.Ficha },
                     ) { ruta = null }
                     Ruta.Ficha -> {
                         val m = mangaSel
@@ -173,11 +199,16 @@ fun Inicio(
                         else FichaMangaScreen(
                             ext, fuenteId ?: 0L, m, almacen, alRecargar,
                             onBack = { ruta = if (desdeNovedades) null else Ruta.FuenteDetalle },
-                            onLeer = { caps, i -> capsLectura = caps; capIndice = i; ruta = Ruta.LeerOnline },
+                            onLeer = { caps, i, pagina ->
+                                capsLectura = caps; capIndice = i; paginaLectura = pagina; ruta = Ruta.LeerOnline
+                            },
+                            reanudarCap = reanudar,
+                            alConsumirReanudar = { reanudar = null },
                         )
                     }
                     Ruta.LeerOnline -> LeerOnlineScreen(
                         ext, fuenteId ?: 0L, mangaSel?.titulo.orEmpty(), capsLectura, capIndice,
+                        almacen = almacen, manga = mangaSel, paginaInicial = paginaLectura,
                     ) { ruta = Ruta.Ficha }
                 }
             }

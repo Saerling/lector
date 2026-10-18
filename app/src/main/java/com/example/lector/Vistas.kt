@@ -137,7 +137,7 @@ fun TarjetaPortada(
                     )
                     if (almacen.mostrarPagina) {
                         Text(
-                            "Pág. ${comic.ultimaPagina + 1} de ${comic.paginas}",
+                            comic.etiquetaProgreso(),
                             color = Color(0xCCFFFFFF),
                             style = MaterialTheme.typography.labelSmall,
                         )
@@ -186,7 +186,7 @@ fun TarjetaPortada(
             )
             if (almacen.mostrarPagina) {
                 Text(
-                    "Pág. ${comic.ultimaPagina + 1} de ${comic.paginas}",
+                    comic.etiquetaProgreso(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -255,7 +255,7 @@ fun FilaLista(
             )
             if (almacen.mostrarPagina) {
                 Text(
-                    "Pág. ${comic.ultimaPagina + 1} de ${comic.paginas}",
+                    comic.etiquetaProgreso(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

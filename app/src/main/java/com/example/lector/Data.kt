@@ -19,9 +19,38 @@ import java.util.zip.ZipOutputStream
 data class Comic(
     val id: String,
     val titulo: String,
+    // Cómic local: nº de páginas. Manga en línea: nº de capítulos que tiene la fuente.
     val paginas: Int,
+    // Cómic local: última página vista. Manga en línea: nº de capítulos leídos.
     val ultimaPagina: Int,
     val leido: Long = 0L, // cuándo lo leíste por última vez (para ordenar)
+    // Solo para mangas añadidos desde una fuente (Explorar): no tienen archivo .cbz.
+    val fuenteId: Long = 0L,
+    val urlManga: String? = null,
+    val portadaUrl: String? = null,
+) {
+    val enLinea: Boolean get() = urlManga != null
+
+    // Texto corto de progreso para tarjetas, listas e historial.
+    fun etiquetaProgreso(): String =
+        if (enLinea) {
+            if (paginas > 0) "Leídos $ultimaPagina de $paginas caps." else "En línea"
+        } else {
+            "Pág. ${ultimaPagina + 1} de $paginas"
+        }
+}
+
+// Una entrada del historial de lectura online: el último capítulo que abriste de cada manga.
+data class EntradaHistorial(
+    val fuenteId: Long,
+    val urlManga: String,
+    val titulo: String,
+    val portadaUrl: String?,
+    val capUrl: String,
+    val capNombre: String,
+    val pagina: Int,
+    val total: Int,
+    val leido: Long,
 )
 
 // Una categoría para organizar la biblioteca. Si es "oculta", esconde sus cómics.
@@ -368,6 +397,13 @@ class Almacen(private val contexto: Context) {
         guardarCategorias(categorias().map { if (it.id == id) it.copy(nombre = limpio) else it })
     }
 
+    // Guarda las categorías en el orden dado (las que falten se quedan al final).
+    fun reordenarCategorias(ids: List<String>) {
+        val actuales = categorias()
+        val porId = actuales.associateBy { it.id }
+        guardarCategorias(ids.mapNotNull { porId[it] } + actuales.filter { it.id !in ids })
+    }
+
     fun alternarOculta(id: String) {
         guardarCategorias(categorias().map { if (it.id == id) it.copy(oculta = !it.oculta) else it })
     }
@@ -418,6 +454,9 @@ class Almacen(private val contexto: Context) {
                 o.getInt("paginas"),
                 o.getInt("ultima"),
                 o.optLong("leido", 0L),
+                fuenteId = o.optLong("fuente", 0L),
+                urlManga = o.optString("url_manga").ifBlank { null },
+                portadaUrl = o.optString("portada_url").ifBlank { null },
             )
         }
     }
@@ -431,7 +470,10 @@ class Almacen(private val contexto: Context) {
                     .put("titulo", it.titulo)
                     .put("paginas", it.paginas)
                     .put("ultima", it.ultimaPagina)
-                    .put("leido", it.leido),
+                    .put("leido", it.leido)
+                    .put("fuente", it.fuenteId)
+                    .put("url_manga", it.urlManga ?: "")
+                    .put("portada_url", it.portadaUrl ?: ""),
             )
         }
         prefs.edit().putString("comics", json.toString()).apply()
@@ -598,7 +640,7 @@ class Almacen(private val contexto: Context) {
         raiz.put("categorias", cats)
 
         val lista = JSONArray()
-        cargar().forEach { c ->
+        cargar().filter { !it.enLinea }.forEach { c ->
             val e = JSONObject()
                 .put("titulo", c.titulo)
                 .put("paginas", c.paginas)
@@ -755,7 +797,7 @@ class Almacen(private val contexto: Context) {
         for (i in 0 until entradas.length()) {
             val e = entradas.getJSONObject(i)
             val clave = claveDe(e.getString("titulo"), e.getInt("paginas"))
-            val indice = locales.indexOfFirst { claveDe(it.titulo, it.paginas) == clave }
+            val indice = locales.indexOfFirst { !it.enLinea && claveDe(it.titulo, it.paginas) == clave }
             if (indice >= 0) {
                 locales[indice] = aplicarEntrada(locales[indice], e, cats, mapa)
                 actualizados++
@@ -788,6 +830,126 @@ class Almacen(private val contexto: Context) {
 
     fun limpiarHistorial() {
         guardar(cargar().map { it.copy(leido = 0L) })
+        historialLinea = emptyList()
+        guardarHistorialLinea(emptyList())
+    }
+
+    // ---- Historial de lectura online (mangas de fuentes; estén o no en la biblioteca) ----
+    var historialLinea by mutableStateOf(leerHistorialLinea())
+        private set
+
+    private fun leerHistorialLinea(): List<EntradaHistorial> = runCatching {
+        val a = JSONArray(prefs.getString("historial_linea", "[]"))
+        List(a.length()) { i ->
+            val o = a.getJSONObject(i)
+            EntradaHistorial(
+                fuenteId = o.getLong("fuente"),
+                urlManga = o.getString("manga"),
+                titulo = o.getString("titulo"),
+                portadaUrl = o.optString("portada").ifBlank { null },
+                capUrl = o.getString("cap"),
+                capNombre = o.optString("cap_nombre"),
+                pagina = o.optInt("pagina", 0),
+                total = o.optInt("total", 0),
+                leido = o.optLong("leido", 0L),
+            )
+        }
+    }.getOrDefault(emptyList())
+
+    private fun guardarHistorialLinea(lista: List<EntradaHistorial>) {
+        val a = JSONArray()
+        lista.forEach {
+            a.put(
+                JSONObject()
+                    .put("fuente", it.fuenteId)
+                    .put("manga", it.urlManga)
+                    .put("titulo", it.titulo)
+                    .put("portada", it.portadaUrl ?: "")
+                    .put("cap", it.capUrl)
+                    .put("cap_nombre", it.capNombre)
+                    .put("pagina", it.pagina)
+                    .put("total", it.total)
+                    .put("leido", it.leido),
+            )
+        }
+        prefs.edit().putString("historial_linea", a.toString()).apply()
+    }
+
+    // Anota (o actualiza) el capítulo que se está leyendo. Un manga ocupa una sola fila: la más reciente.
+    @Synchronized
+    fun registrarHistorialLinea(e: EntradaHistorial) {
+        val nueva = (listOf(e) + historialLinea.filterNot { it.fuenteId == e.fuenteId && it.urlManga == e.urlManga })
+            .take(300)
+        historialLinea = nueva
+        guardarHistorialLinea(nueva)
+        // Si el manga está en la biblioteca, también sube en "último leído".
+        comicEnLinea(e.fuenteId, e.urlManga)?.let { c ->
+            guardar(cargar().map { if (it.id == c.id) it.copy(leido = e.leido) else it })
+        }
+    }
+
+    @Synchronized
+    fun quitarHistorialLinea(fuenteId: Long, urlManga: String) {
+        val nueva = historialLinea.filterNot { it.fuenteId == fuenteId && it.urlManga == urlManga }
+        historialLinea = nueva
+        guardarHistorialLinea(nueva)
+    }
+
+    // ---- Mangas de fuentes dentro de la biblioteca ("En biblioteca" de la ficha) ----
+    fun comicEnLinea(fuenteId: Long, urlManga: String): Comic? =
+        cargar().firstOrNull { it.enLinea && it.fuenteId == fuenteId && it.urlManga == urlManga }
+
+    // Añade el manga a la biblioteca (o devuelve el que ya estaba). La portada se guarda en disco.
+    @Synchronized
+    fun anadirEnLinea(
+        fuenteId: Long, urlManga: String, titulo: String, portadaUrl: String?,
+        portada: Bitmap?, capitulos: Int, leidos: Int,
+    ): Comic {
+        comicEnLinea(fuenteId, urlManga)?.let { return it }
+        val id = UUID.randomUUID().toString()
+        if (portada != null) {
+            runCatching {
+                portadaDe(id).outputStream().use { portada.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+            }
+        }
+        val comic = Comic(
+            id = id, titulo = titulo, paginas = capitulos, ultimaPagina = leidos,
+            fuenteId = fuenteId, urlManga = urlManga, portadaUrl = portadaUrl,
+        )
+        guardar(cargar() + comic)
+        return comic
+    }
+
+    fun quitarEnLinea(fuenteId: Long, urlManga: String) {
+        comicEnLinea(fuenteId, urlManga)?.let { eliminar(it.id) }
+    }
+
+    // Mantiene al día "capítulos leídos / capítulos totales" de un manga de la biblioteca.
+    @Synchronized
+    fun actualizarProgresoEnLinea(fuenteId: Long, urlManga: String, leidos: Int, total: Int) {
+        val c = comicEnLinea(fuenteId, urlManga) ?: return
+        if (c.paginas == total && c.ultimaPagina == leidos) return
+        guardar(cargar().map { if (it.id == c.id) it.copy(paginas = total, ultimaPagina = leidos) else it })
+    }
+
+    // ---- Capítulos descargados como .cbz: "fuenteId|urlCapítulo" -> id del cómic ----
+    fun descargas(): Map<String, String> = runCatching {
+        val o = JSONObject(prefs.getString("descargas", "{}"))
+        o.keys().asSequence().associateWith { o.getString(it) }.filterValues { archivoDe(it).exists() }
+    }.getOrDefault(emptyMap())
+
+    @Synchronized
+    fun registrarDescarga(fuenteId: Long, capUrl: String, comicId: String) {
+        val o = JSONObject(prefs.getString("descargas", "{}"))
+        o.put("$fuenteId|$capUrl", comicId)
+        prefs.edit().putString("descargas", o.toString()).apply()
+    }
+
+    @Synchronized
+    fun olvidarDescarga(fuenteId: Long, capUrl: String) {
+        val o = JSONObject(prefs.getString("descargas", "{}"))
+        o.remove("$fuenteId|$capUrl")
+        prefs.edit().putString("descargas", o.toString()).apply()
     }
 
     fun guardarProgreso(id: String, pagina: Int) {
