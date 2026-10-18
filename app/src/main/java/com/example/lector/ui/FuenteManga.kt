@@ -407,8 +407,26 @@ fun FichaMangaScreen(
                     }
                     val leido = ext.esLeido(f.id, c.url)
                     val numero = numeroTexto(c.numero).ifEmpty { "#" }
+                    val marcado = ext.esMarcado(f.id, c.url)
+                    // Deslizar → leído / no leído · deslizar ← marcado / no marcado.
+                    val accionLeido = AccionDeslizar(
+                        if (leido) Iconos.OjoTachado else Icons.Rounded.Check,
+                        if (leido) "Marcar como no leído" else "Marcar como leído",
+                        acento,
+                    ) {
+                        if (leido) ext.desmarcarLeido(f.id, c.url) else ext.marcarLeido(f.id, c.url)
+                        almacen.actualizarProgresoEnLinea(
+                            f.id, manga.url, fi.capitulos.count { ext.esLeido(f.id, it.url) }, fi.capitulos.size,
+                        )
+                    }
+                    val accionMarca = AccionDeslizar(
+                        if (marcado) Iconos.MarcaBorde else Iconos.Marca,
+                        if (marcado) "Quitar marca" else "Marcar capítulo",
+                        ColorMarca,
+                    ) { ext.alternarMarcado(f.id, c.url) }
+                    FilaDeslizable(accionLeido, accionMarca, Modifier.entrada(pos)) {
                     Row(
-                        Modifier.fillMaxWidth().entrada(pos).pressable { onLeer(fi.capitulos, i, paginaGuardada) }
+                        Modifier.fillMaxWidth().pressable { onLeer(fi.capitulos, i, paginaGuardada) }
                             .padding(start = 24.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -424,11 +442,17 @@ fun FichaMangaScreen(
                         }
                         Spacer(Modifier.width(16.dp))
                         Column(Modifier.weight(1f)) {
-                            LText(
-                                c.nombre.ifBlank { "Capítulo ${numeroTexto(c.numero)}" },
-                                LectorType.Section.copy(fontSize = 17.sp), maxLines = 2,
-                                color = if (leido) LectorColors.Muted else LectorColors.Text,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (marcado) {
+                                    Icon(Iconos.Marca, "Marcado", tint = ColorMarca, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                LText(
+                                    c.nombre.ifBlank { "Capítulo ${numeroTexto(c.numero)}" },
+                                    LectorType.Section.copy(fontSize = 17.sp), Modifier.weight(1f, fill = false), maxLines = 2,
+                                    color = if (leido) LectorColors.Muted else LectorColors.Text,
+                                )
+                            }
                             val sub = listOfNotNull(
                                 if (paginaGuardada > 0) "Pág: ${paginaGuardada + 1}" else null,
                                 fechaTexto(c.fecha).takeIf { it.isNotEmpty() }, c.scanlator,
@@ -452,6 +476,7 @@ fun FichaMangaScreen(
                                 }
                             })
                         }
+                    }
                     }
                 }
             }
@@ -546,6 +571,7 @@ fun FichaMangaScreen(
 
 private val ClaroBtn = Color(0x9EFFFFFF)
 private val TintaBtn = Color(0xFF0D0D18)
+private val ColorMarca = Color(0xFF2DBE6C)
 
 /** Cambia el color de acento (MaterialTheme.primary) de lo que lleva dentro: botones de descarga, chips... */
 @Composable

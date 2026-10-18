@@ -19,6 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.lector.Almacen
@@ -54,6 +56,13 @@ fun Inicio(
     // Solo se ven en Biblioteca, manteniendo pulsado su título.
     val visibles = almacen.sinOcultos(comics)
     val ultimo = visibles.firstOrNull { it.id == almacen.ultimoAbierto }
+    // Último manga en línea que se estaba leyendo (si no está en una categoría oculta).
+    val ultimoLinea = remember(almacen.historialLinea, visibles) {
+        almacen.historialLinea.firstOrNull()?.takeIf { e ->
+            val c = almacen.comicEnLinea(e.fuenteId, e.urlManga)
+            c == null || visibles.any { it.id == c.id }
+        }
+    }
 
     var ruta by rememberSaveable { mutableStateOf<Ruta?>(null) }
     var detalleId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -239,9 +248,21 @@ fun Inicio(
             Column(
                 Modifier.navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 8.dp)
             ) {
-                if (ultimo != null && tab != LectorTab.Library) {
-                    MiniReader(ultimo, almacen, onClick = { alAbrir(ultimo) })
-                    Spacer(Modifier.height(8.dp))
+                // El botón de reanudar abre la ficha del último manga leído (no el capítulo).
+                if (tab != LectorTab.Library) {
+                    if (ultimoLinea != null && (ultimo == null || ultimoLinea.leido >= ultimo.leido)) {
+                        val e = ultimoLinea
+                        val cabeceras = ext.fuentes.firstOrNull { it.id == e.fuenteId }
+                            ?.let { Motor.actual?.cabeceras(it) }.orEmpty()
+                        MiniReaderGenerico(
+                            e.titulo, e.capNombre,
+                            onClick = { abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, null) },
+                        ) { m -> ImagenRemota(e.portadaUrl, m.clip(RoundedCornerShape(12.dp)), cabeceras) }
+                        Spacer(Modifier.height(8.dp))
+                    } else if (ultimo != null) {
+                        MiniReader(ultimo, almacen, onClick = { abrirDetalle(ultimo) })
+                        Spacer(Modifier.height(8.dp))
+                    }
                 }
                 FloatingNavBar(tab, onSelect = onTab)
             }

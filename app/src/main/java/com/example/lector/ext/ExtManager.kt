@@ -75,6 +75,9 @@ class ExtManager private constructor(private val app: Context) {
     var leidos by mutableStateOf(prefs.getStringSet("leidos", emptySet())?.toSet() ?: emptySet()); private set
     var modoLector by mutableStateOf(prefs.getInt("modo_lector", 0)); private set
 
+    // Capítulos marcados con el marcador ("fuenteId|urlCapítulo"); se alternan deslizando la fila hacia la izquierda.
+    var marcados by mutableStateOf(prefs.getStringSet("marcados", emptySet())?.toSet() ?: emptySet()); private set
+
     // Página por la que vas en cada capítulo SIN terminar ("fuenteId|url" -> página, desde 0).
     private val paginasCap = mutableStateMapOf<String, Int>().also { m ->
         runCatching {
@@ -476,6 +479,22 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     fun esLeido(fuenteId: Long, url: String) = "$fuenteId|$url" in leidos
+
+    /** Vuelve a dejar un capítulo como no leído. */
+    fun desmarcarLeido(fuenteId: Long, url: String) {
+        val k = "$fuenteId|$url"
+        if (k !in leidos) return
+        leidos = leidos - k
+        prefs.edit().putStringSet("leidos", leidos).apply()
+    }
+
+    fun esMarcado(fuenteId: Long, url: String) = "$fuenteId|$url" in marcados
+
+    fun alternarMarcado(fuenteId: Long, url: String) {
+        val k = "$fuenteId|$url"
+        marcados = if (k in marcados) marcados - k else marcados + k
+        prefs.edit().putStringSet("marcados", marcados).apply()
+    }
 
     fun cambiarModoLector(m: Int) {
         modoLector = m

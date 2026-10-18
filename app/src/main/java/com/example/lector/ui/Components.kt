@@ -173,18 +173,28 @@ fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier:
 
 /** "Continuar leyendo": el último cómic que abriste. */
 @Composable
-fun MiniReader(comic: Comic, almacen: Almacen, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun MiniReader(comic: Comic, almacen: Almacen, onClick: () -> Unit, modifier: Modifier = Modifier) =
+    MiniReaderGenerico(comic.titulo, comic.textoPagina(), onClick, modifier) { m ->
+        ComicCover(comic, almacen, m, RoundedCornerShape(12.dp))
+    }
+
+/** Mismo botón flotante, con la portada que se le pase (local o de una fuente en línea). */
+@Composable
+fun MiniReaderGenerico(
+    titulo: String, subtitulo: String, onClick: () -> Unit, modifier: Modifier = Modifier,
+    portada: @Composable (Modifier) -> Unit,
+) {
     val shape = RoundedCornerShape(24.dp)
     Row(
         modifier.pressable(onClick).fillMaxWidth().height(64.dp).clip(shape)
             .background(LectorColors.Glass).border(1.dp, LectorColors.GlassBorder, shape).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ComicCover(comic, almacen, Modifier.fillMaxHeight().aspectRatio(1f), RoundedCornerShape(12.dp))
+        portada(Modifier.fillMaxHeight().aspectRatio(1f))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            LText(comic.titulo, LectorType.Body, maxLines = 1)
-            LText(comic.textoPagina(), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+            LText(titulo, LectorType.Body, maxLines = 1)
+            LText(subtitulo, LectorType.Label, color = LectorColors.Muted, maxLines = 1)
         }
         Icon(Icons.Rounded.PlayArrow, "Continuar", tint = LectorColors.Text, modifier = Modifier.size(28.dp))
         Spacer(Modifier.width(8.dp))
