@@ -25,14 +25,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.lector.ui.Inicio
-import com.example.lector.ui.LectorTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -110,9 +107,7 @@ private fun Contenido(almacen: Almacen) {
     var comics by remember { mutableStateOf(almacen.cargar()) }
     var abierto by remember { mutableStateOf<Comic?>(null) }
     var importando by remember { mutableStateOf(false) }
-    // Pestaña de la barra inferior y vista (biblioteca/historial) dentro de la pestaña Biblioteca.
-    var tab by rememberSaveable { mutableStateOf(LectorTab.Home) }
-    var pestanaBiblioteca by rememberSaveable { mutableStateOf(0) }
+    var pestana by remember { mutableStateOf(0) }
 
     // Con sesión de AniList: averigua el nombre de usuario y sube lo que quedó pendiente.
     // Se repite al volver a la biblioteca.
@@ -185,9 +180,7 @@ private fun Contenido(almacen: Almacen) {
 
     val actual = abierto
     if (actual == null) {
-        Inicio(
-            tab = tab,
-            onTab = { tab = it },
+        BibliotecaScreen(
             comics = comics,
             almacen = almacen,
             alAnadir = { selector.launch(arrayOf("*/*")) },
@@ -198,8 +191,8 @@ private fun Contenido(almacen: Almacen) {
                 comics = almacen.cargar()
             },
             alRecargar = { comics = almacen.cargar() },
-            pestanaBiblioteca = pestanaBiblioteca,
-            alCambiarPestanaBiblioteca = { pestanaBiblioteca = it },
+            pestana = pestana,
+            alCambiarPestana = { pestana = it },
         )
     } else {
         val cerrar = {

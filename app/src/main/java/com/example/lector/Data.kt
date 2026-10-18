@@ -665,14 +665,6 @@ class Almacen(private val contexto: Context) {
         return ResultadoRestauracion(actualizados, sinArchivo)
     }
 
-    // Quita los cómics que están en alguna categoría oculta (para Inicio, Buscar y Perfil).
-    fun sinOcultos(comics: List<Comic>): List<Comic> {
-        val ocultas = categorias().filter { it.oculta }.map { it.id }.toSet()
-        if (ocultas.isEmpty()) return comics
-        val asign = asignaciones()
-        return comics.filter { c -> asign[c.id].orEmpty().none { it in ocultas } }
-    }
-
     // ---- Historial ----
     // Quitar un cómic del historial borra solo la fecha de lectura; la página se conserva.
     fun quitarDelHistorial(id: String) {
