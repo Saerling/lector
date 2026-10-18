@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,29 +51,57 @@ fun Modifier.entrada(indice: Int, pasoMs: Int = 55): Modifier {
     }
 }
 
+/** Colores que salen de una portada: un fondo muy oscuro del mismo tono y un acento claro. */
+class TemaPortada(val fondo: Color, val acento: Color)
+
+/** Saca el tono dominante de una portada. Si es casi gris (blanco y negro) devuelve null. */
+fun temaDe(img: ImageBitmap): TemaPortada? = runCatching {
+    val b = android.graphics.Bitmap.createScaledBitmap(img.asAndroidBitmap(), 24, 24, true)
+    val hsv = FloatArray(3)
+    var sx = 0.0; var sy = 0.0; var ss = 0.0; var sw = 0.0
+    for (x in 0 until 24) for (y in 0 until 24) {
+        android.graphics.Color.colorToHSV(b.getPixel(x, y), hsv)
+        val w = (hsv[1] * hsv[2]).toDouble() + 0.001      // pesan más los colores vivos
+        val ang = Math.toRadians(hsv[0].toDouble())
+        sx += kotlin.math.cos(ang) * w; sy += kotlin.math.sin(ang) * w
+        ss += hsv[1] * w; sw += w
+    }
+    val sat = (ss / sw).toFloat()
+    if (sat < 0.18f) return@runCatching null
+    var h = Math.toDegrees(kotlin.math.atan2(sy, sx)).toFloat()
+    if (h < 0f) h += 360f
+    TemaPortada(
+        fondo = Color.hsv(h, sat.coerceIn(0.45f, 0.9f), 0.20f),
+        acento = Color.hsv(h, (sat * 0.7f).coerceIn(0.30f, 0.65f), 1f),
+    )
+}.getOrNull()
+
 /**
- * Barra superior que aparece al bajar: se oscurece el fondo y el título entra desde abajo.
+ * Barra superior que aparece al bajar: el fondo se tiñe y el título entra desde abajo.
  * Lee el scroll dentro de graphicsLayer, así no obliga a recomponer toda la pantalla en cada fotograma.
  */
 @Composable
-fun BarraSuperior(scroll: () -> Float, titulo: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun BarraSuperior(
+    scroll: () -> Float, titulo: String, onBack: () -> Unit, modifier: Modifier = Modifier,
+    fondo: Color = Color.Black, trailing: (@Composable RowScope.() -> Unit)? = null,
+) {
     Box(modifier.fillMaxWidth()) {
         Box(
             Modifier.matchParentSize()
                 .graphicsLayer { alpha = (scroll() / 380f).coerceIn(0f, 1f) }
-                .background(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 0.94f))))
+                .background(Brush.verticalGradient(listOf(fondo, fondo.copy(alpha = 0.94f))))
         )
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(LectorColors.PillFill),
+                Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(Color(0x66000000)),
                 Alignment.Center
             ) { Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text) }
             Spacer(Modifier.width(14.dp))
             LText(
-                titulo, LectorType.Section.copy(fontSize = 19.sp),
+                titulo, LectorType.Display.copy(fontSize = 24.sp, letterSpacing = (-0.5).sp),
                 Modifier.weight(1f).graphicsLayer {
                     val a = ((scroll() - 320f) / 120f).coerceIn(0f, 1f)
                     alpha = a
@@ -79,6 +109,7 @@ fun BarraSuperior(scroll: () -> Float, titulo: String, onBack: () -> Unit, modif
                 },
                 maxLines = 1
             )
+            trailing?.invoke(this)
         }
     }
 }

@@ -651,9 +651,18 @@ object Imagenes {
 }
 
 @Composable
-fun ImagenRemota(url: String?, modifier: Modifier = Modifier, cabeceras: Map<String, String> = emptyMap()) {
+fun ImagenRemota(
+    url: String?, modifier: Modifier = Modifier, cabeceras: Map<String, String> = emptyMap(),
+    onCargada: ((ImageBitmap) -> Unit)? = null,
+) {
     var img by remember(url) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(url) { if (!url.isNullOrBlank()) img = Imagenes.cargar(url, cabeceras) }
+    LaunchedEffect(url) {
+        if (!url.isNullOrBlank()) {
+            val cargada = Imagenes.cargar(url, cabeceras)
+            img = cargada
+            if (cargada != null) onCargada?.invoke(cargada)
+        }
+    }
     Box(modifier.background(LectorColors.CardHigh)) {
         val i = img
         if (i != null) Image(bitmap = i, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

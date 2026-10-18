@@ -14,6 +14,13 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -237,7 +244,18 @@ fun FichaMangaScreen(
 
     val lista = rememberLazyListState()
     val fi = ficha
-    val acento = MaterialTheme.colorScheme.primary
+    // Estética de la ficha: el fondo y el acento toman el tono de la portada (si "Tema según la portada" está activo).
+    var paleta by remember { mutableStateOf<TemaPortada?>(null) }
+    var portadaLista by remember { mutableStateOf(false) }
+    var masAntiguos by rememberSaveable { mutableStateOf(false) }
+    val conTema = almacen.colorPortada
+    val acento = (if (conTema) paleta?.acento else null) ?: MaterialTheme.colorScheme.primary
+    val fondoAnim by animateColorAsState(
+        (if (conTema) paleta?.fondo else null) ?: Color.Black, tween(800), label = "fondoFicha",
+    )
+    val orden = remember(fi, masAntiguos) {
+        fi?.capitulos?.withIndex()?.toList()?.let { if (masAntiguos) it.asReversed() else it } ?: emptyList()
+    }
 
     // Corazón "En biblioteca": añade (descargando la portada) o quita el manga.
     fun alternarBiblioteca() {
@@ -285,65 +303,112 @@ fun FichaMangaScreen(
 
     // Cuánto se ha desplazado la cabecera (se lee al dibujar, sin recomponer).
     val scrollPx: () -> Float = { if (lista.firstVisibleItemIndex == 0) lista.firstVisibleItemScrollOffset.toFloat() else 99999f }
+    val tituloFicha = fi?.detalle?.titulo ?: manga.titulo
+    // La mayoría de fuentes listan el capítulo más nuevo primero: el primero a leer es el último sin leer.
+    val sig = fi?.let { x -> (x.capitulos.lastIndex downTo 0).firstOrNull { !ext.esLeido(f.id, x.capitulos[it].url) } ?: 0 } ?: 0
+    val hayLeidos = fi?.capitulos?.any { ext.esLeido(f.id, it.url) } == true
+    val abrirNavegador: () -> Unit = {
+        val u = urlManga(f, manga)
+        if (u == null) Toast.makeText(ctx, "Esta fuente no da la dirección web", Toast.LENGTH_SHORT).show()
+        else runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
 
-    Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
-        LazyColumn(Modifier.fillMaxSize(), state = lista, contentPadding = PaddingValues(bottom = 130.dp)) {
+    Box(Modifier.fillMaxSize().drawBehind { drawRect(fondoAnim) }) {
+        LazyColumn(Modifier.fillMaxSize(), state = lista, contentPadding = PaddingValues(bottom = 60.dp)) {
             item {
                 val lineas = listOfNotNull(
                     fi?.detalle?.autor,
-                    fi?.detalle?.let { d -> d.artista?.takeIf { it != d.autor } },
                     fi?.let { estadoTexto(it.detalle.estado) },
                     f.nombre,
+                    fi?.let { "${it.capitulos.size} capítulos" },
                 )
                 CabeceraFicha(
-                    fi?.detalle?.portadaUrl ?: manga.portadaUrl, motor.cabeceras(f),
-                    fi?.detalle?.titulo ?: manga.titulo, lineas, acento, scrollPx,
+                    portada = fi?.detalle?.portadaUrl ?: manga.portadaUrl, cabeceras = motor.cabeceras(f),
+                    titulo = tituloFicha, lineas = lineas, acento = acento, fondo = fondoAnim,
+                    scroll = scrollPx, portadaLista = portadaLista,
+                    onCargada = { portadaLista = true; if (conTema) paleta = temaDe(it) },
+                    enBiblioteca = enBiblioteca != null,
+                    textoPildora = if (enBiblioteca != null) "Categorías" else "Añadir a biblioteca",
+                    onLeer = { fi?.let { onLeer(it.capitulos, sig, 0) } },
+                    onCorazon = { alternarBiblioteca() },
+                    onPildora = { if (enBiblioteca != null) dialogoCats = true else alternarBiblioteca() },
                 )
             }
-            item {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    val en = enBiblioteca != null
-                    AccionFicha(
-                        if (en) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                        if (en) "En biblioteca" else "Añadir a biblioteca", en, acento,
-                    ) { alternarBiblioteca() }
-                    if (en) AccionFicha(Icons.Rounded.List, "Categorías", false, acento) { dialogoCats = true }
-                    AccionFicha(Icons.Rounded.ArrowForward, "Navegador", false, acento) {
-                        val u = urlManga(f, manga)
-                        if (u == null) Toast.makeText(ctx, "Esta fuente no da la dirección web", Toast.LENGTH_SHORT).show()
-                        else runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                    }
-                }
-            }
             if (fi != null) {
-                fi.detalle.descripcion?.let { d ->
-                    item {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
-                            LText(
-                                d, LectorType.Body, Modifier.pressable { descExpandida = !descExpandida },
-                                color = LectorColors.Muted, maxLines = if (descExpandida) Int.MAX_VALUE else 4,
-                            )
+                // Tarjetas deslizables: último capítulo y sinopsis.
+                item {
+                    val ultimo = fi.capitulos.firstOrNull()
+                    val sinopsis = fi.detalle.descripcion?.takeIf { it.isNotBlank() }
+                    if (ultimo != null || sinopsis != null) {
+                        val ancho = (LocalConfiguration.current.screenWidthDp * 0.82f).dp
+                        LazyRow(
+                            Modifier.padding(top = 4.dp),
+                            contentPadding = PaddingValues(horizontal = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            if (ultimo != null) item {
+                                TarjetaVidrio(Modifier.width(ancho).entrada(0), { onLeer(fi.capitulos, 0, 0) }) {
+                                    Row(Modifier.padding(start = 22.dp, end = 22.dp, top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        LText("Último capítulo", LectorType.Section.copy(fontSize = 18.sp), Modifier.weight(1f), maxLines = 1)
+                                        LText(fechaTexto(ultimo.fecha), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+                                    }
+                                    Row(Modifier.padding(22.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        ImagenRemota(
+                                            fi.detalle.portadaUrl ?: manga.portadaUrl,
+                                            Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)), motor.cabeceras(f),
+                                        )
+                                        Spacer(Modifier.width(14.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            LText(
+                                                ultimo.nombre.ifBlank { "Capítulo ${numeroTexto(ultimo.numero)}" },
+                                                LectorType.Section.copy(fontSize = 18.sp), maxLines = 2,
+                                            )
+                                            LText(
+                                                ultimo.scanlator?.takeIf { it.isNotBlank() } ?: "${fi.capitulos.size} capítulos",
+                                                LectorType.Label, color = LectorColors.Muted, maxLines = 1,
+                                            )
+                                        }
+                                        Spacer(Modifier.width(10.dp))
+                                        CirculoClaro(Icons.Rounded.PlayArrow, "Leer último capítulo", ClaroBtn, 48.dp) { onLeer(fi.capitulos, 0, 0) }
+                                    }
+                                }
+                            }
+                            if (sinopsis != null) item {
+                                TarjetaVidrio(Modifier.width(ancho).entrada(1), { descExpandida = true }) {
+                                    Column(Modifier.padding(22.dp)) {
+                                        LText("Sinopsis", LectorType.Section.copy(fontSize = 18.sp), maxLines = 1)
+                                        Spacer(Modifier.height(10.dp))
+                                        LText(sinopsis, LectorType.Body, color = LectorColors.Muted, maxLines = 4)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
                 if (fi.detalle.generos.isNotEmpty()) {
                     item {
                         Row(
-                            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
+                            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) { fi.detalle.generos.forEach { ChipBorde(it, acento) } }
                     }
                 }
                 item {
-                    LText(
-                        "${fi.capitulos.size} capítulos", LectorType.Label,
-                        Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-                    )
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        LText("Capítulos", LectorType.Display.copy(fontSize = 30.sp, letterSpacing = (-1).sp))
+                        Spacer(Modifier.width(12.dp))
+                        LText("${fi.capitulos.size}", LectorType.Body, Modifier.weight(1f), color = LectorColors.Muted)
+                        ConAcento(acento) {
+                            ChipSel(if (masAntiguos) "Más antiguos" else "Más nuevos", true) { masAntiguos = !masAntiguos }
+                        }
+                    }
                 }
-                itemsIndexed(fi.capitulos) { i, c ->
+                itemsIndexed(orden) { pos, iv ->
+                    val i = iv.index
+                    val c = iv.value
                     val clave = GestorDescargas.clave(f, c)
                     val fraccion = GestorDescargas.progreso[clave]
                     val estado: EstadoDescarga = when {
@@ -351,15 +416,29 @@ fun FichaMangaScreen(
                         clave in hechas -> EstadoDescarga.Listo
                         else -> EstadoDescarga.Libre
                     }
+                    val leido = ext.esLeido(f.id, c.url)
+                    val numero = numeroTexto(c.numero).ifEmpty { "#" }
                     Row(
-                        Modifier.fillMaxWidth().entrada(i).pressable { onLeer(fi.capitulos, i, 0) }
-                            .padding(start = 24.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+                        Modifier.fillMaxWidth().entrada(pos).pressable { onLeer(fi.capitulos, i, 0) }
+                            .padding(start = 24.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                        Box(
+                            Modifier.size(64.dp).clip(RoundedCornerShape(20.dp))
+                                .background(acento.copy(alpha = if (leido) 0.10f else 0.24f)),
+                            Alignment.Center,
+                        ) {
                             LText(
-                                c.nombre.ifBlank { "Capítulo ${numeroTexto(c.numero)}" }, LectorType.Body, maxLines = 2,
-                                color = if (ext.esLeido(f.id, c.url)) LectorColors.Muted else LectorColors.Text,
+                                numero, LectorType.Display.copy(fontSize = if (numero.length > 3) 15.sp else 21.sp),
+                                color = if (leido) LectorColors.Muted else LectorColors.Text, maxLines = 1,
+                            )
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            LText(
+                                c.nombre.ifBlank { "Capítulo ${numeroTexto(c.numero)}" },
+                                LectorType.Section.copy(fontSize = 17.sp), maxLines = 2,
+                                color = if (leido) LectorColors.Muted else LectorColors.Text,
                             )
                             val sub = listOfNotNull(
                                 fechaTexto(c.fecha).takeIf { it.isNotEmpty() }, c.scanlator,
@@ -369,15 +448,17 @@ fun FichaMangaScreen(
                         Spacer(Modifier.width(6.dp))
                         // Descargar el capítulo como .cbz y meterlo en la biblioteca.
                         // Mientras descarga, volver a tocar el botón cancela la descarga.
-                        BotonDescarga(estado, onClick = {
-                            when (estado) {
-                                is EstadoDescarga.Libre -> GestorDescargas.iniciar(
-                                    ctx, almacen, motor, f, c, fi.detalle.titulo, alRecargar,
-                                )
-                                is EstadoDescarga.Descargando -> GestorDescargas.cancelar(ctx, clave)
-                                is EstadoDescarga.Listo -> quitarDescarga = c
-                            }
-                        })
+                        ConAcento(acento) {
+                            BotonDescarga(estado, onClick = {
+                                when (estado) {
+                                    is EstadoDescarga.Libre -> GestorDescargas.iniciar(
+                                        ctx, almacen, motor, f, c, fi.detalle.titulo, alRecargar,
+                                    )
+                                    is EstadoDescarga.Descargando -> GestorDescargas.cancelar(ctx, clave)
+                                    is EstadoDescarga.Listo -> quitarDescarga = c
+                                }
+                            })
+                        }
                     }
                 }
             }
@@ -395,15 +476,34 @@ fun FichaMangaScreen(
             }
         }
 
-        BarraSuperior(scrollPx, fi?.detalle?.titulo ?: manga.titulo, onBack)
+        BarraSuperior(
+            scrollPx, tituloFicha, onBack, fondo = fondoAnim,
+            trailing = {
+                if (fi != null && fi.capitulos.isNotEmpty()) {
+                    // Al bajar, el "reanudar" de la cabecera sale de pantalla: aparece aquí.
+                    Box(
+                        Modifier.size(44.dp)
+                            .graphicsLayer { alpha = ((scrollPx() - 560f) / 160f).coerceIn(0f, 1f) }
+                            .pressable { if (scrollPx() > 560f) onLeer(fi.capitulos, sig, 0) }
+                            .clip(CircleShape).background(acento),
+                        Alignment.Center,
+                    ) { Icon(Icons.Rounded.PlayArrow, if (hayLeidos) "Reanudar" else "Leer", tint = TintaBtn) }
+                    Spacer(Modifier.width(10.dp))
+                }
+                Box(
+                    Modifier.size(44.dp).pressable(abrirNavegador).clip(CircleShape).background(Color(0x66000000)),
+                    Alignment.Center,
+                ) { Icon(Icons.Rounded.ArrowForward, "Abrir en el navegador", tint = LectorColors.Text) }
+            },
+        )
 
-        if (fi != null && fi.capitulos.isNotEmpty()) {
-            // La mayoría de fuentes listan el capítulo más nuevo primero: el primero a leer es el último.
-            val sig = (fi.capitulos.lastIndex downTo 0).firstOrNull { !ext.esLeido(f.id, fi.capitulos[it].url) } ?: 0
-            val hayLeidos = fi.capitulos.any { ext.esLeido(f.id, it.url) }
-            BotonFlotante(
-                if (hayLeidos) "Reanudar" else "Empezar a leer", acento,
-                { onLeer(fi.capitulos, sig, 0) }, Modifier.align(Alignment.BottomEnd),
+        // Sinopsis completa.
+        if (descExpandida) {
+            AlertDialog(
+                onDismissRequest = { descExpandida = false },
+                title = { Text("Sinopsis") },
+                text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(fi?.detalle?.descripcion.orEmpty()) } },
+                confirmButton = { TextButton(onClick = { descExpandida = false }) { Text("Cerrar") } },
             )
         }
 
@@ -452,34 +552,101 @@ fun FichaMangaScreen(
     }
 }
 
-/** Cabecera de la ficha: portada difuminada y teñida, parallax y entrada suave. */
+private val ClaroBtn = Color(0x9EFFFFFF)
+private val TintaBtn = Color(0xFF0D0D18)
+
+/** Cambia el color de acento (MaterialTheme.primary) de lo que lleva dentro: botones de descarga, chips... */
+@Composable
+private fun ConAcento(acento: Color, content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(primary = acento), content = content)
+}
+
+/** Tarjeta de vidrio: relleno translúcido y borde fino, como las de "Latest release / About". */
+@Composable
+private fun TarjetaVidrio(modifier: Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    val forma = RoundedCornerShape(32.dp)
+    Column(
+        modifier.then(if (onClick != null) Modifier.pressable(onClick) else Modifier)
+            .clip(forma).background(Color.White.copy(alpha = 0.06f))
+            .border(1.5.dp, Color.White.copy(alpha = 0.16f), forma),
+        content = content,
+    )
+}
+
+@Composable
+private fun CirculoClaro(icono: ImageVector, desc: String, fondo: Color, tam: androidx.compose.ui.unit.Dp = 56.dp, onClick: () -> Unit) {
+    Box(Modifier.size(tam).pressable(onClick).clip(CircleShape).background(fondo), Alignment.Center) {
+        Icon(icono, desc, tint = TintaBtn, modifier = Modifier.size(tam * 0.5f))
+    }
+}
+
+@Composable
+private fun PildoraClara(texto: String, icono: ImageVector, onClick: () -> Unit) {
+    Row(
+        Modifier.height(56.dp).pressable(onClick).clip(CircleShape).background(ClaroBtn).padding(horizontal = 22.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icono, null, tint = TintaBtn, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(8.dp))
+        LText(texto, LectorType.Section.copy(fontSize = 17.sp), color = TintaBtn, maxLines = 1)
+    }
+}
+
+/**
+ * Cabecera de la ficha, como la página de artista de musicfy: portada a pantalla completa que se funde con el
+ * fondo, avatar redondo, título enorme y fila de botones. La portada aparece con un fundido y hace parallax.
+ */
 @Composable
 private fun CabeceraFicha(
-    portada: String?, cabeceras: Map<String, String>, titulo: String,
-    lineas: List<String>, acento: Color, scroll: () -> Float,
+    portada: String?, cabeceras: Map<String, String>, titulo: String, lineas: List<String>,
+    acento: Color, fondo: Color, scroll: () -> Float, portadaLista: Boolean,
+    onCargada: (ImageBitmap) -> Unit,
+    enBiblioteca: Boolean, textoPildora: String,
+    onLeer: () -> Unit, onCorazon: () -> Unit, onPildora: () -> Unit,
 ) {
     var entro by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entro = true }
-    val t by animateFloatAsState(if (entro) 1f else 0f, tween(550), label = "entradaFicha")
-    Box(Modifier.fillMaxWidth().height(420.dp)) {
+    val t by animateFloatAsState(if (entro) 1f else 0f, tween(600), label = "entradaFicha")
+    val aparece by animateFloatAsState(if (portadaLista) 1f else 0f, tween(700), label = "portadaFicha")
+    Box(Modifier.fillMaxWidth().height(560.dp)) {
         ImagenRemota(
             portada,
-            Modifier.fillMaxSize().graphicsLayer { translationY = scroll() * 0.5f }.blur(32.dp).alpha(0.6f),
-            cabeceras,
+            Modifier.fillMaxSize().graphicsLayer {
+                translationY = scroll() * 0.5f
+                alpha = aparece * (1f - (scroll() / 1100f).coerceIn(0f, 1f) * 0.8f)
+            },
+            cabeceras, onCargada,
         )
-        Box(Modifier.fillMaxSize().background(acento.copy(alpha = 0.18f)))
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color.Black)))
-        Row(
-            Modifier.align(Alignment.BottomStart).padding(24.dp)
+        // Oscurece un poco arriba (barra de estado) y funde la portada con el fondo por abajo.
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x66000000), 0.22f to Color.Transparent)))
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(0.38f to Color.Transparent, 0.80f to fondo.copy(alpha = 0.88f), 1f to fondo)
+            )
+        )
+        Column(
+            Modifier.align(Alignment.BottomStart).padding(start = 24.dp, end = 24.dp, bottom = 20.dp)
                 .graphicsLayer { alpha = t; translationY = (1f - t) * 60f },
-            verticalAlignment = Alignment.Bottom,
         ) {
-            ImagenRemota(portada, Modifier.width(124.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(20.dp)), cabeceras)
-            Spacer(Modifier.width(18.dp))
-            Column(Modifier.weight(1f)) {
-                LText(titulo, LectorType.Hero, maxLines = 3)
-                Spacer(Modifier.height(6.dp))
-                lineas.forEach { LText(it, LectorType.Body, color = LectorColors.Muted, maxLines = 2) }
+            ImagenRemota(portada, Modifier.size(96.dp).clip(CircleShape), cabeceras)
+            Spacer(Modifier.height(14.dp))
+            LText(
+                titulo, LectorType.Display.copy(fontSize = 44.sp, lineHeight = 46.sp, letterSpacing = (-1.5).sp),
+                maxLines = 3,
+            )
+            Spacer(Modifier.height(6.dp))
+            lineas.chunked(2).forEach { par ->
+                LText(par.joinToString(" · "), LectorType.Body, color = Color(0xCCFFFFFF), maxLines = 1)
+            }
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                CirculoClaro(Icons.Rounded.PlayArrow, "Leer", ClaroBtn, onClick = onLeer)
+                CirculoClaro(
+                    if (enBiblioteca) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    if (enBiblioteca) "Quitar de la biblioteca" else "Añadir a la biblioteca",
+                    if (enBiblioteca) acento else ClaroBtn, onClick = onCorazon,
+                )
+                PildoraClara(textoPildora, if (enBiblioteca) Icons.Rounded.List else Icons.Rounded.Add, onPildora)
             }
         }
     }
