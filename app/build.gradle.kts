@@ -22,6 +22,13 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+        // Las librerías del motor de fuentes pueden venir con metadatos de un Kotlin más nuevo que el del proyecto.
+        freeCompilerArgs += "-Xskip-metadata-version-check"
+    }
+    packaging {
+        resources {
+            excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/DEPENDENCIES", "/META-INF/INDEX.LIST")
+        }
     }
     buildFeatures {
         compose = true
@@ -35,4 +42,14 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.13.1")
+
+    // --- Motor de fuentes (paso 4): source-api de Komikku/Mihon ---
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("com.squareup.okhttp3:okhttp:5.3.2")
+    implementation("io.reactivex:rxjava:1.3.8")
+    implementation("org.jsoup:jsoup:1.23.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-okio:1.11.0")
+    implementation("androidx.preference:preference-ktx:1.2.1")
+    implementation("com.github.mihonapp:injekt:91edab2317")
 }

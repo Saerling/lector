@@ -105,7 +105,7 @@ Se **vendorizó** (copió de Komikku, Apache-2.0) el `source-api` y la red, con 
 | `com/example/lector/ext/MotorExt.kt` | **NUEVO.** Implementa `MotorFuentes`: registra en Injekt `Application`, `NetworkHelper`, `JavaScriptEngine`, `Json`; carga el APK de la extensión con `ChildFirstPathClassLoader` (lee `tachiyomi.extension.class`, soporta `SourceFactory`), cachea por `pkg:versionCode:firma`; **solo carga extensiones con `confiable == true`**; busca la fuente por `id`, si no por nombre+idioma; `populares/recientes/buscar` en `Dispatchers.IO`; `cabeceras()` = `HttpSource.headers` (para portadas) |
 | `com/example/lector/ext/ExtManager.kt` | en `init`: `Motor.actual = MotorExt(app, this)` (dentro de `runCatching`) |
 
-### ⚠️ DEPENDENCIAS NUEVAS (hay que añadirlas en `app/build.gradle(.kts)` — este zip no trae Gradle)
+### ⚠️ DEPENDENCIAS NUEVAS (YA aplicadas en `app/build.gradle.kts` y `settings.gradle.kts` de este zip; el `build.gradle.kts` raíz y `gradle/libs.versions.toml` no existen/no se tocaron). Además se añadió `-Xskip-metadata-version-check` y `packaging excludes`
 ```kotlin
 // settings.gradle(.kts) → dependencyResolutionManagement { repositories { ... maven("https://jitpack.io") } }
 implementation("com.squareup.okhttp3:okhttp:5.3.2")          // OkHttp 5 (el código usa response.body sin "?")

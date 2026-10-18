@@ -10,6 +10,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://jitpack.io") } // Injekt (motor de fuentes)
     }
 }
 rootProject.name = "Lector"
