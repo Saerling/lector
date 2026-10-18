@@ -27,7 +27,13 @@ android {
     }
     packaging {
         resources {
-            excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/DEPENDENCIES", "/META-INF/INDEX.LIST")
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/DEPENDENCIES",
+                "/META-INF/INDEX.LIST",
+                // Varias librerías de OkHttp traen el mismo archivo OSGi y Gradle no sabe cuál usar.
+                "/META-INF/versions/**/OSGI-INF/MANIFEST.MF",
+            )
         }
     }
     buildFeatures {
