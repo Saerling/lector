@@ -18,11 +18,13 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.lector.Almacen
 import com.example.lector.BibliotecaScreen
 import com.example.lector.Comic
 import com.example.lector.HistorialScreen
+import com.example.lector.ext.ExtManager
 
 /**
  * Pantalla principal con el diseño nuevo.
@@ -51,6 +53,10 @@ fun Inicio(
 
     var ruta by rememberSaveable { mutableStateOf<Ruta?>(null) }
     var detalleId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Explorar / extensiones: gestor único + qué extensión o fuente se está viendo.
+    val ext = remember { ExtManager.obtener(LocalContext.current) }
+    var extPkg by rememberSaveable { mutableStateOf<String?>(null) }
+    var fuenteId by rememberSaveable { mutableStateOf<Long?>(null) }
     val hayCapa = ruta != null || detalleId != null
 
     BackHandler(enabled = ruta != null && detalleId == null) { ruta = ruta?.padre() }
@@ -68,7 +74,12 @@ fun Inicio(
         Crossfade(tab, animationSpec = tween(250), label = "tabs") { t ->
             when (t) {
                 LectorTab.Home -> HomeScreen(visibles, almacen, onOpen = abrirDetalle, onRead = alAbrir, onAdd = alAnadir)
-                LectorTab.Search -> SearchScreen(visibles, almacen, abrirDetalle)
+                LectorTab.Search -> ExplorarScreen(
+                    ext = ext,
+                    onRuta = { ruta = it },
+                    onFuente = { fuenteId = it.id; ruta = Ruta.FuenteDetalle },
+                    onExt = { extPkg = it.pkg; ruta = Ruta.ExtDetalle },
+                )
                 LectorTab.Library -> Box(Modifier.padding(bottom = 76.dp)) {
                     BibliotecaScreen(
                         comics = comics,
@@ -130,6 +141,9 @@ fun Inicio(
                     Ruta.Apariencia -> AparienciaScreen(almacen) { ruta = Ruta.Ajustes }
                     Ruta.AjBiblioteca -> AjBibliotecaScreen(almacen, { ruta = Ruta.Ajustes }) { ruta = it }
                     Ruta.AjSeguimiento -> AjSeguimientoScreen(almacen) { ruta = Ruta.Ajustes }
+                    Ruta.ListadosExt -> ListadosExtScreen(ext) { ruta = null }
+                    Ruta.ExtDetalle -> ExtDetalleScreen(ext, extPkg.orEmpty()) { ruta = null }
+                    Ruta.FuenteDetalle -> FuenteDetalleScreen(ext, fuenteId ?: 0L) { ruta = null }
                 }
             }
         }

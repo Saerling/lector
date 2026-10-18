@@ -124,7 +124,7 @@ fun CoverCarousel(items: List<Comic>, almacen: Almacen, onClick: (Comic) -> Unit
 
 enum class LectorTab(val label: String, val icon: ImageVector) {
     Home("Inicio", Icons.Rounded.Home),
-    Search("Buscar", Icons.Rounded.Search),
+    Search("Explorar", Icons.Rounded.Search),
     Library("Biblioteca", Icons.Rounded.List),
     History("Historial", Icons.Rounded.DateRange),
     More("Más", Icons.Rounded.MoreVert)

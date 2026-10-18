@@ -26,7 +26,11 @@ import com.example.lector.Categoria
 import com.example.lector.Comic
 
 /** Páginas que se abren encima de las pestañas (con animación de deslizamiento). */
-enum class Ruta { Categorias, Estadisticas, Datos, Ajustes, Apariencia, AjBiblioteca, AjSeguimiento }
+enum class Ruta {
+    Categorias, Estadisticas, Datos, Ajustes, Apariencia, AjBiblioteca, AjSeguimiento,
+    // Explorar / extensiones (paso 3)
+    ListadosExt, ExtDetalle, FuenteDetalle
+}
 
 fun Ruta.padre(): Ruta? = when (this) {
     Ruta.Apariencia, Ruta.AjBiblioteca, Ruta.AjSeguimiento -> Ruta.Ajustes
