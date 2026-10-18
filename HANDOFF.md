@@ -1,4 +1,4 @@
-# HANDOFF — Lector (app Android estilo Komikku) · Paso 3: Explorar + Extensiones
+# HANDOFF — Lector (app Android estilo Komikku) · Pasos 3 y 4: Explorar + Extensiones + Motor
 
 > Este archivo es el "pasaporte" del proyecto. Se lo puedes pasar a cualquier IA junto con el zip.
 > Al final hay un bloque **"Para la IA que continúe"** con las reglas para devolverlo (a Claude u otra).
@@ -85,7 +85,60 @@ engranaje, y **"Listados de extensiones"** con diálogo *"Añadir listado de ext
 
 ---
 
-## 3. PRÓXIMOS PASOS (en este orden)
+## 2b. PASO 4 — Motor de fuentes (escrito el 2026-10-18, **SIN compilar ni probar**)
+Estado de partida: el paso 3 ya compila y corre en el móvil (se arregló `LocalContext.current` dentro de `remember`).
+Las pantallas decían "el motor de fuentes se conecta en el siguiente paso". Este paso lo conecta.
+
+### Qué se hizo
+Se **vendorizó** (copió de Komikku, Apache-2.0) el `source-api` y la red, con los mismos paquetes `eu.kanade.tachiyomi.*`
+(las extensiones los referencian por nombre; **no cambies paquetes ni firmas**):
+| Ruta (`app/src/main/java/...`) | Origen / cambios |
+|---|---|
+| `eu/kanade/tachiyomi/source/{Source,CatalogueSource,ConfigurableSource,SourceFactory,UnmeteredSource,PagePreviewSource,PreferenceScreen}.kt` | Komikku `source-api`. `logcat` → `android.util.Log`; `PreferenceScreen` pasa de expect/actual a `typealias` de `androidx.preference.PreferenceScreen`; quitadas anotaciones `@Serializable/@Transient` (no exigir el plugin de serialization) |
+| `eu/kanade/tachiyomi/source/model/*` | modelos `SManga, SChapter, Page, Filter, FilterList, MangasPage…` (quitado `MetadataMangasPage`, de SY) |
+| `eu/kanade/tachiyomi/source/online/{HttpSource,ParsedHttpSource}.kt` | `HttpSource` sin delegados EXH/SY: `network = Injekt.get<NetworkHelper>()` |
+| `eu/kanade/tachiyomi/util/{JsoupExtensions,system/ChildFirstPathClassLoader}.kt` | tal cual |
+| `eu/kanade/tachiyomi/network/*` | `AndroidCookieJar, HttpException, OkHttpExtensions, ProgressListener, ProgressResponseBody, Requests, interceptor/{UserAgent,UncaughtException,RateLimit,SpecificHostRateLimit}`. En `OkHttpExtensions`: atomics de Kotlin → `java.util.concurrent.atomic`; `context(Json)` → parámetro normal `json` **primero** (misma firma binaria `decodeFromJsonResponse(Json, DeserializationStrategy, Response)`) |
+| `eu/kanade/tachiyomi/network/NetworkHelper.kt` | **Reescrito, reducido** (sin preferencias, sin DoH, sin logging, **sin interceptor de Cloudflare/WebView**) |
+| `eu/kanade/tachiyomi/network/JavaScriptEngine.kt` | **Stub**: existe para que carguen las extensiones que lo nombran; evaluar JS lanza `UnsupportedOperationException` (falta QuickJS) |
+| `tachiyomi/core/common/util/{QuerySanitizer,lang/RxCoroutineBridge}.kt`, `mihon/core/common/extensions/JsonObject.kt` | tal cual (shims que pide el source-api) |
+| `com/example/lector/ext/MotorExt.kt` | **NUEVO.** Implementa `MotorFuentes`: registra en Injekt `Application`, `NetworkHelper`, `JavaScriptEngine`, `Json`; carga el APK de la extensión con `ChildFirstPathClassLoader` (lee `tachiyomi.extension.class`, soporta `SourceFactory`), cachea por `pkg:versionCode:firma`; **solo carga extensiones con `confiable == true`**; busca la fuente por `id`, si no por nombre+idioma; `populares/recientes/buscar` en `Dispatchers.IO`; `cabeceras()` = `HttpSource.headers` (para portadas) |
+| `com/example/lector/ext/ExtManager.kt` | en `init`: `Motor.actual = MotorExt(app, this)` (dentro de `runCatching`) |
+
+### ⚠️ DEPENDENCIAS NUEVAS (hay que añadirlas en `app/build.gradle(.kts)` — este zip no trae Gradle)
+```kotlin
+// settings.gradle(.kts) → dependencyResolutionManagement { repositories { ... maven("https://jitpack.io") } }
+implementation("com.squareup.okhttp3:okhttp:5.3.2")          // OkHttp 5 (el código usa response.body sin "?")
+implementation("io.reactivex:rxjava:1.3.8")                  // RxJava 1: lo exige el source-api
+implementation("org.jsoup:jsoup:1.23.2")
+implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-okio:1.11.0")
+implementation("androidx.preference:preference-ktx:1.2.1")
+implementation("com.github.mihonapp:injekt:91edab2317")      // jitpack
+// ya deberían estar: kotlinx-coroutines-android, androidx.core:core-ktx, compose runtime
+```
+Versiones copiadas del `gradle/*.versions.toml` de Komikku (que usa Kotlin 2.4.x). Si el proyecto usa un Kotlin más viejo
+y `kotlinx-serialization-json:1.11.0` o `jsoup 1.23.2` no compilan, baja a versiones anteriores compatibles.
+No hace falta el plugin `kotlin-serialization`. Si algún día se activa minify/R8 en release, hay que añadir reglas
+`-keep class eu.kanade.tachiyomi.** { *; }` (las extensiones usan esas clases por nombre).
+
+### Qué debería funcionar (NO verificado)
+Instalar extensión → **Confiar** → su fuente sale en *Fuentes* → al abrirla: Populares / Recientes / búsqueda con
+portadas (`NavegarFuente` en `ui/ExtPantallas.kt`, ya existía) y la pestaña *Novedades*.
+
+### Qué NO existe / límites conocidos
+- **Cloudflare**: no hay interceptor con WebView; las fuentes protegidas darán error 403/503.
+- **QuickJS**: `JavaScriptEngine` es stub.
+- **Ficha del manga, lista de capítulos, leer online, descargar → .cbz**: no existen (el motor solo lista y busca).
+  `MotorFuentes` hay que ampliarlo (`detalle`, `capitulos`, `paginas`) usando `Source.getMangaUpdate(...)` y `getPageList(...)`.
+- Filtros de fuente (`getFilterList`) no se muestran; la búsqueda usa `FilterList()` vacío.
+- Ajustes por fuente (`ConfigurableSource`) sin pantalla.
+- `index.pb` de Keiyoushi y `Fuente.id` del índice deben coincidir con `Source.id` real; si no, se cae a nombre+idioma.
+- Pantalla *Migrar* sigue siendo un aviso.
+
+---
+
+## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.
 2. **Motor de fuentes (lo grande).** Camino recomendado: **vendorizar (copiar) de Komikku/Mihon** (licencia Apache-2.0)

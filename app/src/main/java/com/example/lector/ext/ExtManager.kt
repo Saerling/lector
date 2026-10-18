@@ -140,6 +140,9 @@ class ExtManager private constructor(private val app: Context) {
         cargarCache()
         refrescarInstaladas()
         actualizarLista()
+        // Motor de fuentes: ejecuta el código de las extensiones de confianza (Komikku source-api).
+        runCatching { Motor.actual = MotorExt(app.applicationContext as android.app.Application, this) }
+            .onFailure { android.util.Log.e("Lector", "No se pudo iniciar el motor de fuentes", it) }
     }
 
     // ---- Listados (repositorios) ----
