@@ -1,6 +1,8 @@
 package com.example.lector
 
 import android.app.Activity
+import android.content.pm.ActivityInfo
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -42,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -81,10 +85,20 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
     var modo by remember(comic.id) { mutableStateOf(Modo.MANGA) }
     var paginaActual by remember(comic.id) { mutableIntStateOf(comic.ultimaPagina) }
     var barraVisible by remember { mutableStateOf(true) }
+    var ajustes by remember { mutableStateOf(false) }
+
+    // Filtro de escala de grises / colores invertidos para las imágenes.
+    val filtroImagen = remember(almacen.escalaGrises, almacen.invertirColores) {
+        construirFiltro(almacen.escalaGrises, almacen.invertirColores)
+    }
 
     // Oculta o muestra las barras del sistema junto con nuestra barra inferior.
     PantallaCompleta(oculta = !barraVisible)
     PantallaEncendida(activa = almacen.mantenerEncendida)
+    AjustesPantalla(almacen)
+    if (ajustes) {
+        DialogoLector(almacen = almacen, alCerrar = { ajustes = false })
+    }
     TeclasVolumen(activas = almacen.teclasVolumen)
 
     LaunchedEffect(comic.id) {
@@ -98,7 +112,7 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
 
     // El color de acento puede tomarse de la portada del cómic.
     TemaPortada(almacen.portadaDe(comic.id), almacen.colorPortada) {
-        Box(Modifier.fillMaxSize().background(Color.Black)) {
+        Box(Modifier.fillMaxSize().background(colorFondo(almacen.fondoLector))) {
             val lista = paginas
             if (lista == null) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -134,6 +148,7 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
                         inicial = inicial,
                         alCambiarPagina = { paginaActual = it },
                         alTocar = alTocar,
+                        filtro = filtroImagen,
                     )
                 } else {
                     LectorPaginado(
@@ -141,9 +156,22 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
                         lista = lista,
                         inicial = inicial,
                         rtl = modo == Modo.MANGA,
-                    zonas = almacen.zonasToque,
+                        zonas = almacen.zonasToque,
+                        filtro = filtroImagen,
+                        recortar = almacen.recortarBordes,
                         alCambiarPagina = { paginaActual = it },
                         alTocar = alTocar,
+                    )
+                }
+
+                // Capa de color sobre la página (no intercepta toques).
+                if (almacen.tinte != Tinte.NINGUNO) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                colorTinte(almacen.tinte).copy(alpha = almacen.intensidadTinte),
+                            ),
                     )
                 }
 
@@ -182,6 +210,7 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
                                 },
                             )
                         }
+                        TextButton(onClick = { ajustes = true }) { Text("Ajustes") }
                         TextButton(onClick = alCerrar) { Text("Cerrar") }
                     }
                 }
@@ -200,6 +229,8 @@ private fun LectorPaginado(
     inicial: Int,
     rtl: Boolean,
     zonas: Boolean,
+    filtro: ColorFilter?,
+    recortar: Boolean,
     alCambiarPagina: (Int) -> Unit,
     alTocar: () -> Unit,
 ) {
@@ -222,7 +253,7 @@ private fun LectorPaginado(
         reverseLayout = rtl,
         modifier = Modifier.fillMaxSize(),
     ) { indice ->
-        Pagina(archivo, lista[indice]) { fraccion ->
+        Pagina(archivo, lista[indice], filtro, recortar) { fraccion ->
             // En modo manga (derecha a izquierda), el borde izquierdo avanza.
             val avanzar = if (rtl) fraccion < 0.3f else fraccion > 0.7f
             val retroceder = if (rtl) fraccion > 0.7f else fraccion < 0.3f
@@ -247,6 +278,7 @@ private fun LectorVertical(
     inicial: Int,
     alCambiarPagina: (Int) -> Unit,
     alTocar: () -> Unit,
+    filtro: ColorFilter?,
 ) {
     val estado = rememberLazyListState(initialFirstVisibleItemIndex = inicial)
 
@@ -270,13 +302,13 @@ private fun LectorVertical(
             },
     ) {
         items(lista.size, key = { it }) { indice ->
-            PaginaVertical(archivo, lista[indice])
+            PaginaVertical(archivo, lista[indice], filtro)
         }
     }
 }
 
 @Composable
-private fun PaginaVertical(archivo: File, nombre: String) {
+private fun PaginaVertical(archivo: File, nombre: String, filtro: ColorFilter?) {
     var tiras by remember(nombre) { mutableStateOf<List<ImageBitmap>?>(null) }
 
     LaunchedEffect(nombre) {
@@ -302,6 +334,7 @@ private fun PaginaVertical(archivo: File, nombre: String) {
                     bitmap = tira,
                     contentDescription = null,
                     contentScale = ContentScale.FillWidth,
+                    colorFilter = filtro,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -310,15 +343,23 @@ private fun PaginaVertical(archivo: File, nombre: String) {
 }
 
 @Composable
-private fun Pagina(archivo: File, nombre: String, alToque: (Float) -> Unit) {
+private fun Pagina(
+    archivo: File,
+    nombre: String,
+    filtro: ColorFilter?,
+    recortar: Boolean,
+    alToque: (Float) -> Unit,
+) {
     var imagen by remember(nombre) { mutableStateOf<ImageBitmap?>(null) }
     var escala by remember(nombre) { mutableFloatStateOf(1f) }
     var desplazamiento by remember(nombre) { mutableStateOf(Offset.Zero) }
 
-    LaunchedEffect(nombre) {
+    LaunchedEffect(nombre, recortar) {
         // 3000 px: da margen para ampliar sin que se vea borroso.
         imagen = withContext(Dispatchers.IO) {
-            Cbz.decodificar(archivo, nombre, 3000)?.asImageBitmap()
+            Cbz.decodificar(archivo, nombre, 3000)
+                ?.let { if (recortar) Cbz.recortarBordes(it) else it }
+                ?.asImageBitmap()
         }
     }
 
@@ -384,6 +425,7 @@ private fun Pagina(archivo: File, nombre: String, alToque: (Float) -> Unit) {
                 bitmap = img,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
+                colorFilter = filtro,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
@@ -445,5 +487,61 @@ private fun TeclasVolumen(activas: Boolean) {
     DisposableEffect(activas) {
         Teclas.activo = activas
         onDispose { Teclas.activo = false }
+    }
+}
+
+// Matriz de color para escala de grises y/o colores invertidos (null si no hay ninguno).
+private fun construirFiltro(grises: Boolean, invertir: Boolean): ColorFilter? {
+    if (!grises && !invertir) return null
+    val matriz = ColorMatrix()
+    if (grises) matriz.setToSaturation(0f)
+    if (invertir) {
+        matriz *= ColorMatrix(
+            floatArrayOf(
+                -1f, 0f, 0f, 0f, 255f,
+                0f, -1f, 0f, 0f, 255f,
+                0f, 0f, -1f, 0f, 255f,
+                0f, 0f, 0f, 1f, 0f,
+            ),
+        )
+    }
+    return ColorFilter.colorMatrix(matriz)
+}
+
+// Orientación y brillo propios mientras el lector está abierto. Al salir se restauran.
+@Composable
+private fun AjustesPantalla(almacen: Almacen) {
+    val vista = LocalView.current
+    val actividad = vista.context as? Activity
+
+    DisposableEffect(almacen.orientacion) {
+        actividad?.requestedOrientation = when (almacen.orientacion) {
+            Orientacion.LIBRE -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            Orientacion.VERTICAL -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+            Orientacion.HORIZONTAL -> ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+        }
+        onDispose {
+            actividad?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    DisposableEffect(almacen.brilloPersonalizado, almacen.brillo) {
+        val ventana = actividad?.window
+        if (ventana != null) {
+            val atributos = ventana.attributes
+            atributos.screenBrightness = if (almacen.brilloPersonalizado) {
+                almacen.brillo.coerceIn(0.01f, 1f)
+            } else {
+                WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            }
+            ventana.attributes = atributos
+        }
+        onDispose {
+            if (ventana != null) {
+                val atributos = ventana.attributes
+                atributos.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                ventana.attributes = atributos
+            }
+        }
     }
 }

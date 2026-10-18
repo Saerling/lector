@@ -46,6 +46,7 @@ fun HistorialScreen(
     alAbrir: (Comic) -> Unit,
     alCambiar: () -> Unit,
     modifier: Modifier = Modifier,
+    alVolver: (() -> Unit)? = null,
 ) {
     val entradas = comics.filter { it.leido > 0 }.sortedByDescending { it.leido }
     val grupos = entradas.groupBy { inicioDelDia(it.leido) }
@@ -65,6 +66,9 @@ fun HistorialScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (alVolver != null) {
+                TextButton(onClick = alVolver) { Text("‹ Volver") }
+            }
             Text(
                 "Historial",
                 style = MaterialTheme.typography.headlineMedium,

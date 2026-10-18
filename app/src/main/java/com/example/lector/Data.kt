@@ -94,6 +94,82 @@ class Almacen(private val contexto: Context) {
         prefs.edit().putBoolean("mantener_encendida", valor).apply()
     }
 
+    // ---- Pantalla del lector ----
+    private inline fun <reified T : Enum<T>> leerEnum(clave: String, defecto: T): T =
+        prefs.getString(clave, null)?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: defecto
+
+    var fondoLector by mutableStateOf(leerEnum("fondo_lector", Fondo.NEGRO))
+        private set
+
+    fun elegirFondoLector(valor: Fondo) {
+        fondoLector = valor
+        prefs.edit().putString("fondo_lector", valor.name).apply()
+    }
+
+    var orientacion by mutableStateOf(leerEnum("orientacion", Orientacion.LIBRE))
+        private set
+
+    fun elegirOrientacion(valor: Orientacion) {
+        orientacion = valor
+        prefs.edit().putString("orientacion", valor.name).apply()
+    }
+
+    var brilloPersonalizado by mutableStateOf(prefs.getBoolean("brillo_on", false))
+        private set
+
+    fun elegirBrilloPersonalizado(valor: Boolean) {
+        brilloPersonalizado = valor
+        prefs.edit().putBoolean("brillo_on", valor).apply()
+    }
+
+    var brillo by mutableStateOf(prefs.getFloat("brillo", 0.5f))
+        private set
+
+    fun elegirBrillo(valor: Float) {
+        brillo = valor
+        prefs.edit().putFloat("brillo", valor).apply()
+    }
+
+    var escalaGrises by mutableStateOf(prefs.getBoolean("grises", false))
+        private set
+
+    fun elegirEscalaGrises(valor: Boolean) {
+        escalaGrises = valor
+        prefs.edit().putBoolean("grises", valor).apply()
+    }
+
+    var invertirColores by mutableStateOf(prefs.getBoolean("invertir", false))
+        private set
+
+    fun elegirInvertirColores(valor: Boolean) {
+        invertirColores = valor
+        prefs.edit().putBoolean("invertir", valor).apply()
+    }
+
+    var tinte by mutableStateOf(leerEnum("tinte", Tinte.NINGUNO))
+        private set
+
+    fun elegirTinte(valor: Tinte) {
+        tinte = valor
+        prefs.edit().putString("tinte", valor.name).apply()
+    }
+
+    var intensidadTinte by mutableStateOf(prefs.getFloat("tinte_intensidad", 0.25f))
+        private set
+
+    fun elegirIntensidadTinte(valor: Float) {
+        intensidadTinte = valor
+        prefs.edit().putFloat("tinte_intensidad", valor).apply()
+    }
+
+    var recortarBordes by mutableStateOf(prefs.getBoolean("recortar_bordes", false))
+        private set
+
+    fun elegirRecortarBordes(valor: Boolean) {
+        recortarBordes = valor
+        prefs.edit().putBoolean("recortar_bordes", valor).apply()
+    }
+
     // ---- Vista de la biblioteca ----
     var vista by mutableStateOf(
         prefs.getString("vista", null)?.let { runCatching { Vista.valueOf(it) }.getOrNull() }
@@ -495,7 +571,16 @@ class Almacen(private val contexto: Context) {
                 .put("vista", vista.name)
                 .put("columnas", columnas)
                 .put("mostrar_pagina", mostrarPagina)
-                .put("insignia_progreso", insigniaProgreso),
+                .put("insignia_progreso", insigniaProgreso)
+                .put("fondo_lector", fondoLector.name)
+                .put("orientacion", orientacion.name)
+                .put("brillo_on", brilloPersonalizado)
+                .put("brillo", brillo.toDouble())
+                .put("grises", escalaGrises)
+                .put("invertir", invertirColores)
+                .put("tinte", tinte.name)
+                .put("tinte_intensidad", intensidadTinte.toDouble())
+                .put("recortar_bordes", recortarBordes),
         )
 
         val cats = JSONArray()
@@ -628,6 +713,20 @@ class Almacen(private val contexto: Context) {
             if (a.has("columnas")) elegirColumnas(a.getInt("columnas"))
             if (a.has("mostrar_pagina")) elegirMostrarPagina(a.getBoolean("mostrar_pagina"))
             if (a.has("insignia_progreso")) elegirInsigniaProgreso(a.getBoolean("insignia_progreso"))
+            runCatching { Fondo.valueOf(a.optString("fondo_lector")) }.getOrNull()
+                ?.let { elegirFondoLector(it) }
+            runCatching { Orientacion.valueOf(a.optString("orientacion")) }.getOrNull()
+                ?.let { elegirOrientacion(it) }
+            if (a.has("brillo_on")) elegirBrilloPersonalizado(a.getBoolean("brillo_on"))
+            if (a.has("brillo")) elegirBrillo(a.getDouble("brillo").toFloat())
+            if (a.has("grises")) elegirEscalaGrises(a.getBoolean("grises"))
+            if (a.has("invertir")) elegirInvertirColores(a.getBoolean("invertir"))
+            runCatching { Tinte.valueOf(a.optString("tinte")) }.getOrNull()
+                ?.let { elegirTinte(it) }
+            if (a.has("tinte_intensidad")) {
+                elegirIntensidadTinte(a.getDouble("tinte_intensidad").toFloat())
+            }
+            if (a.has("recortar_bordes")) elegirRecortarBordes(a.getBoolean("recortar_bordes"))
         }
 
         val cats = categorias().toMutableList()
@@ -663,6 +762,14 @@ class Almacen(private val contexto: Context) {
         guardarCategorias(cats)
         prefs.edit().putString("pendientes", pend.toString()).apply()
         return ResultadoRestauracion(actualizados, sinArchivo)
+    }
+
+    // Quita los cómics que están en alguna categoría oculta (para Inicio, Buscar y Perfil).
+    fun sinOcultos(comics: List<Comic>): List<Comic> {
+        val ocultas = categorias().filter { it.oculta }.map { it.id }.toSet()
+        if (ocultas.isEmpty()) return comics
+        val asign = asignaciones()
+        return comics.filter { c -> asign[c.id].orEmpty().none { it in ocultas } }
     }
 
     // ---- Historial ----

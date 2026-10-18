@@ -2,12 +2,85 @@ package com.example.lector
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import java.io.File
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import java.util.zip.ZipFile
 
 // Un archivo .cbz es un .zip con imágenes dentro. Aquí lo leemos.
 object Cbz {
     private val extensiones = setOf("jpg", "jpeg", "png", "webp", "gif")
+
+    // ¿Este píxel se distingue del color de fondo?
+    private fun distinto(pixel: Int, fondo: Int): Boolean {
+        val dif = abs(Color.red(pixel) - Color.red(fondo)) +
+            abs(Color.green(pixel) - Color.green(fondo)) +
+            abs(Color.blue(pixel) - Color.blue(fondo))
+        return dif > 60
+    }
+
+    // Quita los márgenes lisos (del color de la esquina) de una página.
+    // Si no hay un margen claro o recortaría demasiado, devuelve la imagen tal cual.
+    fun recortarBordes(b: Bitmap): Bitmap {
+        val w = b.width
+        val h = b.height
+        if (w < 100 || h < 100) return b
+
+        // Si las cuatro esquinas no se parecen, no hay un margen uniforme.
+        val fondo = b.getPixel(0, 0)
+        if (distinto(b.getPixel(w - 1, 0), fondo) ||
+            distinto(b.getPixel(0, h - 1), fondo) ||
+            distinto(b.getPixel(w - 1, h - 1), fondo)
+        ) {
+            return b
+        }
+
+        // Se mira un píxel de cada 4 para ir rápido.
+        fun filaConContenido(y: Int): Boolean {
+            var x = 0
+            while (x < w) {
+                if (distinto(b.getPixel(x, y), fondo)) return true
+                x += 4
+            }
+            return false
+        }
+
+        fun columnaConContenido(x: Int): Boolean {
+            var y = 0
+            while (y < h) {
+                if (distinto(b.getPixel(x, y), fondo)) return true
+                y += 4
+            }
+            return false
+        }
+
+        var arriba = 0
+        while (arriba < h && !filaConContenido(arriba)) arriba++
+        if (arriba >= h) return b // página lisa
+
+        var abajo = h - 1
+        while (abajo > arriba && !filaConContenido(abajo)) abajo--
+        var izquierda = 0
+        while (izquierda < w && !columnaConContenido(izquierda)) izquierda++
+        var derecha = w - 1
+        while (derecha > izquierda && !columnaConContenido(derecha)) derecha--
+
+        // Un pequeño margen de seguridad para no morder el dibujo.
+        val margen = 6
+        val x0 = max(0, izquierda - margen)
+        val y0 = max(0, arriba - margen)
+        val x1 = min(w - 1, derecha + margen)
+        val y1 = min(h - 1, abajo + margen)
+        val ancho = x1 - x0 + 1
+        val alto = y1 - y0 + 1
+
+        // Si quedaría menos del 40 % de la página, mejor no tocarla.
+        if (ancho.toLong() * alto < w.toLong() * h * 4 / 10) return b
+        if (x0 == 0 && y0 == 0 && ancho == w && alto == h) return b
+        return Bitmap.createBitmap(b, x0, y0, ancho, alto)
+    }
 
     // ¿El nombre de archivo parece una imagen que sabemos leer?
     fun esImagen(nombre: String): Boolean =
