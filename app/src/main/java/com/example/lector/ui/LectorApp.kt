@@ -8,6 +8,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -81,7 +82,15 @@ fun Inicio(
     }
 
     Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
-        Crossfade(tab, animationSpec = tween(250), label = "tabs") { t ->
+        AnimatedContent(
+            targetState = tab, label = "tabs",
+            transitionSpec = {
+                ContentTransform(
+                    fadeIn(tween(280)) + scaleIn(tween(280), initialScale = 0.96f),
+                    fadeOut(tween(160)),
+                )
+            }
+        ) { t ->
             when (t) {
                 LectorTab.Home -> HomeScreen(visibles, almacen, onOpen = abrirDetalle, onRead = alAbrir, onAdd = alAnadir)
                 LectorTab.Search -> ExplorarScreen(

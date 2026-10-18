@@ -2,6 +2,10 @@ package com.example.lector.ui
 
 import android.graphics.BitmapFactory
 import android.util.LruCache
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -119,26 +123,28 @@ fun ExplorarScreen(
             }
         }
 
-        // Pestañas con subrayado.
-        Row(Modifier.fillMaxWidth()) {
-            listOf("Fuentes", "Novedades", "Extensiones", "Migrar").forEachIndexed { i, titulo ->
-                val sel = i == sub
-                Column(
-                    Modifier.weight(1f).clickable { sub = i; consulta = ""; buscando = false; reordenar = false },
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    LText(
-                        titulo, LectorType.Body.copy(fontSize = 15.sp), Modifier.padding(vertical = 14.dp),
-                        color = if (sel) acento else LectorColors.Text, maxLines = 1
-                    )
+        // Pestañas en píldora: el indicador se desliza de una a otra.
+        BoxWithConstraints(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                .clip(CircleShape).background(LectorColors.Card).padding(4.dp)
+        ) {
+            val titulos = listOf("Fuentes", "Novedades", "Extensiones", "Migrar")
+            val ancho = maxWidth / titulos.size
+            val x by animateDpAsState(ancho * sub, spring(dampingRatio = 0.75f, stiffness = 400f), label = "tabExplorar")
+            Box(Modifier.offset(x = x).width(ancho).height(40.dp).clip(CircleShape).background(acento.copy(alpha = 0.22f)))
+            Row(Modifier.fillMaxWidth()) {
+                titulos.forEachIndexed { i, titulo ->
+                    val color by animateColorAsState(if (i == sub) acento else LectorColors.Text, label = "tabColor")
                     Box(
-                        Modifier.fillMaxWidth(0.7f).height(3.dp).clip(CircleShape)
-                            .background(if (sel) acento else Color.Transparent)
-                    )
+                        Modifier.weight(1f).height(40.dp).clip(CircleShape)
+                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                                sub = i; consulta = ""; buscando = false; reordenar = false
+                            },
+                        Alignment.Center
+                    ) { LText(titulo, LectorType.Body.copy(fontSize = 14.sp), color = color, maxLines = 1) }
                 }
             }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x22FFFFFF)))
 
         Box(Modifier.weight(1f)) {
             when (sub) {

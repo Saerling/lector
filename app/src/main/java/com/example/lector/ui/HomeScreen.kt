@@ -26,6 +26,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -61,19 +66,22 @@ fun HomeScreen(
     val sinLeer = remember(comics) { comics.filter { it.leido == 0L } }
 
     val list = rememberLazyListState()
+    val altoPx = with(LocalDensity.current) { 520.dp.toPx() }
+    // Cuánto se ha desplazado la cabecera (se lee solo al dibujar, no recompone la pantalla).
+    val scrollPx: () -> Float = { if (list.firstVisibleItemIndex == 0) list.firstVisibleItemScrollOffset.toFloat() else altoPx }
     // El título "Inicio" aparece fijo arriba cuando la cabecera ya salió de pantalla.
     val collapsed by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(state = list, contentPadding = PaddingValues(bottom = 190.dp)) {
-            item { Hero(featured, comics, almacen, onOpen, onRead, onAdd) }
+            item { Hero(featured, comics, almacen, onOpen, onRead, onAdd, scrollPx, altoPx) }
             if (recientes.isNotEmpty()) item {
                 Spacer(Modifier.height(24.dp)); SectionHeader("Leídos recientemente")
                 Spacer(Modifier.height(12.dp)); CoverCarousel(recientes, almacen, onOpen)
             }
             if (enCurso.isNotEmpty()) {
                 item { Spacer(Modifier.height(28.dp)); SectionHeader("En curso"); Spacer(Modifier.height(8.dp)) }
-                items(enCurso, key = { it.id }) { FilaProgreso(it, almacen, onOpen) }
+                itemsIndexed(enCurso, key = { _, c -> c.id }) { i, c -> FilaProgreso(c, almacen, onOpen, Modifier.entrada(i)) }
             }
             if (sinLeer.isNotEmpty()) item {
                 Spacer(Modifier.height(28.dp)); SectionHeader("Sin leer")
@@ -96,8 +104,16 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (Comic) -> Unit, onRead: (Comic) -> Unit, onAdd: () -> Unit) {
-    Box(Modifier.fillMaxWidth().height(520.dp)) {
+private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (Comic) -> Unit, onRead: (Comic) -> Unit, onAdd: () -> Unit, scroll: () -> Float, altoPx: Float) {
+    Box(
+        Modifier.fillMaxWidth().height(520.dp).graphicsLayer {
+            val p = (scroll() / altoPx).coerceIn(0f, 1f)
+            translationY = scroll() * 0.45f          // parallax: la portada sube más despacio
+            alpha = 1f - p * 0.9f                    // se desvanece
+            val r = p * 40f                          // y se desenfoca (Android 12+)
+            renderEffect = if (r > 1f && android.os.Build.VERSION.SDK_INT >= 31) BlurEffect(r, r, TileMode.Decal) else null
+        }
+    ) {
         // Cruce con desenfoque al cambiar de cómic (blur real en Android 12+).
         AnimatedContent(
             targetState = featured.id, label = "hero",
@@ -140,9 +156,9 @@ private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (C
 }
 
 @Composable
-private fun FilaProgreso(c: Comic, almacen: Almacen, onOpen: (Comic) -> Unit) {
+private fun FilaProgreso(c: Comic, almacen: Almacen, onOpen: (Comic) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        Modifier.fillMaxWidth().pressable { onOpen(c) }.padding(horizontal = 24.dp, vertical = 6.dp),
+        modifier.fillMaxWidth().pressable { onOpen(c) }.padding(horizontal = 24.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         ComicCover(c, almacen, Modifier.size(width = 44.dp, height = 60.dp), RoundedCornerShape(10.dp))

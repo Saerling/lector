@@ -9,6 +9,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -305,8 +306,8 @@ private fun NavegarFuente(f: FuenteUI, motor: MotorFuentes, onManga: (MangaFuent
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            items(lista) { m ->
-                Column(Modifier.pressable { onManga(m) }) {
+            itemsIndexed(lista) { i, m ->
+                Column(Modifier.entrada(i % 12).pressable { onManga(m) }) {
                     ImagenRemota(
                         m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)),
                         motor.cabeceras(f)

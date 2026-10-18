@@ -12,6 +12,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -111,8 +113,8 @@ fun CoverCarousel(items: List<Comic>, almacen: Almacen, onClick: (Comic) -> Unit
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         flingBehavior = rememberSnapFlingBehavior(state)
     ) {
-        items(items, key = { it.id }) { c ->
-            Column(Modifier.width(140.dp).pressable { onClick(c) }) {
+        itemsIndexed(items, key = { _, c -> c.id }) { i, c ->
+            Column(Modifier.width(140.dp).entrada(i).pressable { onClick(c) }) {
                 ComicCover(c, almacen, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
                 Spacer(Modifier.height(8.dp))
                 LText(c.titulo, LectorType.Body, maxLines = 1)
@@ -130,27 +132,40 @@ enum class LectorTab(val label: String, val icon: ImageVector) {
     More("Más", Icons.Rounded.MoreVert)
 }
 
-/** Barra flotante en píldora; el indicador de la pestaña activa cambia con resorte. */
+/** Barra flotante en píldora: el indicador se desliza de una pestaña a otra con un rebote suave. */
 @Composable
 fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(30.dp)
-    Row(
+    val tabs = LectorTab.values()
+    BoxWithConstraints(
         modifier.fillMaxWidth().height(60.dp).clip(shape).background(LectorColors.Glass)
-            .border(1.dp, LectorColors.GlassBorder, shape).padding(6.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+            .border(1.dp, LectorColors.GlassBorder, shape).padding(6.dp)
     ) {
-        LectorTab.values().forEach { tab ->
-            val sel = tab == selected
-            val bg by animateColorAsState(
-                if (sel) LectorColors.PillFill else Color.Transparent,
-                spring(stiffness = Spring.StiffnessMediumLow), label = "navBg"
-            )
-            val tint by animateColorAsState(if (sel) LectorColors.Text else LectorColors.Muted, label = "navTint")
-            Box(
-                Modifier.weight(1f).fillMaxHeight().clip(CircleShape).background(bg)
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(tab) },
-                contentAlignment = Alignment.Center
-            ) { Icon(tab.icon, tab.label, tint = tint) }
+        val ancho = maxWidth / tabs.size
+        val x by animateDpAsState(
+            ancho * selected.ordinal,
+            spring(dampingRatio = 0.72f, stiffness = 380f), label = "indicador"
+        )
+        Box(Modifier.offset(x = x).width(ancho).fillMaxHeight().clip(CircleShape).background(LectorColors.PillFill))
+        Row(Modifier.fillMaxSize()) {
+            tabs.forEach { tab ->
+                val sel = tab == selected
+                val tint by animateColorAsState(if (sel) LectorColors.Text else LectorColors.Muted, label = "navTint")
+                val escala by animateFloatAsState(
+                    if (sel) 1.15f else 1f,
+                    spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "navEscala"
+                )
+                Box(
+                    Modifier.weight(1f).fillMaxHeight()
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(tab) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        tab.icon, tab.label, tint = tint,
+                        modifier = Modifier.graphicsLayer { scaleX = escala; scaleY = escala }
+                    )
+                }
+            }
         }
     }
 }

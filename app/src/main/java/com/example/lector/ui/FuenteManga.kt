@@ -12,6 +12,16 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.pager.HorizontalPager
@@ -107,54 +117,40 @@ fun FichaMangaScreen(
         cargando = false
     }
 
-    Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(LectorColors.PillFill), Alignment.Center) {
-                Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text)
-            }
-            Spacer(Modifier.width(14.dp))
-            LText(ficha?.detalle?.titulo ?: manga.titulo, LectorType.Display.copy(fontSize = 22.sp), maxLines = 1)
-        }
+    val lista = rememberLazyListState()
+    val fi = ficha
+    val acento = MaterialTheme.colorScheme.primary
 
-        if (f == null || motor == null) {
-            LText("La fuente no está disponible.", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
-            return@Column
-        }
-
-        val fi = ficha
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 40.dp)) {
-            item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
-                    ImagenRemota(
-                        fi?.detalle?.portadaUrl ?: manga.portadaUrl,
-                        Modifier.width(120.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)),
-                        motor.cabeceras(f),
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        LText(fi?.detalle?.titulo ?: manga.titulo, LectorType.Display.copy(fontSize = 20.sp), maxLines = 4)
-                        Spacer(Modifier.height(6.dp))
-                        fi?.detalle?.autor?.let { LText(it, LectorType.Label, color = LectorColors.Muted, maxLines = 2) }
-                        fi?.detalle?.let { d ->
-                            d.artista?.takeIf { it != d.autor }
-                                ?.let { LText(it, LectorType.Label, color = LectorColors.Muted, maxLines = 2) }
-                        }
-                        fi?.let { LText(estadoTexto(it.detalle.estado), LectorType.Label, color = LectorColors.Muted) }
-                        LText(f.nombre, LectorType.Label, color = LectorColors.Muted, maxLines = 1)
-                    }
+    if (f == null || motor == null) {
+        Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(LectorColors.PillFill), Alignment.Center) {
+                    Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text)
                 }
+            }
+            LText("La fuente no está disponible.", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
+        }
+        return
+    }
+
+    // Cuánto se ha desplazado la cabecera (se lee al dibujar, sin recomponer).
+    val scrollPx: () -> Float = { if (lista.firstVisibleItemIndex == 0) lista.firstVisibleItemScrollOffset.toFloat() else 99999f }
+
+    Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
+        LazyColumn(Modifier.fillMaxSize(), state = lista, contentPadding = PaddingValues(bottom = 130.dp)) {
+            item {
+                val lineas = listOfNotNull(
+                    fi?.detalle?.autor,
+                    fi?.detalle?.let { d -> d.artista?.takeIf { it != d.autor } },
+                    fi?.let { estadoTexto(it.detalle.estado) },
+                    f.nombre,
+                )
+                CabeceraFicha(
+                    fi?.detalle?.portadaUrl ?: manga.portadaUrl, motor.cabeceras(f),
+                    fi?.detalle?.titulo ?: manga.titulo, lineas, acento, scrollPx,
+                )
             }
             if (fi != null) {
-                item {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
-                        if (fi.capitulos.isNotEmpty()) {
-                            // La mayoría de fuentes listan el capítulo más nuevo primero: el primero a leer es el último.
-                            PillButton("Empezar a leer", Icons.Rounded.PlayArrow, {
-                                onLeer(fi.capitulos, fi.capitulos.lastIndex)
-                            })
-                        }
-                    }
-                }
                 fi.detalle.descripcion?.let { d ->
                     item {
                         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
@@ -167,10 +163,10 @@ fun FichaMangaScreen(
                 }
                 if (fi.detalle.generos.isNotEmpty()) {
                     item {
-                        LText(
-                            fi.detalle.generos.joinToString(" · "), LectorType.Label,
-                            Modifier.padding(horizontal = 24.dp, vertical = 8.dp), color = LectorColors.Muted,
-                        )
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) { fi.detalle.generos.forEach { ChipBorde(it, acento) } }
                     }
                 }
                 item {
@@ -182,7 +178,7 @@ fun FichaMangaScreen(
                 itemsIndexed(fi.capitulos) { i, c ->
                     val prog = descargando[c.url]
                     Row(
-                        Modifier.fillMaxWidth().pressable { onLeer(fi.capitulos, i) }
+                        Modifier.fillMaxWidth().entrada(i).pressable { onLeer(fi.capitulos, i) }
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -243,6 +239,51 @@ fun FichaMangaScreen(
                         }
                     }
                 }
+            }
+        }
+
+        BarraSuperior(scrollPx, fi?.detalle?.titulo ?: manga.titulo, onBack)
+
+        if (fi != null && fi.capitulos.isNotEmpty()) {
+            // La mayoría de fuentes listan el capítulo más nuevo primero: el primero a leer es el último.
+            val sig = (fi.capitulos.lastIndex downTo 0).firstOrNull { !ext.esLeido(f.id, fi.capitulos[it].url) } ?: 0
+            val hayLeidos = fi.capitulos.any { ext.esLeido(f.id, it.url) }
+            BotonFlotante(
+                if (hayLeidos) "Reanudar" else "Empezar a leer", acento,
+                { onLeer(fi.capitulos, sig) }, Modifier.align(Alignment.BottomEnd),
+            )
+        }
+    }
+}
+
+/** Cabecera de la ficha: portada difuminada y teñida, parallax y entrada suave. */
+@Composable
+private fun CabeceraFicha(
+    portada: String?, cabeceras: Map<String, String>, titulo: String,
+    lineas: List<String>, acento: Color, scroll: () -> Float,
+) {
+    var entro by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entro = true }
+    val t by animateFloatAsState(if (entro) 1f else 0f, tween(550), label = "entradaFicha")
+    Box(Modifier.fillMaxWidth().height(420.dp)) {
+        ImagenRemota(
+            portada,
+            Modifier.fillMaxSize().graphicsLayer { translationY = scroll() * 0.5f }.blur(32.dp).alpha(0.6f),
+            cabeceras,
+        )
+        Box(Modifier.fillMaxSize().background(acento.copy(alpha = 0.18f)))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color.Black)))
+        Row(
+            Modifier.align(Alignment.BottomStart).padding(24.dp)
+                .graphicsLayer { alpha = t; translationY = (1f - t) * 60f },
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            ImagenRemota(portada, Modifier.width(124.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(20.dp)), cabeceras)
+            Spacer(Modifier.width(18.dp))
+            Column(Modifier.weight(1f)) {
+                LText(titulo, LectorType.Hero, maxLines = 3)
+                Spacer(Modifier.height(6.dp))
+                lineas.forEach { LText(it, LectorType.Body, color = LectorColors.Muted, maxLines = 2) }
             }
         }
     }
@@ -408,11 +449,13 @@ fun LeerOnlineScreen(
         // ── Barra superior ──
         AnimatedVisibility(
             visible = barras, modifier = Modifier.align(Alignment.TopCenter),
-            enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it },
+            enter = fadeIn(tween(220)) + slideInVertically(tween(300)) { -it }, exit = fadeOut(tween(160)) + slideOutVertically(tween(240)) { -it },
         ) {
             Row(
-                Modifier.fillMaxWidth().background(LectorColors.Glass).statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(28.dp)).background(LectorColors.Glass)
+                    .border(1.dp, LectorColors.GlassBorder, RoundedCornerShape(28.dp))
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(44.dp).pressable(onBack).clip(CircleShape), Alignment.Center) {
@@ -432,7 +475,7 @@ fun LeerOnlineScreen(
         // ── Barra inferior: avance + acciones ──
         AnimatedVisibility(
             visible = barras, modifier = Modifier.align(Alignment.BottomCenter),
-            enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it },
+            enter = fadeIn(tween(220)) + slideInVertically(tween(300)) { it }, exit = fadeOut(tween(160)) + slideOutVertically(tween(240)) { it },
         ) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
                 Row(
@@ -452,7 +495,12 @@ fun LeerOnlineScreen(
                                 value = actual.toFloat(),
                                 onValueChange = { actual = it.roundToInt(); irA(actual) },
                                 valueRange = 0f..(n - 1).toFloat(),
-                                steps = if (n in 3..80) n - 2 else 0,
+                                steps = 0,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = LectorColors.Text,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                                    inactiveTrackColor = LectorColors.PillFill,
+                                ),
                                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                             )
                         } else Spacer(Modifier.weight(1f))
@@ -462,7 +510,9 @@ fun LeerOnlineScreen(
                     BotonCapitulo(Icons.Rounded.KeyboardArrowRight, "Capítulo siguiente", haySiguiente) { indice -= 1 }
                 }
                 Row(
-                    Modifier.fillMaxWidth().background(LectorColors.Glass).padding(vertical = 8.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(28.dp)).background(LectorColors.Glass)
+                        .border(1.dp, LectorColors.GlassBorder, RoundedCornerShape(28.dp)).padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
                     AccionLector(Icons.Rounded.List, "Capítulos") { dialogoCaps = true }

@@ -83,22 +83,13 @@ fun DetalleScreen(
         else -> "Sin leer"
     }
 
+    val scroll = rememberScrollState()
     Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 130.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 130.dp)) {
             Box(Modifier.fillMaxWidth().height(400.dp)) {
-                ComicCover(comic, almacen, Modifier.fillMaxSize().blur(32.dp).alpha(0.6f), RoundedCornerShape(0.dp))
+                ComicCover(comic, almacen, Modifier.fillMaxSize().graphicsLayer { translationY = scroll.value * 0.5f }.blur(32.dp).alpha(0.6f), RoundedCornerShape(0.dp))
                 Box(Modifier.fillMaxSize().background(acento.copy(alpha = 0.18f)))
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color.Black)))
-
-                Row(
-                    Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Box(
-                        Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(LectorColors.PillFill),
-                        Alignment.Center
-                    ) { Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text) }
-                }
 
                 Row(
                     Modifier.align(Alignment.BottomStart).padding(24.dp)
@@ -141,6 +132,8 @@ fun DetalleScreen(
                 ) { propias.forEach { ChipBorde(it.nombre, acento) } }
             }
         }
+
+        BarraSuperior({ scroll.value.toFloat() }, comic.titulo, onBack)
 
         // Botón "Reanudar" flotante, del color de la portada.
         Row(
