@@ -285,6 +285,7 @@ fun Inicio(
                             ext, fuenteId ?: 0L, mangaSel?.titulo.orEmpty(), capsLectura, capIndice,
                             almacen = almacen, manga = mangaSel, paginaInicial = paginaLectura,
                         ) { ruta = Ruta.Ficha }
+                        else -> Unit
                         }
                     }
                 }
