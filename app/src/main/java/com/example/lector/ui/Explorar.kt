@@ -194,6 +194,7 @@ fun ExplorarScreen(
                 }
             },
             confirmButton = { TextButton(onClick = { dialogoIdiomas = false }) { Text("Listo") } },
+            dismissButton = { TextButton(onClick = { ext.activarTodosIdiomas() }) { Text("Todos") } },
         )
     }
 }

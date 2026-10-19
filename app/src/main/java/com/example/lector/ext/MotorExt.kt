@@ -190,6 +190,10 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         }
     }
 
+    override fun urlManga(fuente: FuenteUI, manga: MangaFuente): String? = runCatching {
+        (fuenteReal(fuente) as? HttpSource)?.getMangaUrl(sManga(manga))?.takeIf { it.startsWith("http") }
+    }.getOrNull()
+
     override fun cabeceras(fuente: FuenteUI): Map<String, String> = runCatching {
         val h = (fuenteReal(fuente) as? HttpSource)?.headers ?: return emptyMap()
         h.names().associateWith { h[it].orEmpty() }

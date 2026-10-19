@@ -89,7 +89,7 @@ fun BarraSuperior(
         Box(
             Modifier.matchParentSize()
                 .graphicsLayer { alpha = (scroll() / 380f).coerceIn(0f, 1f) }
-                .background(Brush.verticalGradient(listOf(fondo, fondo.copy(alpha = 0.94f))))
+                .background(fondo)
         )
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),

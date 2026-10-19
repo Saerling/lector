@@ -52,6 +52,9 @@ interface MotorFuentes {
         fuente: FuenteUI, capitulo: CapituloFuente, destino: java.io.File, progreso: (hechas: Int, total: Int) -> Unit,
     )
 
+    /** Dirección web de un manga en el sitio de la fuente (null si no se sabe). */
+    fun urlManga(fuente: FuenteUI, manga: MangaFuente): String? = null
+
     /** Cabeceras HTTP (Referer, User-Agent...) para cargar las portadas de esta fuente. */
     fun cabeceras(fuente: FuenteUI): Map<String, String> = emptyMap()
 }

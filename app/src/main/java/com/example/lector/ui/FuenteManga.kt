@@ -56,6 +56,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -189,6 +190,7 @@ fun FichaMangaScreen(
     var cargando by remember { mutableStateOf(true) }
     var descExpandida by remember { mutableStateOf(false) }
     var recarga by remember { mutableStateOf(0) }
+    var webUrl by remember { mutableStateOf<String?>(null) }
 
     // Biblioteca y categorías
     var enBiblioteca by remember { mutableStateOf(almacen.comicEnLinea(fuenteId, manga.url)) }
@@ -294,10 +296,11 @@ fun FichaMangaScreen(
     val sig = fi?.let { x -> (x.capitulos.lastIndex downTo 0).firstOrNull { !ext.esLeido(f.id, x.capitulos[it].url) } ?: 0 } ?: 0
     val paginaSig = fi?.capitulos?.getOrNull(sig)?.let { ext.paginaDe(f.id, it.url) } ?: 0
     val hayLeidos = fi?.capitulos?.any { ext.esLeido(f.id, it.url) } == true
+    // WebView dentro de la app (como Komikku): la dirección la da la propia fuente; si no, se arma con su baseUrl.
     val abrirNavegador: () -> Unit = {
-        val u = urlManga(f, manga)
+        val u = motor.urlManga(f, manga) ?: urlManga(f, manga)
         if (u == null) Toast.makeText(ctx, "Esta fuente no da la dirección web", Toast.LENGTH_SHORT).show()
-        else runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        else webUrl = u
     }
 
     Box(Modifier.fillMaxSize().drawBehind { drawRect(fondoAnim) }) {
@@ -515,6 +518,13 @@ fun FichaMangaScreen(
             },
         )
 
+        // WebView del sitio, encima de la ficha.
+        webUrl?.let { u ->
+            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
+                WebViewScreen(u, tituloFicha) { webUrl = null }
+            }
+        }
+
         // Sinopsis completa.
         if (descExpandida) {
             AlertDialog(
@@ -626,7 +636,8 @@ private fun CabeceraFicha(
     LaunchedEffect(Unit) { entro = true }
     val t by animateFloatAsState(if (entro) 1f else 0f, tween(600), label = "entradaFicha")
     val aparece by animateFloatAsState(if (portadaLista) 1f else 0f, tween(700), label = "portadaFicha")
-    Box(Modifier.fillMaxWidth().height(560.dp)) {
+    // clipToBounds: con el parallax la portada se corría hacia abajo y asomaba por debajo de la cabecera.
+    Box(Modifier.fillMaxWidth().height(560.dp).clipToBounds()) {
         ImagenRemota(
             portada,
             Modifier.fillMaxSize().graphicsLayer {

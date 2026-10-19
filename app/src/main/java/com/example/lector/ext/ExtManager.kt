@@ -62,6 +62,20 @@ class ExtManager private constructor(private val app: Context) {
         prefs.getStringSet("idiomas", null)?.toSet()
             ?: setOf("all", "es", Locale.getDefault().language)
     ); private set
+    // Mientras el usuario no toque la lista de idiomas, salen TODOS (los de todas las extensiones del listado).
+    private var idiomasPersonalizados = prefs.getBoolean("idiomas_pers", false)
+    private fun sincronizarIdiomas() {
+        if (idiomasPersonalizados) return
+        idiomas = (disponibles.map { it.lang } + instaladasRaw.map { it.lang } + "all").filter { it.isNotBlank() }.toSet()
+    }
+
+    /** Vuelve a activar todos los idiomas. */
+    fun activarTodosIdiomas() {
+        idiomasPersonalizados = false
+        prefs.edit().putBoolean("idiomas_pers", false).apply()
+        sincronizarIdiomas()
+    }
+
     var fijadas by mutableStateOf(prefs.getStringSet("fijadas", emptySet())?.toSet() ?: emptySet()); private set
     var recientes by mutableStateOf(
         (prefs.getString("recientes", "") ?: "").split(',').filter { it.isNotBlank() }
@@ -167,7 +181,7 @@ class ExtManager private constructor(private val app: Context) {
     // ---- Listados (repositorios) ----
     private fun reposPorDefecto() = listOf(
         RepoExt(
-            "https://github.com/keiyoushi/extensions/raw/repo/index.pb", "Keiyoushi", true,
+            "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json", "Keiyoushi", true,
             "https://github.com/keiyoushi/extensions",
         ),
         RepoExt(
@@ -181,10 +195,17 @@ class ExtManager private constructor(private val app: Context) {
         if (s == null) return reposPorDefecto().also { guardarRepos(it) }
         return runCatching {
             val a = JSONArray(s)
-            (0 until a.length()).map {
+            val lista = (0 until a.length()).map {
                 val o = a.getJSONObject(it)
-                RepoExt(o.getString("url"), o.getString("nombre"), o.optBoolean("activo", true), o.optString("web").ifBlank { null })
+                // El index.pb de Keiyoushi no se lee bien: se usa su index.min.json (mismo contenido, JSON estándar).
+                val url = o.getString("url").let { u ->
+                    if (u.contains("keiyoushi/extensions") && u.endsWith("/index.pb"))
+                        "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json" else u
+                }
+                RepoExt(url, o.getString("nombre"), o.optBoolean("activo", true), o.optString("web").ifBlank { null })
             }
+            guardarRepos(lista)
+            lista
         }.getOrDefault(emptyList())
     }
 
@@ -259,8 +280,17 @@ class ExtManager private constructor(private val app: Context) {
             val nuevas = ArrayList<ExtDisponible>()
             val errs = ArrayList<String>()
             repos.filter { it.activo }.forEach { r ->
-                runCatching { nuevas += ExtRepos.leerIndice(ExtRepos.descargar(r.url), r.url, r) }
-                    .onFailure { errs += "${r.nombre}: ${it.message ?: it.javaClass.simpleName}" }
+                // Si el índice falla o viene vacío, se prueban los otros nombres habituales del mismo listado.
+                val urls = listOf(r.url) + ExtRepos.candidatos(ExtRepos.base(r.url)).filter { it != r.url }
+                var primerError: String? = null
+                var leido = false
+                for (u in urls) {
+                    val res = runCatching { ExtRepos.leerIndice(ExtRepos.descargar(u), u, r) }
+                    val lista = res.getOrNull()
+                    if (!lista.isNullOrEmpty()) { nuevas += lista; leido = true; break }
+                    if (primerError == null) primerError = res.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName } ?: "listado vacío"
+                }
+                if (!leido) errs += "${r.nombre}: ${primerError ?: "sin respuesta"}"
             }
             // Si una extensión sale en varios listados, gana la versión más alta.
             val unicas = nuevas.groupBy { it.pkg }.values.map { g -> g.maxByOrNull { it.versionCode }!! }
@@ -268,6 +298,7 @@ class ExtManager private constructor(private val app: Context) {
                 if (unicas.isNotEmpty() || errs.isEmpty()) {
                     disponibles = unicas
                     guardarCache(unicas)
+                    sincronizarIdiomas()
                 }
                 errores = errs
                 cargando = false
@@ -313,6 +344,7 @@ class ExtManager private constructor(private val app: Context) {
                     o.optString("repo"), o.optString("sigla"),
                 )
             }
+            sincronizarIdiomas()
         }
     }
 
@@ -344,6 +376,7 @@ class ExtManager private constructor(private val app: Context) {
                 )
             }.getOrNull()
         }.sortedBy { it.nombre.lowercase() }
+        sincronizarIdiomas()
     }
 
     @Suppress("DEPRECATION")
@@ -430,6 +463,10 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     fun alternarIdioma(lang: String) {
+        if (!idiomasPersonalizados) {
+            idiomasPersonalizados = true
+            prefs.edit().putBoolean("idiomas_pers", true).apply()
+        }
         idiomas = if (lang in idiomas) idiomas - lang else idiomas + lang
         prefs.edit().putStringSet("idiomas", idiomas).apply()
     }
