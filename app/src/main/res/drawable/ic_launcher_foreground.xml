@@ -5,31 +5,89 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Disco crema -->
+    <!-- Disco de acreción inclinado (queda detrás del horizonte) -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="-18">
+        <path
+            android:pathData="M23,54a31,8 0 1 0 62,0a31,8 0 1 0 -62,0z"
+            android:strokeWidth="2.6">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="23"
+                    android:startY="54"
+                    android:endX="85"
+                    android:endY="54"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#FF4DA3FF" />
+                    <item android:offset="0.5" android:color="#FFC9A8FF" />
+                    <item android:offset="1.0" android:color="#FF7B3FF2" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+    <!-- Horizonte de sucesos -->
     <path
-        android:fillColor="#FFFFF3E6"
-        android:pathData="M27,54a27,27 0 1 0 54,0a27,27 0 1 0 -54,0z" />
-    <!-- Anillo -->
+        android:fillColor="#FF000000"
+        android:pathData="M35,54a19,19 0 1 0 38,0a19,19 0 1 0 -38,0z" />
+    <!-- Anillo de fotones -->
     <path
-        android:pathData="M26.5,54a27.5,27.5 0 1 0 55,0a27.5,27.5 0 1 0 -55,0z"
-        android:strokeWidth="5">
+        android:pathData="M33.5,54a20.5,20.5 0 1 0 41,0a20.5,20.5 0 1 0 -41,0z"
+        android:strokeWidth="2.4">
         <aapt:attr name="android:strokeColor">
             <gradient
-                android:startX="30"
-                android:startY="26"
-                android:endX="78"
-                android:endY="82"
+                android:startX="34"
+                android:startY="34"
+                android:endX="74"
+                android:endY="74"
                 android:type="linear">
-                <item android:offset="0.0" android:color="#FFFF8A3D" />
-                <item android:offset="1.0" android:color="#FFFA233B" />
+                <item android:offset="0.0" android:color="#FF8FD0FF" />
+                <item android:offset="0.5" android:color="#FFC9A8FF" />
+                <item android:offset="1.0" android:color="#FF8A5CFF" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- Kana し (shiori) -->
+    <!-- Lente gravitacional: luz del disco curvada sobre y bajo el horizonte -->
     <path
-        android:pathData="M43,36L43,62C43,73 53,77 60,71C63,68 65,64 65,60"
-        android:strokeColor="#FFFA233B"
-        android:strokeWidth="7.5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:pathData="M32.35,41.5A25,25 0 0 1 75.65,41.5"
+        android:strokeColor="#FFB9C8FF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M32.35,66.5A25,25 0 0 0 75.65,66.5"
+        android:strokeColor="#B08A5CFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round" />
+    <!-- Kana お (segunda sílaba de shiori) -->
+    <group
+        android:pivotX="0"
+        android:pivotY="0"
+        android:scaleX="0.56"
+        android:scaleY="0.56"
+        android:translateX="42.5"
+        android:translateY="41.5">
+        <path
+            android:pathData="M6,16C12,15.5 19,15 26,14"
+            android:strokeColor="#FFA9DCFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M17,4L17,30C17,43 4,43 4,33C4,24 14,25 27,31"
+            android:strokeColor="#FFA9DCFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M28,10C35,12 38,18 36,28C34,38 38,43 43,39"
+            android:strokeColor="#FFA9DCFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M33,2L37,6"
+            android:strokeColor="#FFA9DCFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round" />
+    </group>
 </vector>
