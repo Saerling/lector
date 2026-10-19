@@ -1,4 +1,4 @@
-# Lector
+# Shiori
 
 Lector de cómics y manga (.cbz) hecho con Kotlin y Jetpack Compose.
 

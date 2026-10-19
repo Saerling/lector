@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.92"
+        android:scaleY="0.92"
+        android:pivotX="54"
+        android:pivotY="54">
+        <!-- Canto de las páginas (da profundidad) -->
+        <path
+            android:fillColor="#66FFFFFF"
+            android:pathData="M52.5,48C45,44 36,43.5 28,46.5L28,75C36,72.5 45,72.5 52.5,76.5z" />
+        <path
+            android:fillColor="#66FFFFFF"
+            android:pathData="M55.5,48C63,44 72,43.5 80,46.5L80,75C72,72.5 63,72.5 55.5,76.5z" />
+        <!-- Libro abierto -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M52.5,45C45,41 36,40.5 28,43.5L28,72C36,69.5 45,69.5 52.5,73.5z" />
+        <path
+            android:fillColor="#FFF4EEFF"
+            android:pathData="M55.5,45C63,41 72,40.5 80,43.5L80,72C72,69.5 63,69.5 55.5,73.5z" />
+        <!-- Marcapáginas (shiori) -->
+        <path android:pathData="M62,30h9v52l-4.5,-5.5l-4.5,5.5z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="62"
+                    android:startY="30"
+                    android:endX="71"
+                    android:endY="82"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#FFFF8A3D" />
+                    <item android:offset="1.0" android:color="#FFFA233B" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>
