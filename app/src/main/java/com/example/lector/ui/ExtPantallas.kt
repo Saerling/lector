@@ -65,11 +65,11 @@ fun ListadosExtScreen(ext: ExtManager, onBack: () -> Unit) {
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
                         .alpha(if (r.activo) 1f else 0.5f)
-                        .clip(RoundedCornerShape(24.dp)).background(LectorColors.Card).padding(16.dp)
+                        .clip(SuaveShape(24.dp)).background(LectorColors.Card).padding(16.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
-                            Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(acento.copy(alpha = 0.2f)),
+                            Modifier.size(56.dp).clip(SuaveShape(14.dp)).background(acento.copy(alpha = 0.2f)),
                             Alignment.Center
                         ) { LText(r.sigla, LectorType.Section, color = acento) }
                         Spacer(Modifier.width(16.dp))
@@ -83,7 +83,7 @@ fun ListadosExtScreen(ext: ExtManager, onBack: () -> Unit) {
                         AccionTexto("Copiar") {
                             val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             cm.setPrimaryClip(ClipData.newPlainText("Listado", r.url))
-                            Toast.makeText(ctx, "Dirección copiada", Toast.LENGTH_SHORT).show()
+                            Avisos.mostrar("Dirección copiada")
                         }
                         AccionTexto(if (r.activo) "Ocultar" else "Mostrar") { ext.alternarRepo(r.url) }
                         IconButton(onClick = { borrar = r }) { Icon(Icons.Rounded.Delete, "Borrar", tint = LectorColors.Text) }
@@ -94,7 +94,7 @@ fun ListadosExtScreen(ext: ExtManager, onBack: () -> Unit) {
         }
         Row(
             Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp)
-                .pressable { anadir = true }.clip(RoundedCornerShape(20.dp))
+                .pressable { anadir = true }.clip(SuaveShape(20.dp))
                 .background(acento.copy(alpha = 0.28f)).padding(horizontal = 22.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -329,9 +329,9 @@ private fun NavegarFuente(f: FuenteUI, motor: MotorFuentes, onManga: (MangaFuent
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             itemsIndexed(lista) { i, m ->
-                Column(Modifier.entrada(i % 12).pressable { onManga(m) }) {
+                Column(Modifier.entrada(i % 12).press3D().pressable { onManga(m) }) {
                     ImagenRemota(
-                        m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)),
+                        m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(14.dp)),
                         motor.cabeceras(f)
                     )
                     Spacer(Modifier.height(6.dp))

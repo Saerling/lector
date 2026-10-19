@@ -124,7 +124,7 @@ private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (C
                 if (it == EnterExitState.Visible) 0.dp else 28.dp
             }
             Box(Modifier.fillMaxSize().blur(blur)) {
-                ComicCover(s, almacen, Modifier.fillMaxSize(), RoundedCornerShape(0.dp))
+                ComicCover(s, almacen, Modifier.fillMaxSize(), SuaveShape(0.dp))
                 Box(
                     Modifier.fillMaxSize().background(
                         Brush.verticalGradient(0.40f to Color.Transparent, 1f to Color.Black)
@@ -144,7 +144,7 @@ private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (C
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(LectorColors.PillFill), Alignment.Center) {
+            Box(Modifier.size(36.dp).clip(SuaveShape(10.dp)).background(LectorColors.PillFill), Alignment.Center) {
                 LText("L", LectorType.Section)
             }
             Box(
@@ -158,10 +158,10 @@ private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (C
 @Composable
 private fun FilaProgreso(c: Comic, almacen: Almacen, onOpen: (Comic) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier.fillMaxWidth().pressable { onOpen(c) }.padding(horizontal = 24.dp, vertical = 6.dp),
+        modifier.fillMaxWidth().resaltable { onOpen(c) }.padding(horizontal = 24.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ComicCover(c, almacen, Modifier.size(width = 44.dp, height = 60.dp), RoundedCornerShape(10.dp))
+        ComicCover(c, almacen, Modifier.size(width = 44.dp, height = 60.dp), SuaveShape(10.dp))
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             LText(c.titulo, LectorType.Body, maxLines = 1)

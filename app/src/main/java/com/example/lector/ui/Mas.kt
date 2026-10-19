@@ -49,7 +49,7 @@ fun MasScreen(onRuta: (Ruta) -> Unit, onAdd: () -> Unit, onAddFolder: () -> Unit
     ) {
         Box(Modifier.fillMaxWidth().padding(vertical = 28.dp), Alignment.Center) {
             Box(
-                Modifier.size(88.dp).clip(RoundedCornerShape(28.dp))
+                Modifier.size(88.dp).clip(SuaveShape(28.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
                 Alignment.Center
             ) { LText("L", LectorType.Display.copy(fontSize = 44.sp), color = MaterialTheme.colorScheme.primary) }

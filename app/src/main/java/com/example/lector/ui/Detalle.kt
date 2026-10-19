@@ -1,6 +1,12 @@
 package com.example.lector.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -87,7 +93,7 @@ fun DetalleScreen(
     Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
         Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 130.dp)) {
             Box(Modifier.fillMaxWidth().height(400.dp)) {
-                ComicCover(comic, almacen, Modifier.fillMaxSize().graphicsLayer { translationY = scroll.value * 0.5f }.blur(32.dp).alpha(0.6f), RoundedCornerShape(0.dp))
+                ComicCover(comic, almacen, Modifier.fillMaxSize().graphicsLayer { translationY = scroll.value * 0.5f }.blur(32.dp).alpha(0.6f), SuaveShape(0.dp))
                 Box(Modifier.fillMaxSize().background(acento.copy(alpha = 0.18f)))
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color.Black)))
 
@@ -96,7 +102,7 @@ fun DetalleScreen(
                         .graphicsLayer { alpha = t; translationY = (1f - t) * 60f },
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    ComicCover(comic, almacen, Modifier.width(124.dp).aspectRatio(2f / 3f), RoundedCornerShape(20.dp))
+                    ComicCover(comic, almacen, Modifier.width(124.dp).aspectRatio(2f / 3f), SuaveShape(20.dp))
                     Spacer(Modifier.width(18.dp))
                     Column(Modifier.weight(1f)) {
                         LText(comic.titulo, LectorType.Hero, maxLines = 3)
@@ -119,7 +125,7 @@ fun DetalleScreen(
             Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LText(comic.textoPagina(), LectorType.Section, Modifier.weight(1f))
-                    LText("$porcentaje%", LectorType.Body, color = acento)
+                    Odometro("$porcentaje%", LectorType.Body, color = acento)
                 }
                 Spacer(Modifier.height(10.dp))
                 ProgressLine(comic.progresoLectura())
@@ -136,15 +142,39 @@ fun DetalleScreen(
         BarraSuperior({ scroll.value.toFloat() }, comic.titulo, onBack)
 
         // Botón "Reanudar" flotante, del color de la portada.
+        // Al bajar se encoge a solo el icono; al subir vuelve a enseñar el texto (como el botón de musicfy).
+        var extendido by remember { mutableStateOf(true) }
+        LaunchedEffect(scroll) {
+            var ancla = 0
+            snapshotFlow { scroll.value }.collect { v ->
+                when {
+                    v < 120 -> { extendido = true; ancla = v }
+                    v > ancla + 24 -> { extendido = false; ancla = v }
+                    v < ancla - 24 -> { extendido = true; ancla = v }
+                }
+            }
+        }
+        val relleno by animateDpAsState(if (extendido) 26.dp else 16.dp, tween(300, easing = EnfasisEasing), label = "rellenoReanudar")
         Row(
             Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(24.dp)
-                .pressable(onRead).clip(RoundedCornerShape(22.dp)).background(acento)
-                .padding(horizontal = 26.dp, vertical = 16.dp),
+                .pressable(onRead).clip(SuaveShape(22.dp)).background(acento)
+                .padding(horizontal = relleno, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Rounded.PlayArrow, null, tint = textoSobre(acento), modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(10.dp))
-            LText(if (comic.enCurso()) "Reanudar" else "Leer", LectorType.Section.copy(fontSize = 18.sp), color = textoSobre(acento))
+            AnimatedVisibility(
+                visible = extendido,
+                enter = expandHorizontally(tween(300, easing = EnfasisEasing)) + fadeIn(tween(240)),
+                exit = shrinkHorizontally(tween(260, easing = EnfasisEasing)) + fadeOut(tween(160)),
+            ) {
+                Row {
+                    Spacer(Modifier.width(10.dp))
+                    LText(
+                        if (comic.enCurso()) "Reanudar" else "Leer", LectorType.Section.copy(fontSize = 18.sp),
+                        color = textoSobre(acento), maxLines = 1,
+                    )
+                }
+            }
         }
     }
 

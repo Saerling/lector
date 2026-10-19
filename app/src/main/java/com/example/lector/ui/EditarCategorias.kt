@@ -94,10 +94,10 @@ fun EditarCategoriasScreen(almacen: Almacen, onBack: () -> Unit) {
                                 .fillMaxWidth().height(AltoFila)
                                 .zIndex(if (moviendo) 1f else 0f)
                                 .offset { IntOffset(0, if (moviendo) desplazamiento.roundToInt() else 0) }
-                                .shadow(if (moviendo) 10.dp else 0.dp, RoundedCornerShape(20.dp))
-                                .clip(RoundedCornerShape(20.dp))
+                                .shadow(if (moviendo) 10.dp else 0.dp, SuaveShape(20.dp))
+                                .clip(SuaveShape(20.dp))
                                 .background(if (moviendo) LectorColors.CardHigh else LectorColors.Card)
-                                .border(1.dp, LectorColors.GlassBorder, RoundedCornerShape(20.dp))
+                                .border(1.dp, LectorColors.GlassBorderBrush, SuaveShape(20.dp))
                                 .padding(start = 6.dp, end = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -150,7 +150,7 @@ fun EditarCategoriasScreen(almacen: Almacen, onBack: () -> Unit) {
         // Botón "Añadir" (abajo a la derecha).
         Row(
             Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .clip(SuaveShape(20.dp))
                 .background(MaterialTheme.colorScheme.primary)
                 .pressable { nueva = true }
                 .padding(horizontal = 22.dp, vertical = 16.dp),
@@ -218,7 +218,7 @@ fun DialogoAsignarCategorias(
 ) {
     var sel by remember { mutableStateOf(seleccionInicial) }
     Dialog(onDismissRequest = alCancelar) {
-        Surface(shape = RoundedCornerShape(28.dp), color = LectorColors.CardHigh) {
+        Surface(shape = SuaveShape(28.dp), color = LectorColors.CardHigh) {
             Column(Modifier.padding(top = 24.dp, bottom = 12.dp)) {
                 LText("Asignar categorías", LectorType.Display.copy(fontSize = 24.sp), Modifier.padding(horizontal = 24.dp))
                 Spacer(Modifier.height(12.dp))

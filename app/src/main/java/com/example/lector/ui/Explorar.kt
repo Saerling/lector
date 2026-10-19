@@ -34,6 +34,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,7 +108,7 @@ fun ExplorarScreen(
                 }
             }
             if (sub == 0 || sub == 2) {
-                val forma = RoundedCornerShape(8.dp)
+                val forma = SuaveShape(8.dp)
                 val color = if (ext.mostrarNsfw) acento else LectorColors.Muted
                 Box(
                     Modifier.padding(horizontal = 8.dp).size(30.dp).pressable { ext.alternarNsfw() }
@@ -319,13 +322,13 @@ private fun NovedadesFuente(
                 LText(fallo!!, LectorType.Label, Modifier.weight(1f), color = Rojo, maxLines = 2)
                 IconButton(onClick = { intento++ }) { Icon(Icons.Rounded.Refresh, "Reintentar", tint = LectorColors.Text) }
             }
-            lst == null -> Box(Modifier.fillMaxWidth().height(120.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp)) }
+            lst == null -> BonesPortadas()
             else -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(lst) { m ->
-                    Column(Modifier.width(124.dp).pressable { onManga(f, m) }) {
+                    Column(Modifier.width(124.dp).press3D().pressable { onManga(f, m) }) {
                         ImagenRemota(
                             m.portadaUrl,
-                            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(12.dp)),
+                            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)),
                             motor.cabeceras(f)
                         )
                         Spacer(Modifier.height(6.dp))
@@ -357,7 +360,7 @@ private fun OrdenarNovedades(ext: ExtManager) {
                     Modifier.fillMaxWidth().height(72.dp)
                         .zIndex(if (arrastrando == id) 1f else 0f)
                         .offset { IntOffset(0, if (arrastrando == id) desplaz.roundToInt() else 0) }
-                        .clip(RoundedCornerShape(20.dp)).background(LectorColors.CardHigh),
+                        .clip(SuaveShape(20.dp)).background(LectorColors.CardHigh),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
@@ -621,7 +624,7 @@ fun IconoExt(pkg: String, url: String?, modifier: Modifier = Modifier) {
     val local = remember(pkg) {
         runCatching { ctx.packageManager.getApplicationIcon(pkg).toBitmap(128, 128).asImageBitmap() }.getOrNull()
     }
-    val forma = RoundedCornerShape(12.dp)
+    val forma = SuaveShape(12.dp)
     if (local != null) Image(local, null, modifier.clip(forma), contentScale = ContentScale.Crop)
     else ImagenRemota(url, modifier.clip(forma))
 }
@@ -664,8 +667,13 @@ fun ImagenRemota(
             if (cargada != null) onCargada?.invoke(cargada)
         }
     }
+    // La portada aparece con un fundido cuando termina de cargar, en vez de saltar de golpe.
+    val opacidad by animateFloatAsState(if (img != null) 1f else 0f, tween(450), label = "portadaFundido")
     Box(modifier.background(LectorColors.CardHigh)) {
         val i = img
-        if (i != null) Image(bitmap = i, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        if (i != null) Image(
+            bitmap = i, contentDescription = null, contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().graphicsLayer { alpha = opacidad },
+        )
     }
 }

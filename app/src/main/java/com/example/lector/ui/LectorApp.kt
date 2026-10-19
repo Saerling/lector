@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -183,8 +184,11 @@ fun Inicio(
             targetState = capa, label = "capa",
             transitionSpec = {
                 ContentTransform(
-                    slideInHorizontally(tween(320)) { it / 4 } + fadeIn(tween(320)),
-                    slideOutHorizontally(tween(260)) { -it / 5 } + fadeOut(tween(220)),
+                    slideInHorizontally(tween(420, easing = EnfasisEasing)) { it / 6 } +
+                        scaleIn(tween(420, easing = EnfasisEasing), initialScale = 0.95f) +
+                        fadeIn(tween(340, easing = EnfasisEasing)),
+                    slideOutHorizontally(tween(300, easing = EnfasisEasing)) { -it / 6 } +
+                        scaleOut(tween(300, easing = EnfasisEasing), targetScale = 0.96f) + fadeOut(tween(200)),
                 )
             }
         ) { clave ->
@@ -257,7 +261,7 @@ fun Inicio(
                         MiniReaderGenerico(
                             e.titulo, e.capNombre,
                             onClick = { abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, null) },
-                        ) { m -> ImagenRemota(e.portadaUrl, m.clip(RoundedCornerShape(12.dp)), cabeceras) }
+                        ) { m -> ImagenRemota(e.portadaUrl, m.clip(SuaveShape(12.dp)), cabeceras) }
                         Spacer(Modifier.height(8.dp))
                     } else if (ultimo != null) {
                         MiniReader(ultimo, almacen, onClick = { abrirDetalle(ultimo) })
@@ -267,5 +271,8 @@ fun Inicio(
                 FloatingNavBar(tab, onSelect = onTab)
             }
         }
+
+        // Avisos (en lugar de Toast): píldora que cae desde arriba.
+        AvisosHost(Modifier.align(Alignment.TopCenter))
     }
 }

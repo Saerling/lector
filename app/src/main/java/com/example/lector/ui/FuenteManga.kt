@@ -133,11 +133,11 @@ object GestorDescargas {
             try {
                 motor.descargarCbz(f, c, archivo) { h, t -> if (t > 0) progreso[clave] = h.toFloat() / t }
                 withContext(Dispatchers.IO) { almacen.guardarDescarga(archivo, f.id, c.url) }
-                Toast.makeText(app, "Capítulo descargado", Toast.LENGTH_SHORT).show()
+                Avisos.mostrar("Capítulo descargado")
             } catch (e: CancellationException) {
                 throw e // el aviso de "cancelada" lo da cancelar()
             } catch (e: Exception) {
-                Toast.makeText(app, "No se pudo descargar: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
+                Avisos.mostrar("No se pudo descargar: ${e.message ?: "error desconocido"}")
             } finally {
                 archivo.delete()
                 // Solo limpia si nadie ha cancelado y reiniciado mientras tanto.
@@ -155,7 +155,7 @@ object GestorDescargas {
         val t = trabajos.remove(clave) ?: return
         progreso.remove(clave) // el botón vuelve a "descargar" al instante
         t.cancel()
-        Toast.makeText(ctx.applicationContext, "Descarga cancelada", Toast.LENGTH_SHORT).show()
+        Avisos.mostrar("Descarga cancelada")
     }
 }
 
@@ -249,7 +249,7 @@ fun FichaMangaScreen(
             almacen.quitarEnLinea(f.id, manga.url)
             enBiblioteca = null
             alRecargar()
-            Toast.makeText(ctx, "Quitado de la biblioteca", Toast.LENGTH_SHORT).show()
+            Avisos.mostrar("Quitado de la biblioteca")
             return
         }
         guardando = true
@@ -271,7 +271,7 @@ fun FichaMangaScreen(
             enBiblioteca = comic
             guardando = false
             alRecargar()
-            Toast.makeText(ctx, "Añadido a la biblioteca", Toast.LENGTH_SHORT).show()
+            Avisos.mostrar("Añadido a la biblioteca")
             // Como en Komikku: al añadir, pregunta las categorías (si hay).
             if (almacen.categorias().isNotEmpty()) dialogoCats = true
         }
@@ -299,7 +299,7 @@ fun FichaMangaScreen(
     // WebView dentro de la app (como Komikku): la dirección la da la propia fuente; si no, se arma con su baseUrl.
     val abrirNavegador: () -> Unit = {
         val u = motor.urlManga(f, manga) ?: urlManga(f, manga)
-        if (u == null) Toast.makeText(ctx, "Esta fuente no da la dirección web", Toast.LENGTH_SHORT).show()
+        if (u == null) Avisos.mostrar("Esta fuente no da la dirección web")
         else webUrl = u
     }
 
@@ -345,7 +345,7 @@ fun FichaMangaScreen(
                                     Row(Modifier.padding(22.dp), verticalAlignment = Alignment.CenterVertically) {
                                         ImagenRemota(
                                             fi.detalle.portadaUrl ?: manga.portadaUrl,
-                                            Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)), motor.cabeceras(f),
+                                            Modifier.size(64.dp).clip(SuaveShape(16.dp)), motor.cabeceras(f),
                                         )
                                         Spacer(Modifier.width(14.dp))
                                         Column(Modifier.weight(1f)) {
@@ -390,7 +390,7 @@ fun FichaMangaScreen(
                     ) {
                         LText("Capítulos", LectorType.Display.copy(fontSize = 30.sp, letterSpacing = (-1).sp))
                         Spacer(Modifier.width(12.dp))
-                        LText("${fi.capitulos.size}", LectorType.Body, Modifier.weight(1f), color = LectorColors.Muted)
+                        Odometro("${fi.capitulos.size}", LectorType.Body, Modifier.weight(1f), LectorColors.Muted)
                         ConAcento(acento) {
                             ChipSel(if (masAntiguos) "Más antiguos" else "Más nuevos", true) { masAntiguos = !masAntiguos }
                         }
@@ -429,12 +429,12 @@ fun FichaMangaScreen(
                     ) { ext.alternarMarcado(f.id, c.url) }
                     FilaDeslizable(accionLeido, accionMarca, Modifier.entrada(pos)) {
                     Row(
-                        Modifier.fillMaxWidth().pressable { onLeer(fi.capitulos, i, paginaGuardada) }
+                        Modifier.fillMaxWidth().resaltable { onLeer(fi.capitulos, i, paginaGuardada) }
                             .padding(start = 24.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
-                            Modifier.size(64.dp).clip(RoundedCornerShape(20.dp))
+                            Modifier.size(64.dp).clip(SuaveShape(20.dp))
                                 .background(acento.copy(alpha = if (leido) 0.10f else 0.24f)),
                             Alignment.Center,
                         ) {
@@ -486,7 +486,7 @@ fun FichaMangaScreen(
             item {
                 Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) {
                     when {
-                        cargando -> CircularProgressIndicator(Modifier.size(28.dp))
+                        cargando -> if (fi == null) BonesCapitulos() else CircularProgressIndicator(Modifier.size(28.dp))
                         error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             LText(error!!, LectorType.Label, color = Color(0xFFE57373))
                             Spacer(Modifier.height(10.dp))
@@ -592,9 +592,9 @@ private fun ConAcento(acento: Color, content: @Composable () -> Unit) {
 /** Tarjeta de vidrio: relleno translúcido y borde fino, como las de "Latest release / About". */
 @Composable
 private fun TarjetaVidrio(modifier: Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    val forma = RoundedCornerShape(32.dp)
+    val forma = SuaveShape(32.dp)
     Column(
-        modifier.then(if (onClick != null) Modifier.pressable(onClick) else Modifier)
+        modifier.press3D(5f, 0.98f).then(if (onClick != null) Modifier.pressable(onClick) else Modifier)
             .clip(forma).background(Color.White.copy(alpha = 0.06f))
             .border(1.5.dp, Color.White.copy(alpha = 0.16f), forma),
         content = content,
@@ -906,8 +906,8 @@ fun LeerOnlineScreen(
         ) {
             Row(
                 Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(28.dp)).background(LectorColors.Glass)
-                    .border(1.dp, LectorColors.GlassBorder, RoundedCornerShape(28.dp))
+                    .clip(SuaveShape(28.dp)).background(LectorColors.Glass)
+                    .border(1.dp, LectorColors.GlassBorderBrush, SuaveShape(28.dp))
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -964,14 +964,14 @@ fun LeerOnlineScreen(
                 }
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
-                        .clip(RoundedCornerShape(28.dp)).background(LectorColors.Glass)
-                        .border(1.dp, LectorColors.GlassBorder, RoundedCornerShape(28.dp)).padding(vertical = 8.dp),
+                        .clip(SuaveShape(28.dp)).background(LectorColors.Glass)
+                        .border(1.dp, LectorColors.GlassBorderBrush, SuaveShape(28.dp)).padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
                     AccionLector(Icons.Rounded.List, "Capítulos") { dialogoCaps = true }
                     AccionLector(Icons.Rounded.ArrowForward, "Navegador") {
                         val u = urlCapitulo(f, cap)
-                        if (u == null) Toast.makeText(ctx, "Esta fuente no da la dirección web", Toast.LENGTH_SHORT).show()
+                        if (u == null) Avisos.mostrar("Esta fuente no da la dirección web")
                         else runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     }
                     AccionLector(Icons.Rounded.Share, "Compartir") {

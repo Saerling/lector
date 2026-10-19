@@ -45,7 +45,7 @@ fun PaginaAjustes(titulo: String, onBack: () -> Unit, content: @Composable Colum
 @Composable
 fun FilaAjuste(icon: ImageVector?, titulo: String, detalle: String? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
+        Modifier.fillMaxWidth().resaltable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
@@ -62,7 +62,7 @@ fun FilaAjuste(icon: ImageVector?, titulo: String, detalle: String? = null, onCl
 @Composable
 fun FilaSwitch(titulo: String, detalle: String? = null, activado: Boolean, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable { onChange(!activado) }.padding(horizontal = 24.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().resaltable { onChange(!activado) }.padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
@@ -77,7 +77,7 @@ fun FilaSwitch(titulo: String, detalle: String? = null, activado: Boolean, onCha
 @Composable
 fun FilaRadio(etiqueta: String, marcada: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().resaltable(onClick = onClick).padding(horizontal = 24.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(selected = marcada, onClick = null)
@@ -112,14 +112,14 @@ fun ChipSel(texto: String, seleccionado: Boolean, onClick: () -> Unit) {
 @Composable
 fun ChipBorde(texto: String, color: Color) {
     Box(
-        Modifier.clip(RoundedCornerShape(14.dp)).border(1.5.dp, color, RoundedCornerShape(14.dp))
+        Modifier.clip(SuaveShape(14.dp)).border(1.5.dp, color, SuaveShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 9.dp)
     ) { LText(texto, LectorType.Body, color = color) }
 }
 
 @Composable
 fun StatCard(value: String, label: String, modifier: Modifier = Modifier) {
-    Column(modifier.clip(RoundedCornerShape(24.dp)).background(LectorColors.Card).padding(20.dp)) {
+    Column(modifier.clip(SuaveShape(24.dp)).background(LectorColors.Card).padding(20.dp)) {
         LText(value, LectorType.Display.copy(fontSize = 40.sp))
         Spacer(Modifier.height(4.dp))
         LText(label, LectorType.Mono, color = LectorColors.Muted)

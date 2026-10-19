@@ -79,14 +79,14 @@ fun AparienciaScreen(almacen: Almacen, onBack: () -> Unit) {
 /** Mini maqueta de teléfono con el color elegido, como las tarjetas de tema de Komikku. */
 @Composable
 private fun TarjetaTema(nombre: String, color: Color, seleccionada: Boolean, onClick: () -> Unit) {
-    val forma = RoundedCornerShape(24.dp)
+    val forma = SuaveShape(24.dp)
     Column(Modifier.width(104.dp).pressable(onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.fillMaxWidth().height(150.dp).clip(forma).background(Color.Black)
                 .border(if (seleccionada) 3.dp else 2.dp, if (seleccionada) color else Color(0xFF3A3A3C), forma)
         ) {
             Box(Modifier.padding(12.dp).size(width = 46.dp, height = 12.dp).clip(CircleShape).background(Color.White))
-            Box(Modifier.align(Alignment.Center).size(width = 56.dp, height = 62.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF44464F))) {
+            Box(Modifier.align(Alignment.Center).size(width = 56.dp, height = 62.dp).clip(SuaveShape(10.dp)).background(Color(0xFF44464F))) {
                 Box(Modifier.padding(6.dp).size(width = 22.dp, height = 12.dp).clip(CircleShape).background(color))
             }
             Row(

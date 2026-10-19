@@ -3,6 +3,7 @@ package com.example.lector.ui
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -41,13 +42,12 @@ fun Modifier.entrada(indice: Int, pasoMs: Int = 55): Modifier {
     }
     val t by animateFloatAsState(
         if (visible) 1f else 0f,
-        spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessLow), label = "entrada"
+        tween(520, easing = EnfasisEasing), label = "entrada"
     )
+    val subida = with(androidx.compose.ui.platform.LocalDensity.current) { 20.dp.toPx() }
     return this.graphicsLayer {
         alpha = t
-        translationY = (1f - t) * 56f
-        val s = 0.94f + 0.06f * t
-        scaleX = s; scaleY = s
+        translationY = (1f - t) * subida
     }
 }
 
@@ -119,7 +119,7 @@ fun BarraSuperior(
 fun BotonFlotante(texto: String, acento: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier.navigationBarsPadding().padding(24.dp)
-            .pressable(onClick).clip(RoundedCornerShape(22.dp)).background(acento)
+            .pressable(onClick).clip(SuaveShape(22.dp)).background(acento)
             .padding(horizontal = 26.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

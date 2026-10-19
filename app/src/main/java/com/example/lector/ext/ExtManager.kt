@@ -405,7 +405,7 @@ class ExtManager private constructor(private val app: Context) {
         val actual = progreso[e.pkg]?.fase
         if (actual == Fase.DESCARGANDO || actual == Fase.INSTALANDO) return
         if (!app.packageManager.canRequestPackageInstalls()) {
-            Toast.makeText(app, "Permite instalar apps desde Lector y vuelve a pulsar Instalar", Toast.LENGTH_LONG).show()
+            com.example.lector.ui.Avisos.mostrar("Permite instalar apps desde Lector y vuelve a pulsar Instalar")
             runCatching {
                 app.startActivity(
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${app.packageName}"))

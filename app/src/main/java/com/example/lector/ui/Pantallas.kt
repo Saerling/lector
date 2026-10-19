@@ -32,7 +32,7 @@ fun SearchScreen(comics: List<Comic>, almacen: Almacen, onOpen: (Comic) -> Unit)
             cursorBrush = SolidColor(LectorColors.Text),
             decorationBox = { inner ->
                 Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(LectorColors.Card)
+                    Modifier.fillMaxWidth().clip(SuaveShape(20.dp)).background(LectorColors.Card)
                         .padding(horizontal = 16.dp, vertical = 14.dp)
                 ) {
                     if (q.isEmpty()) LText("Buscar en tu biblioteca…", LectorType.Body, color = LectorColors.Muted)
@@ -48,8 +48,8 @@ fun SearchScreen(comics: List<Comic>, almacen: Almacen, onOpen: (Comic) -> Unit)
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(res, key = { it.id }) { c ->
-                Column(Modifier.pressable { onOpen(c) }) {
-                    ComicCover(c, almacen, Modifier.fillMaxWidth().aspectRatio(2f / 3f), RoundedCornerShape(14.dp))
+                Column(Modifier.press3D().pressable { onOpen(c) }) {
+                    ComicCover(c, almacen, Modifier.fillMaxWidth().aspectRatio(2f / 3f), SuaveShape(14.dp))
                     Spacer(Modifier.height(6.dp))
                     LText(c.titulo, LectorType.Label, maxLines = 2)
                 }

@@ -45,23 +45,9 @@ fun LText(
     color: Color = LectorColors.Text, maxLines: Int = Int.MAX_VALUE
 ) = Text(text, modifier, color, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
 
-/** Rebote suave al presionar. */
-@Composable
-fun Modifier.pressable(onClick: () -> Unit): Modifier {
-    val src = remember { MutableInteractionSource() }
-    val pressed by src.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        if (pressed) 0.96f else 1f,
-        spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "press"
-    )
-    return this
-        .graphicsLayer { scaleX = scale; scaleY = scale }
-        .clickable(interactionSource = src, indication = null, onClick = onClick)
-}
-
 /** Portada real (la que ya guarda tu Almacen); si no hay, muestra la inicial del título. */
 @Composable
-fun ComicCover(comic: Comic, almacen: Almacen, modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(20.dp)) {
+fun ComicCover(comic: Comic, almacen: Almacen, modifier: Modifier = Modifier, shape: Shape = SuaveShape(20.dp)) {
     val portada = remember(comic.id) {
         BitmapFactory.decodeFile(almacen.portadaDe(comic.id).path)?.asImageBitmap()
     }
@@ -114,7 +100,7 @@ fun CoverCarousel(items: List<Comic>, almacen: Almacen, onClick: (Comic) -> Unit
         flingBehavior = rememberSnapFlingBehavior(state)
     ) {
         itemsIndexed(items, key = { _, c -> c.id }) { i, c ->
-            Column(Modifier.width(140.dp).entrada(i).pressable { onClick(c) }) {
+            Column(Modifier.width(140.dp).entrada(i).press3D().pressable { onClick(c) }) {
                 ComicCover(c, almacen, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
                 Spacer(Modifier.height(8.dp))
                 LText(c.titulo, LectorType.Body, maxLines = 1)
@@ -136,11 +122,11 @@ enum class LectorTab(val label: String, val icon: ImageVector) {
 /** Barra flotante en píldora: el indicador se desliza de una pestaña a otra con un rebote suave. */
 @Composable
 fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(30.dp)
+    val shape = SuaveShape(30.dp)
     val tabs = LectorTab.values()
     BoxWithConstraints(
         modifier.fillMaxWidth().height(60.dp).clip(shape).background(LectorColors.Glass)
-            .border(1.dp, LectorColors.GlassBorder, shape).padding(6.dp)
+            .border(1.dp, LectorColors.GlassBorderBrush, shape).padding(6.dp)
     ) {
         val ancho = maxWidth / tabs.size
         val x by animateDpAsState(
@@ -156,9 +142,11 @@ fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier:
                     if (sel) 1.15f else 1f,
                     spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "navEscala"
                 )
+                val fuente = remember { MutableInteractionSource() }
                 Box(
                     Modifier.weight(1f).fillMaxHeight()
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(tab) },
+                        .rebote(fuente, 0.86f)
+                        .clickable(interactionSource = fuente, indication = null) { onSelect(tab) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -175,7 +163,7 @@ fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier:
 @Composable
 fun MiniReader(comic: Comic, almacen: Almacen, onClick: () -> Unit, modifier: Modifier = Modifier) =
     MiniReaderGenerico(comic.titulo, comic.textoPagina(), onClick, modifier) { m ->
-        ComicCover(comic, almacen, m, RoundedCornerShape(12.dp))
+        ComicCover(comic, almacen, m, SuaveShape(12.dp))
     }
 
 /** Mismo botón flotante, con la portada que se le pase (local o de una fuente en línea). */
@@ -184,10 +172,10 @@ fun MiniReaderGenerico(
     titulo: String, subtitulo: String, onClick: () -> Unit, modifier: Modifier = Modifier,
     portada: @Composable (Modifier) -> Unit,
 ) {
-    val shape = RoundedCornerShape(24.dp)
+    val shape = SuaveShape(24.dp)
     Row(
-        modifier.pressable(onClick).fillMaxWidth().height(64.dp).clip(shape)
-            .background(LectorColors.Glass).border(1.dp, LectorColors.GlassBorder, shape).padding(10.dp),
+        modifier.press3D(4f, 0.98f).pressable(onClick).fillMaxWidth().height(64.dp).clip(shape)
+            .background(LectorColors.Glass).border(1.dp, LectorColors.GlassBorderBrush, shape).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         portada(Modifier.fillMaxHeight().aspectRatio(1f))

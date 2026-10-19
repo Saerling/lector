@@ -63,13 +63,13 @@ object Actualizador {
         val app = ctx.applicationContext
         val motor = Motor.actual
         if (motor == null) {
-            if (avisar) Toast.makeText(app, "El motor de fuentes no está listo", Toast.LENGTH_SHORT).show()
+            if (avisar) Avisos.mostrar("El motor de fuentes no está listo")
             return
         }
         val lista = almacen.cargar().filter { it.enLinea }
         if (lista.isEmpty()) {
             almacen.marcarActualizado()
-            if (avisar) Toast.makeText(app, "Tu biblioteca no tiene mangas de fuentes en línea", Toast.LENGTH_SHORT).show()
+            if (avisar) Avisos.mostrar("Tu biblioteca no tiene mangas de fuentes en línea")
             return
         }
         corriendo = true; hechas = 0; total = lista.size
@@ -112,7 +112,7 @@ object Actualizador {
                     append(if (nuevos == 0) "Sin capítulos nuevos" else "$nuevos capítulo(s) nuevo(s)")
                     if (fallos > 0) append(" · $fallos manga(s) no se pudieron revisar")
                 }
-                Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
+                Avisos.mostrar(msg)
             }
         }
     }
@@ -270,10 +270,10 @@ private fun FilaActualizacion(
     }
 
     Row(
-        Modifier.fillMaxWidth().pressable { alAbrir(a) }.padding(start = 24.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+        Modifier.fillMaxWidth().resaltable { alAbrir(a) }.padding(start = 24.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(48.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(8.dp)).background(LectorColors.CardHigh)) {
+        Box(Modifier.width(48.dp).aspectRatio(2f / 3f).clip(SuaveShape(8.dp)).background(LectorColors.CardHigh)) {
             val c = cabeceras
             if (c != null) ImagenRemota(a.portadaUrl, Modifier.fillMaxSize(), c)
         }
@@ -294,9 +294,9 @@ private fun FilaActualizacion(
             val motor = Motor.actual
             when {
                 estado is EstadoDescarga.Descargando -> GestorDescargas.cancelar(ctx, clave)
-                estado is EstadoDescarga.Listo -> Toast.makeText(ctx, "Ya está descargado", Toast.LENGTH_SHORT).show()
+                estado is EstadoDescarga.Listo -> Avisos.mostrar("Ya está descargado")
                 f == null || motor == null ->
-                    Toast.makeText(ctx, "Esa fuente no está disponible ahora", Toast.LENGTH_SHORT).show()
+                    Avisos.mostrar("Esa fuente no está disponible ahora")
                 else -> GestorDescargas.iniciar(ctx, almacen, motor, f, cap, a.titulo) {}
             }
         })
