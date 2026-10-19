@@ -188,11 +188,13 @@ fun BibliotecaScreen(
 
     // Filtrar y ordenar es trabajo caro con bibliotecas grandes: solo se rehace si cambia algo de lo que depende
     // (antes se repetía en cada recomposición, p. ej. al marcar un cómic o durante las animaciones).
-    val lista = remember(comics, asignaciones, idsOcultas, mostrarOcultas, activa, filtro, consulta, orden, ascendente) {
-        // Un cómic con alguna categoría oculta se esconde en todas partes (también en "Continuar").
-        val visibles = comics.filter { c ->
+    // Un cómic con alguna categoría oculta se esconde en todas partes (también en "Continuar").
+    val visibles = remember(comics, asignaciones, idsOcultas, mostrarOcultas) {
+        comics.filter { c ->
             mostrarOcultas || asignaciones[c.id].orEmpty().none { it in idsOcultas }
         }
+    }
+    val lista = remember(visibles, asignaciones, activa, filtro, consulta, orden, ascendente) {
         val texto = consulta.trim()
         val filtrados = visibles
             .filter { c -> activa == null || activa in asignaciones[c.id].orEmpty() }
