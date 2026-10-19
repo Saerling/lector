@@ -22,6 +22,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -193,7 +195,9 @@ private fun Contenido(almacen: Almacen) {
     }
 
     val actual = abierto
-    if (actual == null) {
+    // Inicio se queda en composición mientras lees: así, al cerrar el capítulo, vuelves exactamente donde estabas
+    // (ficha abierta, scroll, lista de la extensión...) en vez de recargar todo desde cero.
+    Box(Modifier.fillMaxSize()) {
         Inicio(
             tab = tab,
             onTab = { tab = it },
@@ -209,13 +213,18 @@ private fun Contenido(almacen: Almacen) {
             alRecargar = { comics = almacen.cargar() },
             pestanaBiblioteca = pestanaBiblioteca,
             alCambiarPestanaBiblioteca = { pestanaBiblioteca = it },
+            activo = actual == null,
         )
-    } else {
-        val cerrar = {
-            abierto = null
-            comics = almacen.cargar()
+        if (actual != null) {
+            val cerrar = {
+                abierto = null
+                comics = almacen.cargar()
+            }
+            BackHandler { cerrar() }
+            // El lector tapa todo y se queda con los toques (Inicio sigue vivo debajo).
+            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
+                LectorScreen(comic = actual, almacen = almacen, alCerrar = cerrar)
+            }
         }
-        BackHandler { cerrar() }
-        LectorScreen(comic = actual, almacen = almacen, alCerrar = cerrar)
     }
 }

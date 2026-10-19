@@ -22,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.lector.Almacen
@@ -52,6 +54,8 @@ fun Inicio(
     alRecargar: () -> Unit,
     pestanaBiblioteca: Int,
     alCambiarPestanaBiblioteca: (Int) -> Unit,
+    // false mientras se lee un cómic local encima: Inicio sigue vivo pero no debe atender el botón atrás.
+    activo: Boolean = true,
 ) {
     // Los cómics de categorías ocultas no salen en Inicio, Buscar ni Historial.
     // Solo se ven en Biblioteca, manteniendo pulsado su título.
@@ -92,10 +96,10 @@ fun Inicio(
         else if (ruta == Ruta.LeerOnline && capsLectura.isEmpty()) ruta = Ruta.Ficha
     }
 
-    BackHandler(enabled = ruta != null && detalleId == null) {
+    BackHandler(enabled = activo && ruta != null && detalleId == null) {
         ruta = if (ruta == Ruta.Ficha && desdeNovedades) null else ruta?.padre()
     }
-    BackHandler(enabled = detalleId != null) { detalleId = null }
+    BackHandler(enabled = activo && detalleId != null) { detalleId = null }
 
     // Abre la ficha de un manga de una fuente (desde la biblioteca o el historial).
     val abrirEnLinea: (Long, String, String, String?, Pair<String, Int>?) -> Unit = { fId, url, titulo, portada, cap ->
@@ -111,10 +115,20 @@ fun Inicio(
         else detalleId = it.id
     }
     val leerComic: (Comic) -> Unit = { if (it.enLinea) abrirDetalle(it) else alAbrir(it) }
+    // Fuente → ficha → lector online forman una pila: las de abajo se quedan en composición (tapadas) mientras
+    // hay otra encima, así al volver no se recarga la lista de la extensión ni la ficha ni se pierde el scroll.
+    val pila: List<Ruta> = when (ruta) {
+        Ruta.LeerOnline -> if (desdeNovedades) listOf(Ruta.Ficha, Ruta.LeerOnline)
+            else listOf(Ruta.FuenteDetalle, Ruta.Ficha, Ruta.LeerOnline)
+        Ruta.Ficha -> if (desdeNovedades) listOf(Ruta.Ficha) else listOf(Ruta.FuenteDetalle, Ruta.Ficha)
+        Ruta.FuenteDetalle -> listOf(Ruta.FuenteDetalle)
+        else -> emptyList()
+    }
     // Clave de la capa que está encima ("" = ninguna). Se usa como estado de la animación.
+    // Las pantallas de la pila se dibujan aparte (más abajo), por eso aquí cuentan como "ninguna".
     val capa = when {
         detalleId != null -> "d:$detalleId"
-        ruta != null -> ruta!!.name
+        ruta != null && ruta !in pila -> ruta!!.name
         else -> ""
     }
 
@@ -230,27 +244,49 @@ fun Inicio(
                     Ruta.AjSeguimiento -> AjSeguimientoScreen(almacen) { ruta = Ruta.Ajustes }
                     Ruta.ListadosExt -> ListadosExtScreen(ext) { ruta = null }
                     Ruta.ExtDetalle -> ExtDetalleScreen(ext, extPkg.orEmpty()) { ruta = null }
-                    Ruta.FuenteDetalle -> FuenteDetalleScreen(
-                        ext, fuenteId ?: 0L,
-                        onManga = { mangaSel = it; desdeNovedades = false; reanudar = null; ruta = Ruta.Ficha },
-                    ) { ruta = null }
-                    Ruta.Ficha -> {
-                        val m = mangaSel
-                        if (m == null) Box(Modifier.fillMaxSize().background(LectorColors.Bg))
-                        else FichaMangaScreen(
-                            ext, fuenteId ?: 0L, m, almacen, alRecargar,
-                            onBack = { ruta = if (desdeNovedades) null else Ruta.FuenteDetalle },
-                            onLeer = { caps, i, pagina ->
-                                capsLectura = caps; capIndice = i; paginaLectura = pagina; ruta = Ruta.LeerOnline
-                            },
-                            reanudarCap = reanudar,
-                            alConsumirReanudar = { reanudar = null },
-                        )
+                    Ruta.FuenteDetalle, Ruta.Ficha, Ruta.LeerOnline -> Box(Modifier.fillMaxSize())
+                }
+            }
+        }
+
+
+        // Pila fuente → ficha → lector online: cada una sigue viva mientras haya otra encima.
+        listOf(Ruta.FuenteDetalle, Ruta.Ficha, Ruta.LeerOnline).forEach { r ->
+            key(r) {
+                AnimatedVisibility(
+                    visible = r in pila && detalleId == null,
+                    enter = slideInHorizontally(tween(330, easing = EnfasisEasing)) { it / 8 } +
+                        scaleIn(tween(330, easing = EnfasisEasing), initialScale = 0.96f) +
+                        fadeIn(tween(260, easing = EnfasisEasing)),
+                    exit = slideOutHorizontally(tween(240, easing = EnfasisEasing)) { it / 8 } +
+                        scaleOut(tween(240, easing = EnfasisEasing), targetScale = 0.97f) + fadeOut(tween(160)),
+                ) {
+                    // Fondo opaco y toques propios: la pantalla de debajo no se ve ni recibe toques.
+                    Box(Modifier.fillMaxSize().background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {
+                        when (r) {
+                        Ruta.FuenteDetalle -> FuenteDetalleScreen(
+                            ext, fuenteId ?: 0L,
+                            onManga = { mangaSel = it; desdeNovedades = false; reanudar = null; ruta = Ruta.Ficha },
+                        ) { ruta = null }
+                        Ruta.Ficha -> {
+                            val m = mangaSel
+                            if (m == null) Box(Modifier.fillMaxSize().background(LectorColors.Bg))
+                            else FichaMangaScreen(
+                                ext, fuenteId ?: 0L, m, almacen, alRecargar,
+                                onBack = { ruta = if (desdeNovedades) null else Ruta.FuenteDetalle },
+                                onLeer = { caps, i, pagina ->
+                                    capsLectura = caps; capIndice = i; paginaLectura = pagina; ruta = Ruta.LeerOnline
+                                },
+                                reanudarCap = reanudar,
+                                alConsumirReanudar = { reanudar = null },
+                            )
+                        }
+                        Ruta.LeerOnline -> LeerOnlineScreen(
+                            ext, fuenteId ?: 0L, mangaSel?.titulo.orEmpty(), capsLectura, capIndice,
+                            almacen = almacen, manga = mangaSel, paginaInicial = paginaLectura,
+                        ) { ruta = Ruta.Ficha }
+                        }
                     }
-                    Ruta.LeerOnline -> LeerOnlineScreen(
-                        ext, fuenteId ?: 0L, mangaSel?.titulo.orEmpty(), capsLectura, capIndice,
-                        almacen = almacen, manga = mangaSel, paginaInicial = paginaLectura,
-                    ) { ruta = Ruta.Ficha }
                 }
             }
         }
