@@ -47,6 +47,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -77,6 +79,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -108,8 +112,12 @@ private fun numeroTexto(n: Float): String =
  * sigue, y al volver ves su progreso. Tocar otra vez el botón de un capítulo que se está descargando la CANCELA.
  */
 object GestorDescargas {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    // Main (no .immediate): así `trabajos[clave]` ya está registrado antes de que el trabajo empiece a correr.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val trabajos = HashMap<String, Job>()
+
+    // Como la cola de Komikku: como mucho 2 capítulos a la vez; el resto espera su turno (y se puede cancelar).
+    private val cola = kotlinx.coroutines.sync.Semaphore(2)
 
     /** "fuenteId|urlCapítulo" → fracción descargada (0f = preparando). Las pantallas lo leen y se repintan. */
     val progreso = mutableStateMapOf<String, Float>()
@@ -131,9 +139,12 @@ object GestorDescargas {
             val yo = coroutineContext[Job]
             val archivo = File(app.cacheDir, "cap_${System.nanoTime()}.cbz")
             try {
-                motor.descargarCbz(f, c, archivo) { h, t -> if (t > 0) progreso[clave] = h.toFloat() / t }
-                withContext(Dispatchers.IO) { almacen.guardarDescarga(archivo, f.id, c.url) }
-                Avisos.mostrar("Capítulo descargado")
+                cola.withPermit {
+                    motor.descargarCbz(f, c, archivo) { h, t -> if (t > 0) progreso[clave] = h.toFloat() / t }
+                    withContext(Dispatchers.IO) { almacen.guardarDescarga(archivo, f.id, c.url) }
+                }
+                // En descargas en lote solo se avisa al terminar la última.
+                if (trabajos.size <= 1) Avisos.mostrar("Capítulo descargado")
             } catch (e: CancellationException) {
                 throw e // el aviso de "cancelada" lo da cancelar()
             } catch (e: Exception) {
@@ -149,6 +160,16 @@ object GestorDescargas {
                 alTerminar()
             }
         }
+    }
+
+    /** Pone en cola varios capítulos (los que ya están descargados o en curso se saltan). Devuelve cuántos. */
+    fun iniciarVarios(
+        ctx: Context, almacen: Almacen, motor: MotorFuentes, f: FuenteUI, caps: List<CapituloFuente>,
+        tituloManga: String, alTerminar: () -> Unit,
+    ): Int {
+        val pendientes = caps.filter { !almacen.estaDescargado(f.id, it.url) && !trabajos.containsKey(clave(f, it)) }
+        pendientes.forEach { iniciar(ctx, almacen, motor, f, it, tituloManga, alTerminar) }
+        return pendientes.size
     }
 
     fun cancelar(ctx: Context, clave: String) {
@@ -199,6 +220,7 @@ fun FichaMangaScreen(
     var editandoCats by remember { mutableStateOf(false) }
     // Capítulo cuya descarga se quiere borrar.
     var quitarDescarga by remember { mutableStateOf<CapituloFuente?>(null) }
+    var menuDescarga by remember { mutableStateOf(false) }
 
     LaunchedEffect(fuenteId, manga.url, recarga) {
         if (f == null || motor == null) return@LaunchedEffect
@@ -293,9 +315,13 @@ fun FichaMangaScreen(
     val scrollPx: () -> Float = { if (lista.firstVisibleItemIndex == 0) lista.firstVisibleItemScrollOffset.toFloat() else 99999f }
     val tituloFicha = fi?.detalle?.titulo ?: manga.titulo
     // La mayoría de fuentes listan el capítulo más nuevo primero: el primero a leer es el último sin leer.
-    val sig = fi?.let { x -> (x.capitulos.lastIndex downTo 0).firstOrNull { !ext.esLeido(f.id, x.capitulos[it].url) } ?: 0 } ?: 0
+    // Con 1000+ capítulos esto son miles de comparaciones: solo se rehace si cambia la ficha o lo leído.
+    val leidosAhora = ext.leidos
+    val sig = remember(fi, leidosAhora) {
+        fi?.let { x -> (x.capitulos.lastIndex downTo 0).firstOrNull { !ext.esLeido(f.id, x.capitulos[it].url) } ?: 0 } ?: 0
+    }
     val paginaSig = fi?.capitulos?.getOrNull(sig)?.let { ext.paginaDe(f.id, it.url) } ?: 0
-    val hayLeidos = fi?.capitulos?.any { ext.esLeido(f.id, it.url) } == true
+    val hayLeidos = remember(fi, leidosAhora) { fi?.capitulos?.any { ext.esLeido(f.id, it.url) } == true }
     // WebView dentro de la app (como Komikku): la dirección la da la propia fuente; si no, se arma con su baseUrl.
     val abrirNavegador: () -> Unit = {
         val u = motor.urlManga(f, manga) ?: urlManga(f, manga)
@@ -391,12 +417,43 @@ fun FichaMangaScreen(
                         LText("Capítulos", LectorType.Display.copy(fontSize = 30.sp, letterSpacing = (-1).sp))
                         Spacer(Modifier.width(12.dp))
                         Odometro("${fi.capitulos.size}", LectorType.Body, Modifier.weight(1f), LectorColors.Muted)
+                        // Menú de descargas en lote (como Komikku): siguiente, siguientes N, no leídos o todos.
+                        Box {
+                            Box(
+                                Modifier.size(44.dp).pressable { menuDescarga = true }.clip(CircleShape)
+                                    .background(LectorColors.PillFill),
+                                Alignment.Center,
+                            ) { Icon(Iconos.Descargar, "Descargar capítulos", tint = LectorColors.Text) }
+                            DropdownMenu(expanded = menuDescarga, onDismissRequest = { menuDescarga = false }) {
+                                // La lista llega con lo más nuevo primero: "siguientes" = desde el primero sin leer hacia los nuevos.
+                                val opciones = listOf(
+                                    "Siguiente capítulo" to fi.capitulos.slice((sig downTo maxOf(sig, 0)).toList()),
+                                    "Siguientes 5" to fi.capitulos.slice((sig downTo maxOf(sig - 4, 0)).toList()),
+                                    "Siguientes 10" to fi.capitulos.slice((sig downTo maxOf(sig - 9, 0)).toList()),
+                                    "No leídos" to fi.capitulos.filter { !ext.esLeido(f.id, it.url) }.asReversed(),
+                                    "Todos" to fi.capitulos.asReversed(),
+                                )
+                                opciones.forEach { (texto, caps) ->
+                                    DropdownMenuItem(
+                                        text = { Text(texto) },
+                                        onClick = {
+                                            menuDescarga = false
+                                            val n = GestorDescargas.iniciarVarios(ctx, almacen, motor, f, caps, fi.detalle.titulo, alRecargar)
+                                            Avisos.mostrar(if (n == 0) "Ya están descargados" else "Descargando $n capítulo(s)")
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
                         ConAcento(acento) {
                             ChipSel(if (masAntiguos) "Más antiguos" else "Más nuevos", true) { masAntiguos = !masAntiguos }
                         }
                     }
                 }
-                itemsIndexed(orden) { pos, iv ->
+                // La clave es el índice original del capítulo (único aunque la fuente repita direcciones):
+                // al invertir el orden las filas se mueven en vez de recomponerse todas.
+                itemsIndexed(orden, key = { _, iv -> iv.index }) { pos, iv ->
                     val i = iv.index
                     val c = iv.value
                     val clave = GestorDescargas.clave(f, c)
@@ -684,22 +741,66 @@ private fun CabeceraFicha(
 // ───────────────────── Leer online (tira vertical) ─────────────────────
 
 private object CachePaginas {
-    // Límite por bytes (48 MB), no por número de páginas: algunas fuentes dan tiras muy altas.
-    val cache = object : LruCache<String, ImageBitmap>(48 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
+    // Límite por bytes (64 MB), no por número de páginas: algunas fuentes dan tiras muy altas.
+    // Cada página es una LISTA de imágenes: las muy altas (webtoon) se cortan en tiras porque la GPU
+    // no dibuja bitmaps de más de ~4096-8192 px de alto (antes salían en blanco o cerraban la app).
+    val cache = object : LruCache<String, List<ImageBitmap>>(64 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: List<ImageBitmap>): Int = value.sumOf { it.width * it.height * 4 }
+    }
+
+    // Proporción alto/ancho de la última página cargada: reserva el hueco con la altura probable y evita
+    // que la tira "salte" al llegar la imagen.
+    @Volatile var proporcion = 1.45f
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val enVuelo = HashMap<String, kotlinx.coroutines.Deferred<List<ImageBitmap>>>()
+    private val limite = kotlinx.coroutines.sync.Semaphore(3)
+
+    /** Una sola descarga por página aunque la pidan a la vez la pantalla y la precarga. */
+    suspend fun obtener(clave: String, cargar: suspend () -> List<ImageBitmap>): List<ImageBitmap> {
+        cache.get(clave)?.let { return it }
+        val tarea = synchronized(enVuelo) {
+            enVuelo.getOrPut(clave) {
+                scope.async {
+                    try {
+                        val r = limite.withPermit { cargar() }
+                        cache.put(clave, r)
+                        r.firstOrNull()?.let { if (it.width > 0) proporcion = (it.height.toFloat() / it.width).coerceIn(0.5f, 3f) }
+                        r
+                    } finally {
+                        synchronized(enVuelo) { enVuelo.remove(clave) }
+                    }
+                }
+            }
+        }
+        return tarea.await()
     }
 }
 
-private suspend fun decodificar(bytes: ByteArray, anchoMax: Int = 1440): ImageBitmap? = withContext(Dispatchers.Default) {
-    val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, medidas)
-    var muestra = 1
-    while (medidas.outWidth / (muestra * 2) >= anchoMax ||
-        (medidas.outWidth / muestra).toLong() * (medidas.outHeight / muestra) > 12_000_000L
-    ) muestra *= 2
-    val op = BitmapFactory.Options().apply { inSampleSize = muestra }
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, op)?.asImageBitmap()
-}
+private const val ALTO_TIRA = 4096
+
+private suspend fun decodificarTiras(bytes: ByteArray, anchoMax: Int = 1440): List<ImageBitmap> =
+    withContext(Dispatchers.Default) {
+        val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, medidas)
+        if (medidas.outWidth <= 0) error("Imagen no válida")
+        var muestra = 1
+        while (medidas.outWidth / (muestra * 2) >= anchoMax ||
+            (medidas.outWidth / muestra).toLong() * (medidas.outHeight / muestra) > 16_000_000L
+        ) muestra *= 2
+        val op = BitmapFactory.Options().apply { inSampleSize = muestra }
+        val completo = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, op) ?: error("Imagen no válida")
+        if (completo.height <= ALTO_TIRA) return@withContext listOf(completo.asImageBitmap())
+        val tiras = ArrayList<ImageBitmap>()
+        var y = 0
+        while (y < completo.height) {
+            val alto = minOf(ALTO_TIRA, completo.height - y)
+            tiras.add(android.graphics.Bitmap.createBitmap(completo, 0, y, completo.width, alto).asImageBitmap())
+            y += alto
+        }
+        completo.recycle()
+        tiras
+    }
 
 // Si el capítulo está descargado se lee del archivo; si no, de la red (misma pantalla, mismo progreso).
 private suspend fun paginasDeCap(almacen: Almacen?, motor: MotorFuentes, f: FuenteUI, cap: CapituloFuente): Int {
@@ -831,6 +932,32 @@ fun LeerOnlineScreen(
                 leido = System.currentTimeMillis(),
             ),
         )
+    }
+
+    // Precarga: mientras lees, ya se van bajando y decodificando las 3 páginas siguientes (si no, cada página
+    // empezaba a cargar solo cuando llegaba a pantalla). Se cancela sola si cambias de página o de capítulo.
+    LaunchedEffect(cap.url, actual, total) {
+        if (total == null || total <= 0) return@LaunchedEffect
+        for (k in 1..3) {
+            val n = actual + k
+            if (n >= total) break
+            val clave = "${f.id}|${cap.url}|$n"
+            if (CachePaginas.cache.get(clave) != null) continue
+            try {
+                CachePaginas.obtener(clave) { decodificarTiras(bytesDePagina(almacen, motor, f, cap, n)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Si falla, la propia página lo mostrará y permitirá reintentar.
+            }
+        }
+    }
+    // Mantiene la pantalla encendida mientras lees online.
+    val vista = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(Unit) {
+        val antes = vista.keepScreenOn
+        vista.keepScreenOn = true
+        onDispose { vista.keepScreenOn = antes }
     }
 
     fun irA(p: Int) {
@@ -1056,18 +1183,32 @@ private fun PaginaOnline(f: FuenteUI, cap: CapituloFuente, i: Int, motor: MotorF
     LaunchedEffect(clave, intento) {
         if (img != null) return@LaunchedEffect
         fallo = null
-        runCatching { decodificar(bytesDePagina(almacen, motor, f, cap, i)) ?: error("Imagen no válida") }
-            .onSuccess { img = it; CachePaginas.cache.put(clave, it) }
-            .onFailure { fallo = it.message ?: "Error al cargar la página" }
+        try {
+            img = CachePaginas.obtener(clave) { decodificarTiras(bytesDePagina(almacen, motor, f, cap, i)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            fallo = e.message ?: "Error al cargar la página"
+        }
     }
 
-    val b = img
-    if (b != null) {
-        if (ajustar) Image(b, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-        else Image(b, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)
+    val tiras = img
+    if (tiras != null) {
+        if (!ajustar) {
+            Column(Modifier.fillMaxWidth()) {
+                tiras.forEach { Image(it, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+            }
+        } else if (tiras.size == 1) {
+            Image(tiras[0], null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+        } else {
+            // Página muy alta en modo paginado: se ajusta al ancho y se desplaza dentro de la página.
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                tiras.forEach { Image(it, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+            }
+        }
     } else {
         Box(
-            (if (ajustar) Modifier.fillMaxSize() else Modifier.fillMaxWidth().height(480.dp))
+            (if (ajustar) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(1f / CachePaginas.proporcion))
                 .background(Color(0xFF0C0C0C)).pressable { if (fallo != null) intento++ },
             Alignment.Center,
         ) {

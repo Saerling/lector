@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.animation.animateColorAsState
@@ -62,8 +63,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.example.lector.ext.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -629,29 +638,117 @@ fun IconoExt(pkg: String, url: String?, modifier: Modifier = Modifier) {
     else ImagenRemota(url, modifier.clip(forma))
 }
 
-/** Cargador de imágenes mínimo (sin librerías): descarga, reduce y guarda en memoria. */
+/**
+ * Cargador de imágenes sin librerías.
+ *  - Memoria: límite por BYTES (no por número de imágenes), así las cuadrículas largas no vuelven a descargar portadas.
+ *  - Disco: guarda los bytes originales en cacheDir/imagenes (máx. ~120 MB); al reabrir la app las portadas salen al instante.
+ *  - Una sola petición por URL aunque varias pantallas la pidan a la vez, y máximo 6 descargas simultáneas.
+ */
 object Imagenes {
-    private val cache = LruCache<String, ImageBitmap>(40)
+    private val memoria = object : LruCache<String, ImageBitmap>(
+        (Runtime.getRuntime().maxMemory() / 8L).coerceIn(16L * 1024 * 1024, 96L * 1024 * 1024).toInt()
+    ) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val enVuelo = HashMap<String, Deferred<ImageBitmap?>>()
+    private val limite = Semaphore(6)
+    @Volatile private var disco: File? = null
+
+    private const val MAX_DISCO = 120L * 1024 * 1024
+
+    /** Prepara la caché en disco. Se puede llamar muchas veces. */
+    fun iniciar(ctx: Context) {
+        if (disco != null) return
+        val carpeta = File(ctx.applicationContext.cacheDir, "imagenes").apply { mkdirs() }
+        disco = carpeta
+        scope.launch { runCatching { recortarDisco(carpeta) } }
+    }
+
+    private fun recortarDisco(carpeta: File) {
+        val archivos = carpeta.listFiles()?.filter { it.isFile } ?: return
+        var total = archivos.sumOf { it.length() }
+        if (total <= MAX_DISCO) return
+        for (a in archivos.sortedBy { it.lastModified() }) {
+            if (total <= MAX_DISCO * 3 / 4) break
+            total -= a.length()
+            a.delete()
+        }
+    }
+
+    /** Devuelve la imagen si ya está en memoria (sin esperar), para pintarla en el primer fotograma. */
+    fun enMemoria(url: String): ImageBitmap? = memoria.get(url)
 
     suspend fun cargar(url: String, cabeceras: Map<String, String> = emptyMap(), maxLado: Int = 512): ImageBitmap? {
-        cache.get(url)?.let { return it }
-        return withContext(Dispatchers.IO) {
-            runCatching {
-                val c = URL(url).openConnection() as HttpURLConnection
+        memoria.get(url)?.let { return it }
+        val tarea = synchronized(enVuelo) {
+            enVuelo.getOrPut(url) {
+                scope.async {
+                    try {
+                        limite.withPermit { obtener(url, cabeceras, maxLado) }
+                    } finally {
+                        synchronized(enVuelo) { enVuelo.remove(url) }
+                    }
+                }
+            }
+        }
+        return tarea.await()
+    }
+
+    private fun archivoDe(url: String): File? {
+        val carpeta = disco ?: return null
+        val h = java.security.MessageDigest.getInstance("SHA-1")
+            .digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
+        return File(carpeta, h)
+    }
+
+    private fun obtener(url: String, cabeceras: Map<String, String>, maxLado: Int): ImageBitmap? {
+        val archivo = archivoDe(url)
+        // 1) Disco.
+        if (archivo != null && archivo.exists() && archivo.length() > 0) {
+            val bytes = runCatching { archivo.readBytes() }.getOrNull()
+            val img = bytes?.let { decodificar(it, maxLado) }
+            if (img != null) {
+                archivo.setLastModified(System.currentTimeMillis())
+                memoria.put(url, img)
+                return img
+            }
+            archivo.delete() // archivo dañado
+        }
+        // 2) Red.
+        val bytes = runCatching {
+            val c = URL(url).openConnection() as HttpURLConnection
+            try {
                 c.connectTimeout = 15_000
                 c.readTimeout = 30_000
                 c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) Lector/1.0")
                 cabeceras.forEach { (k, v) -> c.setRequestProperty(k, v) }
-                val bytes = try { c.inputStream.use { it.readBytes() } } finally { c.disconnect() }
-                val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, medidas)
-                var muestra = 1
-                while (maxOf(medidas.outWidth, medidas.outHeight) / (muestra * 2) >= maxLado) muestra *= 2
-                val opciones = BitmapFactory.Options().apply { inSampleSize = muestra }
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opciones)?.asImageBitmap()
-            }.getOrNull()?.also { cache.put(url, it) }
+                if (c.responseCode !in 200..299) null else c.inputStream.use { it.readBytes() }
+            } finally {
+                c.disconnect()
+            }
+        }.getOrNull() ?: return null
+        val img = decodificar(bytes, maxLado) ?: return null
+        if (archivo != null) {
+            runCatching {
+                val tmp = File(archivo.path + ".tmp")
+                tmp.writeBytes(bytes)
+                if (!tmp.renameTo(archivo)) tmp.delete()
+            }
         }
+        memoria.put(url, img)
+        return img
     }
+
+    private fun decodificar(bytes: ByteArray, maxLado: Int): ImageBitmap? = runCatching {
+        val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, medidas)
+        if (medidas.outWidth <= 0) return@runCatching null
+        var muestra = 1
+        while (maxOf(medidas.outWidth, medidas.outHeight) / (muestra * 2) >= maxLado) muestra *= 2
+        val opciones = BitmapFactory.Options().apply { inSampleSize = muestra }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opciones)?.asImageBitmap()
+    }.getOrNull()
 }
 
 @Composable
@@ -659,16 +756,19 @@ fun ImagenRemota(
     url: String?, modifier: Modifier = Modifier, cabeceras: Map<String, String> = emptyMap(),
     onCargada: ((ImageBitmap) -> Unit)? = null,
 ) {
-    var img by remember(url) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(url) {
+    val ctx = LocalContext.current
+    remember { Imagenes.iniciar(ctx) }
+    // Si ya estaba en memoria se pinta en el primer fotograma, sin parpadeo ni fundido al hacer scroll.
+    var img by remember(url) { mutableStateOf(url?.takeIf { it.isNotBlank() }?.let { Imagenes.enMemoria(it) }) }
+    LaunchedEffect(url, cabeceras) {
         if (!url.isNullOrBlank()) {
-            val cargada = Imagenes.cargar(url, cabeceras)
+            val cargada = img ?: Imagenes.cargar(url, cabeceras)
             img = cargada
             if (cargada != null) onCargada?.invoke(cargada)
         }
     }
-    // La portada aparece con un fundido cuando termina de cargar, en vez de saltar de golpe.
-    val opacidad by animateFloatAsState(if (img != null) 1f else 0f, tween(450), label = "portadaFundido")
+    // La portada nueva aparece con un fundido; la que ya estaba en caché empieza directamente en 1f.
+    val opacidad by animateFloatAsState(if (img != null) 1f else 0f, tween(300), label = "portadaFundido")
     Box(modifier.background(LectorColors.CardHigh)) {
         val i = img
         if (i != null) Image(

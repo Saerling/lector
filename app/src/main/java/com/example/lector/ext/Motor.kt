@@ -57,6 +57,9 @@ interface MotorFuentes {
 
     /** Cabeceras HTTP (Referer, User-Agent...) para cargar las portadas de esta fuente. */
     fun cabeceras(fuente: FuenteUI): Map<String, String> = emptyMap()
+
+    /** Como [cabeceras], pero si hace falta carga la extensión (en segundo plano). Úsalo con produceState. */
+    suspend fun cabecerasCargando(fuente: FuenteUI): Map<String, String> = cabeceras(fuente)
 }
 
 object Motor {

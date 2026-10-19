@@ -52,12 +52,12 @@ fun ArranqueOverlay(alTerminar: () -> Unit) {
     val brillo = remember { Animatable(1f) }
 
     LaunchedEffect(Unit) {
-        entrada.animateTo(1f, tween(280, easing = EnfasisEasing))
-        delay(380)
+        entrada.animateTo(1f, tween(200, easing = EnfasisEasing))
+        delay(160)
         coroutineScope {
-            launch { mover.animateTo(1f, tween(780, easing = EnfasisEasing)) }
-            launch { delay(120); fondo.animateTo(0f, tween(620)) }
-            launch { delay(680); brillo.animateTo(0f, tween(140)) }
+            launch { mover.animateTo(1f, tween(560, easing = EnfasisEasing)) }
+            launch { delay(80); fondo.animateTo(0f, tween(440)) }
+            launch { delay(460); brillo.animateTo(0f, tween(120)) }
         }
         alTerminar()
     }

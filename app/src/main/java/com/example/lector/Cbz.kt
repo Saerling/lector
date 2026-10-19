@@ -86,9 +86,17 @@ object Cbz {
     fun esImagen(nombre: String): Boolean =
         nombre.substringAfterLast('.', "").lowercase() in extensiones
 
+    // Lista de páginas ya leída de cada archivo. Sin esto, leer una página online descargada abría el .zip y
+    // ordenaba TODOS los nombres otra vez en cada página (trabajo cuadrático en capítulos largos).
+    private val listas = object : LinkedHashMap<String, List<String>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<String>>?): Boolean = size > 12
+    }
+
     // Devuelve los nombres de las páginas, en orden natural (1, 2, 10 y no 1, 10, 2).
-    fun paginas(archivo: File): List<String> =
-        ZipFile(archivo).use { zip ->
+    fun paginas(archivo: File): List<String> {
+        val clave = "${archivo.path}|${archivo.length()}|${archivo.lastModified()}"
+        synchronized(listas) { listas[clave]?.let { return it } }
+        val lista = ZipFile(archivo).use { zip ->
             zip.entries().asSequence()
                 .filter { !it.isDirectory }
                 .map { it.name }
@@ -97,6 +105,9 @@ object Cbz {
                 .sortedWith(Comparator { a, b -> compararNatural(a.lowercase(), b.lowercase()) })
                 .toList()
         }
+        synchronized(listas) { listas[clave] = lista }
+        return lista
+    }
 
     // Decodifica una página reduciendo su tamaño si es enorme (ahorra memoria).
     fun decodificar(archivo: File, nombre: String, ladoMax: Int): Bitmap? =

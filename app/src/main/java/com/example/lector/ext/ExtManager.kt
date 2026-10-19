@@ -170,9 +170,13 @@ class ExtManager private constructor(private val app: Context) {
         ContextCompat.registerReceiver(
             app, receptorInstalacion, IntentFilter(ACCION_INSTALAR), ContextCompat.RECEIVER_NOT_EXPORTED,
         )
-        cargarCache()
-        refrescarInstaladas()
-        actualizarLista()
+        // Leer el JSON de ~1500 extensiones y recorrer todos los paquetes del teléfono tardaba cientos de ms
+        // EN EL HILO PRINCIPAL al abrir la app. Ahora va en segundo plano; las pantallas se rellenan solas.
+        scope.launch {
+            cargarCache()
+            leerInstaladas()
+            withContext(Dispatchers.Main) { actualizarLista() }
+        }
         // Motor de fuentes: ejecuta el código de las extensiones de confianza (Komikku source-api).
         runCatching { Motor.actual = MotorExt(app.applicationContext as android.app.Application, this) }
             .onFailure { android.util.Log.e("Lector", "No se pudo iniciar el motor de fuentes", it) }
@@ -349,8 +353,13 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     // ---- Extensiones instaladas ----
-    @Suppress("DEPRECATION")
+    /** Vuelve a leer las extensiones instaladas (en segundo plano). */
     fun refrescarInstaladas() {
+        scope.launch { leerInstaladas() }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun leerInstaladas() {
         val pm = app.packageManager
         val nombres = runCatching { pm.getInstalledPackages(PackageManager.GET_CONFIGURATIONS) }
             .getOrDefault(emptyList())

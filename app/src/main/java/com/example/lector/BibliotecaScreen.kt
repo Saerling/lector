@@ -186,27 +186,31 @@ fun BibliotecaScreen(
     val categoriasVisibles = categorias.filter { mostrarOcultas || !it.oculta }
     val activa = categoriaSel?.takeIf { id -> categoriasVisibles.any { it.id == id } }
 
-    // Un cómic con alguna categoría oculta se esconde en todas partes (también en "Continuar").
-    val visibles = comics.filter { c ->
-        mostrarOcultas || asignaciones[c.id].orEmpty().none { it in idsOcultas }
-    }
+    // Filtrar y ordenar es trabajo caro con bibliotecas grandes: solo se rehace si cambia algo de lo que depende
+    // (antes se repetía en cada recomposición, p. ej. al marcar un cómic o durante las animaciones).
+    val lista = remember(comics, asignaciones, idsOcultas, mostrarOcultas, activa, filtro, consulta, orden, ascendente) {
+        // Un cómic con alguna categoría oculta se esconde en todas partes (también en "Continuar").
+        val visibles = comics.filter { c ->
+            mostrarOcultas || asignaciones[c.id].orEmpty().none { it in idsOcultas }
+        }
+        val texto = consulta.trim()
+        val filtrados = visibles
+            .filter { c -> activa == null || activa in asignaciones[c.id].orEmpty() }
+            .filter { c -> filtro == Filtro.TODOS || estadoDe(c) == filtro }
+            .filter { c -> texto.isEmpty() || c.titulo.contains(texto, ignoreCase = true) }
 
-    val filtrados = visibles
-        .filter { c -> activa == null || activa in asignaciones[c.id].orEmpty() }
-        .filter { c -> filtro == Filtro.TODOS || estadoDe(c) == filtro }
-        .filter { c -> consulta.isBlank() || c.titulo.contains(consulta.trim(), ignoreCase = true) }
-
-    val ordenados = when (orden) {
-        Orden.TITULO -> filtrados.sortedWith(
-            Comparator { a, b ->
-                Cbz.compararNatural(a.titulo.lowercase(), b.titulo.lowercase())
-            },
-        )
-        Orden.ULTIMO_LEIDO -> filtrados.sortedBy { it.leido }
-        Orden.PROGRESO -> filtrados.sortedBy { progresoDe(it) }
-        Orden.ANADIDO -> filtrados
+        val ordenados = when (orden) {
+            Orden.TITULO -> {
+                val claves = HashMap<String, String>(filtrados.size)
+                filtrados.forEach { claves[it.id] = it.titulo.lowercase() }
+                filtrados.sortedWith(Comparator { a, b -> Cbz.compararNatural(claves.getValue(a.id), claves.getValue(b.id)) })
+            }
+            Orden.ULTIMO_LEIDO -> filtrados.sortedBy { it.leido }
+            Orden.PROGRESO -> filtrados.sortedBy { progresoDe(it) }
+            Orden.ANADIDO -> filtrados
+        }
+        if (ascendente) ordenados else ordenados.reversed()
     }
-    val lista = if (ascendente) ordenados else ordenados.reversed()
 
     // Solo cuentan los seleccionados que se ven ahora mismo.
     val seleccionados = lista.filter { it.id in seleccion }

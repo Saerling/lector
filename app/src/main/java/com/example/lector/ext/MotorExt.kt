@@ -17,6 +17,9 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.ChildFirstPathClassLoader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -114,7 +117,10 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
 
     // ---- Ficha, capítulos y páginas ----
 
-    private val paginasCache = ConcurrentHashMap<String, List<Page>>()
+    // Lista de páginas por capítulo; acotada (los últimos 24 capítulos) para que no crezca sin fin.
+    private val paginasCache = object : java.util.LinkedHashMap<String, List<Page>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Page>>?): Boolean = size > 24
+    }
 
     private fun sManga(m: MangaFuente) = SManga.create().apply { url = m.url; title = m.titulo }
 
@@ -144,9 +150,9 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
 
     private suspend fun paginasDe(fuente: FuenteUI, capitulo: CapituloFuente): List<Page> {
         val clave = "${fuente.id}|${capitulo.url}"
-        paginasCache[clave]?.let { return it }
+        synchronized(paginasCache) { paginasCache[clave] }?.let { return it }
         val lista = fuenteReal(fuente).getPageList(sCapitulo(capitulo))
-        paginasCache[clave] = lista
+        synchronized(paginasCache) { paginasCache[clave] = lista }
         return lista
     }
 
@@ -169,18 +175,25 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         val tmp = File(destino.parentFile, destino.name + ".tmp")
         try {
             ZipOutputStream(tmp.outputStream().buffered()).use { zip ->
-                for (i in 0 until total) {
-                    ensureActive() // permite cancelar la descarga entre página y página
-                    val bytes = imagenPagina(fuente, capitulo, i)
-                    val ext = when {
-                        bytes.size > 4 && bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() -> "png"
-                        bytes.size > 12 && bytes[0] == 'R'.code.toByte() && bytes[8] == 'W'.code.toByte() -> "webp"
-                        else -> "jpg"
+                zip.setLevel(java.util.zip.Deflater.NO_COMPRESSION) // las imágenes ya vienen comprimidas
+                var i = 0
+                while (i < total) {
+                    ensureActive() // permite cancelar la descarga entre grupos de páginas
+                    val grupo = (i until minOf(i + 3, total)).toList()
+                    // Se piden 3 páginas a la vez (antes era una por una) y se escriben en orden.
+                    val datos = coroutineScope { grupo.map { n -> async { imagenPagina(fuente, capitulo, n) } }.awaitAll() }
+                    for ((k, bytes) in datos.withIndex()) {
+                        val ext = when {
+                            bytes.size > 4 && bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() -> "png"
+                            bytes.size > 12 && bytes[0] == 'R'.code.toByte() && bytes[8] == 'W'.code.toByte() -> "webp"
+                            else -> "jpg"
+                        }
+                        zip.putNextEntry(ZipEntry("%04d.%s".format(grupo[k] + 1, ext)))
+                        zip.write(bytes)
+                        zip.closeEntry()
+                        progreso(grupo[k] + 1, total)
                     }
-                    zip.putNextEntry(ZipEntry("%04d.%s".format(i + 1, ext)))
-                    zip.write(bytes)
-                    zip.closeEntry()
-                    progreso(i + 1, total)
+                    i += grupo.size
                 }
             }
             destino.delete()
@@ -194,8 +207,28 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         (fuenteReal(fuente) as? HttpSource)?.getMangaUrl(sManga(manga))?.takeIf { it.startsWith("http") }
     }.getOrNull()
 
-    override fun cabeceras(fuente: FuenteUI): Map<String, String> = runCatching {
-        val h = (fuenteReal(fuente) as? HttpSource)?.headers ?: return emptyMap()
+    private val cabecerasCache = ConcurrentHashMap<Long, Map<String, String>>()
+
+    private fun calcularCabeceras(fuente: FuenteUI): Map<String, String> = runCatching {
+        val h = (fuenteReal(fuente) as? HttpSource)?.headers ?: return@runCatching emptyMap<String, String>()
         h.names().associateWith { h[it].orEmpty() }
     }.getOrDefault(emptyMap())
+
+    /**
+     * Versión rápida, segura para el hilo de la interfaz: solo responde si la extensión ya está cargada
+     * (cargar un APK tarda cientos de ms). Si no, devuelve vacío; usa [cabecerasCargando] fuera del hilo principal.
+     */
+    override fun cabeceras(fuente: FuenteUI): Map<String, String> {
+        cabecerasCache[fuente.id]?.let { return it }
+        val e = ext.instaladas.firstOrNull { it.pkg == fuente.pkg } ?: return emptyMap()
+        if (!cache.containsKey("${e.pkg}:${e.versionCode}:${e.firma}")) return emptyMap()
+        return calcularCabeceras(fuente).also { if (it.isNotEmpty()) cabecerasCache[fuente.id] = it }
+    }
+
+    override suspend fun cabecerasCargando(fuente: FuenteUI): Map<String, String> {
+        cabecerasCache[fuente.id]?.let { return it }
+        return withContext(Dispatchers.IO) {
+            calcularCabeceras(fuente).also { if (it.isNotEmpty()) cabecerasCache[fuente.id] = it }
+        }
+    }
 }

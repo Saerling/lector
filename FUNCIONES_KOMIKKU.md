@@ -10,13 +10,20 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 |---|---|---|
 | Leer online desde fuentes | ✅ | Explorar → ficha → lector (`FuenteManga.kt`). Ejecuta las extensiones de confianza. |
 | Leer contenido descargado | ✅ | Descargas por capítulo (.cbz); el lector online las usa sin conexión. También .cbz/carpetas locales. |
-| Lector configurable (visores, direcciones) | 🟡 | Online: tira vertical / paginado → / paginado ←. Local: ajustes de brillo, tinte, fondo, orientación. Faltan más ajustes para el lector online. |
+| Lector configurable (visores, direcciones) | 🟡 | Online: tira vertical / paginado → / paginado ←, pantalla siempre encendida, precarga de 3 páginas y páginas muy altas cortadas en tiras. Local: ajustes de brillo, tinte, fondo, orientación. Faltan más ajustes para el lector online (zoom, brillo, recorte de bordes). |
 | Seguimiento (trackers) | 🟡 | Solo **AniList**. Faltan MyAnimeList, Kitsu, MangaUpdates, Shikimori, Bangumi. |
 | Categorías para organizar la biblioteca | ✅ | Con pantalla «Editar categorías» (arrastrar, renombrar, ocultar, borrar). |
 | Temas claro / oscuro | 🟡 | Solo esquema oscuro (`darkColorScheme`). Hay color de acento y color según la portada. |
 | Programar la actualización de la biblioteca | 🟡 | Pestaña **Actualizaciones**: revisa al abrirla (cada 6 h) o con el botón. No hay revisión en segundo plano ni notificaciones. |
-| Copias de seguridad | 🟡 | Archivo .json manual. Faltan copias automáticas/en la nube, y **los mangas en línea de la biblioteca no entran en la copia**. |
+| Copias de seguridad | 🟡 | Archivo .json manual. **Ahora la copia incluye los mangas en línea** (fuente, dirección, progreso y categorías; la portada se vuelve a bajar). Faltan copias automáticas/en la nube y el historial/capítulos leídos. |
 | Botón «continuar leyendo» en la biblioteca | 🟡 | «Continuar leyendo» solo para cómics locales; en mangas online, «Reanudar» en la ficha. |
+
+## Descargas (Mihon)
+| Función | Estado | Notas |
+|---|---|---|
+| Cola de descargas | 🟡 | **Nuevo:** máximo 2 capítulos a la vez, el resto espera y se puede cancelar. Sin pausa ni persistencia al cerrar la app. |
+| Descargar siguientes / no leídos / todos | ✅ | **Nuevo:** menú de descarga junto a «Capítulos» en la ficha. |
+| Borrar al leer, descargar al leer | ❌ | |
 
 ## Funciones propias de Komikku
 | Función | Estado | Notas |
@@ -54,7 +61,7 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Categorías dinámicas (agrupar biblioteca por fuente, estado…) | ❌ |
 | Fondo inteligente en el lector | ❌ |
 | Autodesplazamiento (autoscroll) | ❌ |
-| Precarga de páginas / tamaño de caché configurables | ❌ (precarga fija de 1 página) |
+| Precarga de páginas / tamaño de caché configurables | 🟡 (precarga fija de 3 páginas; caché de imágenes en disco de ~120 MB fija; no configurables) |
 | Importar fuentes/extensiones en lote | ❌ |
 | Ajustes avanzados de fuentes (activar/desactivar todas) | 🟡 |
 | Pulsar etiqueta = buscar | ❌ |

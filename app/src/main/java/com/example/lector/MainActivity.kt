@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         almacen = Almacen(applicationContext)
+        com.example.lector.ui.Imagenes.iniciar(applicationContext)
         procesarEnlace(intent)
         setContent {
             App(almacen)

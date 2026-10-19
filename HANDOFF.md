@@ -235,6 +235,34 @@ Se quitó `AccionFicha` (ya no se usa). Ojo: `TemaPortada` existe como clase en 
 - `FUNCIONES_KOMIKKU.md`: tabla de funciones de Komikku (README oficial) frente a las nuestras, con orden sugerido.
 - Pendiente de verificar: el esquema de `repo.json` (`meta.name`, `meta.website`) y el «formato de índice más nuevo» que menciona el changelog de Komikku 1.14 (no está soportado: un índice que empiece por `{` se interpreta como protobuf y falla).
 
+## 2i. PASO 9 — Optimización y revisión estática (2026-10-19, **SIN compilar ni probar**: el entorno no tenía Kotlin/Gradle ni red)
+Se revisó el código leyéndolo (no ejecutándolo). Lo que se cambió y por qué:
+
+**Rendimiento**
+- `ui/Explorar.kt` → `Imagenes`/`ImagenRemota`: caché en memoria por **bytes** (antes 40 imágenes: las cuadrículas largas volvían a descargar portadas), **caché en disco** (`cacheDir/imagenes`, ~120 MB), una sola petición por URL, máx. 6 descargas a la vez, no decodifica respuestas de error. Una portada que ya está en memoria se pinta en el primer fotograma (sin parpadeo). `ImagenRemota` reintenta si cambian las cabeceras.
+- `Data.kt` → `Almacen`: la biblioteca, las categorías y las asignaciones se leen del JSON **una vez** y viven en memoria (antes se reparseaban en cada consulta, incluso al recomponer). Lectura-modificación-escritura bajo un mismo cerrojo (`modificar { }`, `@Synchronized`) para no perder cambios entre el hilo de la interfaz y el actualizador/descargas. `estaDescargado` usa un conjunto en memoria (antes: SHA-256 + acceso a disco **por fila** de la ficha).
+- `Cbz.paginas`: la lista de páginas de cada .cbz se guarda en una caché (antes cada página del lector online descargado reabría el zip y reordenaba todos los nombres).
+- `ext/MotorExt.kt`: `cabeceras()` ya **no carga el APK de la extensión** si no estaba cargada (se hacía en el hilo principal desde `LectorApp`); nueva `cabecerasCargando()` (suspend) para pedirlas en segundo plano. Caché de cabeceras por fuente; caché de páginas acotada a 24 capítulos; `descargarCbz` baja 3 páginas a la vez.
+- `ext/ExtManager.kt`: la lectura del JSON de extensiones disponibles, el listado de paquetes instalados y las firmas SHA-256 pasaron del hilo principal a segundo plano (arranque más rápido).
+- `BibliotecaScreen.kt`: filtrar/ordenar la lista va en `remember` con sus dependencias (antes se rehacía en cada recomposición).
+- `ui/FuenteManga.kt`: `sig`/`hayLeidos` memorizados; lista de capítulos con `key` estable.
+- Animaciones: arranque de ~1,45 s a ~0,95 s; transiciones de pestañas y capas ~25 % más cortas; entrada escalonada de listas más corta.
+
+**Errores corregidos**
+- Lector online: las páginas muy altas (webtoon) se decodificaban como **un solo bitmap** que la GPU no dibuja (salían en blanco o cerraban la app). Ahora se cortan en tiras de 4096 px. El hueco de carga usa la proporción de la última página (antes 480 dp fijos → la tira «saltaba» al llegar la imagen).
+- `LectorApp`: al restaurar la app tras morir el proceso, `ruta` volvía pero `mangaSel`/`capsLectura` no (pantalla «No se puede abrir el capítulo»). Ahora vuelve a la pestaña.
+- `GestorDescargas` usaba `Dispatchers.Main.immediate`: un fallo síncrono podía dejar un capítulo «descargando» para siempre. Ahora `Dispatchers.Main`.
+
+**Funciones nuevas**
+- Cola de descargas (2 a la vez) y menú «Descargar» en la ficha: siguiente, siguientes 5/10, no leídos, todos.
+- Copia de seguridad: incluye los mangas en línea (clave `en_linea`; compatible con copias antiguas).
+- Lector online: precarga de las 3 páginas siguientes, pantalla encendida mientras lees.
+
+**Sin probar / riesgos conocidos**
+- Todo lo anterior. Primer paso al retomar: compilar. Puntos donde más probable es un error de compilación: `Imagenes` (Explorar.kt), `CachePaginas`/`decodificarTiras`/`PaginaOnline` y el menú de descargas (FuenteManga.kt), `modificar { }` (Data.kt), `descargarCbz` (MotorExt.kt).
+- `press3D`/`pressableCon` usan `composed {}` en cada tarjeta de las cuadrículas (costoso): conviene migrarlos a `Modifier.Node` cuando se pueda probar.
+- La caché de disco de imágenes se indexa solo por URL (no por cabeceras).
+
 ## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.

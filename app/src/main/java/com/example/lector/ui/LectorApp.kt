@@ -85,6 +85,13 @@ fun Inicio(
     // Al cerrar cualquier página que estaba encima, relee la biblioteca (progreso, "último leído", etc.).
     LaunchedEffect(hayCapa) { if (!hayCapa) alRecargar() }
 
+    // `ruta` se restaura tras morir el proceso, pero el manga y los capítulos abiertos viven solo en memoria:
+    // sin esto se veía una ficha o un lector vacíos ("No se puede abrir el capítulo").
+    LaunchedEffect(ruta) {
+        if ((ruta == Ruta.Ficha || ruta == Ruta.LeerOnline) && mangaSel == null) ruta = null
+        else if (ruta == Ruta.LeerOnline && capsLectura.isEmpty()) ruta = Ruta.Ficha
+    }
+
     BackHandler(enabled = ruta != null && detalleId == null) {
         ruta = if (ruta == Ruta.Ficha && desdeNovedades) null else ruta?.padre()
     }
@@ -116,8 +123,8 @@ fun Inicio(
             targetState = tab, label = "tabs",
             transitionSpec = {
                 ContentTransform(
-                    fadeIn(tween(280)) + scaleIn(tween(280), initialScale = 0.96f),
-                    fadeOut(tween(160)),
+                    fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.97f),
+                    fadeOut(tween(110)),
                 )
             }
         ) { t ->
@@ -155,7 +162,10 @@ fun Inicio(
                             )
                         },
                         cabecerasDe = { id ->
-                            ext.fuentes.firstOrNull { it.id == id }?.let { Motor.actual?.cabeceras(it) }.orEmpty()
+                            // Ya corre en un hilo de fondo: aquí sí se puede cargar la extensión.
+                            ext.fuentes.firstOrNull { it.id == id }
+                                ?.let { f -> Motor.actual?.let { m -> kotlinx.coroutines.runBlocking { m.cabecerasCargando(f) } } }
+                                .orEmpty()
                         },
                     )
                 }
@@ -167,7 +177,10 @@ fun Inicio(
                             abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, e.capUrl to e.pagina)
                         },
                         cabecerasDe = { id ->
-                            ext.fuentes.firstOrNull { it.id == id }?.let { Motor.actual?.cabeceras(it) }.orEmpty()
+                            // Ya corre en un hilo de fondo: aquí sí se puede cargar la extensión.
+                            ext.fuentes.firstOrNull { it.id == id }
+                                ?.let { f -> Motor.actual?.let { m -> kotlinx.coroutines.runBlocking { m.cabecerasCargando(f) } } }
+                                .orEmpty()
                         },
                     )
                 }
@@ -184,11 +197,11 @@ fun Inicio(
             targetState = capa, label = "capa",
             transitionSpec = {
                 ContentTransform(
-                    slideInHorizontally(tween(420, easing = EnfasisEasing)) { it / 6 } +
-                        scaleIn(tween(420, easing = EnfasisEasing), initialScale = 0.95f) +
-                        fadeIn(tween(340, easing = EnfasisEasing)),
-                    slideOutHorizontally(tween(300, easing = EnfasisEasing)) { -it / 6 } +
-                        scaleOut(tween(300, easing = EnfasisEasing), targetScale = 0.96f) + fadeOut(tween(200)),
+                    slideInHorizontally(tween(330, easing = EnfasisEasing)) { it / 8 } +
+                        scaleIn(tween(330, easing = EnfasisEasing), initialScale = 0.96f) +
+                        fadeIn(tween(260, easing = EnfasisEasing)),
+                    slideOutHorizontally(tween(240, easing = EnfasisEasing)) { -it / 8 } +
+                        scaleOut(tween(240, easing = EnfasisEasing), targetScale = 0.97f) + fadeOut(tween(160)),
                 )
             }
         ) { clave ->
@@ -246,8 +259,8 @@ fun Inicio(
         AnimatedVisibility(
             visible = !hayCapa,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(tween(300)) { it } + fadeIn(tween(300)),
-            exit = slideOutVertically(tween(250)) { it } + fadeOut(tween(200)),
+            enter = slideInVertically(tween(240)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(160)),
         ) {
             Column(
                 Modifier.navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 8.dp)
@@ -256,8 +269,13 @@ fun Inicio(
                 if (tab != LectorTab.Library) {
                     if (ultimoLinea != null && (ultimo == null || ultimoLinea.leido >= ultimo.leido)) {
                         val e = ultimoLinea
-                        val cabeceras = ext.fuentes.firstOrNull { it.id == e.fuenteId }
-                            ?.let { Motor.actual?.cabeceras(it) }.orEmpty()
+                        // Cargar la extensión tarda: se pide en segundo plano y, mientras, se usa lo que ya haya en caché.
+                        val fuenteMini = ext.fuentes.firstOrNull { it.id == e.fuenteId }
+                        val cabeceras by produceState(
+                            initialValue = fuenteMini?.let { Motor.actual?.cabeceras(it) }.orEmpty(), fuenteMini?.id,
+                        ) {
+                            value = fuenteMini?.let { Motor.actual?.cabecerasCargando(it) }.orEmpty()
+                        }
                         MiniReaderGenerico(
                             e.titulo, e.capNombre,
                             onClick = { abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, null) },

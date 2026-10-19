@@ -32,17 +32,17 @@ import kotlinx.coroutines.delay
  * uno tras otro. Solo ocurre la primera vez; al volver a hacer scroll ya no se repite.
  */
 @Composable
-fun Modifier.entrada(indice: Int, pasoMs: Int = 55): Modifier {
+fun Modifier.entrada(indice: Int, pasoMs: Int = 35): Modifier {
     var visible by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         if (!visible) {
-            delay((indice.coerceIn(0, 10) * pasoMs).toLong())
+            delay((indice.coerceIn(0, 8) * pasoMs).toLong())
             visible = true
         }
     }
     val t by animateFloatAsState(
         if (visible) 1f else 0f,
-        tween(520, easing = EnfasisEasing), label = "entrada"
+        tween(380, easing = EnfasisEasing), label = "entrada"
     )
     val subida = with(androidx.compose.ui.platform.LocalDensity.current) { 20.dp.toPx() }
     return this.graphicsLayer {
