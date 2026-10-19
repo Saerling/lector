@@ -47,13 +47,19 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     if (comics.isEmpty()) {
-        Column(
-            modifier.fillMaxSize().padding(32.dp),
-            verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            LText("Tu biblioteca está vacía", LectorType.Hero)
-            Spacer(Modifier.height(16.dp))
-            PillButton("Añadir cómic", Icons.Rounded.Add, onAdd)
+        Box(modifier.fillMaxSize()) {
+            Column(
+                Modifier.fillMaxSize().padding(32.dp),
+                verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                LText("Tu biblioteca está vacía", LectorType.Hero)
+                Spacer(Modifier.height(16.dp))
+                PillButton("Añadir cómic", Icons.Rounded.Add, onAdd)
+            }
+            LogoApp(
+                Modifier.align(Alignment.TopStart).statusBarsPadding()
+                    .padding(start = LogoEsquinaInicio, top = LogoEsquinaArriba).size(LogoEsquina)
+            )
         }
         return
     }
@@ -97,9 +103,15 @@ fun HomeScreen(
             Box(
                 Modifier.fillMaxWidth()
                     .background(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(0.92f), Color.Transparent)))
-                    .statusBarsPadding().padding(horizontal = 24.dp, vertical = 12.dp)
+                    .statusBarsPadding().padding(start = 76.dp, end = 24.dp, top = 12.dp, bottom = 12.dp)
             ) { LText("Inicio", LectorType.Display) }
         }
+
+        // El icono de la app, fijo en la esquina (a donde llega la animación de arranque).
+        LogoApp(
+            Modifier.align(Alignment.TopStart).statusBarsPadding()
+                .padding(start = LogoEsquinaInicio, top = LogoEsquinaArriba).size(LogoEsquina)
+        )
     }
 }
 

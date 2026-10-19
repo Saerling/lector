@@ -12,7 +12,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.lector.ui.ArranqueOverlay
 import com.example.lector.ui.Inicio
 import com.example.lector.ui.LectorTab
 import kotlinx.coroutines.Dispatchers
@@ -98,8 +101,13 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun App(almacen: Almacen) {
+    // La animación de arranque solo se ve al abrir la app (no al girar la pantalla).
+    var arranque by rememberSaveable { mutableStateOf(true) }
     LectorTheme(acento = colorDePaleta(almacen.paleta)) {
-        Contenido(almacen)
+        Box(Modifier.fillMaxSize()) {
+            Contenido(almacen)
+            if (arranque) ArranqueOverlay { arranque = false }
+        }
     }
 }
 
