@@ -391,7 +391,7 @@ private fun NavegarFuente(
     LaunchedEffect(modo, enviada, recarga) {
         lista.clear(); pagina = 1; hay = true; error = null; cargando = true
         runCatching { pedir(1) }
-            .onSuccess { lista.addAll(it.mangas); hay = it.haySiguiente }
+            .onSuccess { lista.addAll(it.mangas.distinctBy { m -> m.url }); hay = it.haySiguiente }
             .onFailure { error = it.message ?: "No se pudo cargar" }
         cargando = false
     }
@@ -467,7 +467,13 @@ private fun NavegarFuente(
             if (cargando || !hay || lista.isEmpty()) return
             cargando = true
             runCatching { pedir(pagina + 1) }
-                .onSuccess { lista.addAll(it.mangas.filter { n -> lista.none { v -> v.url == n.url } }); hay = it.haySiguiente; pagina += 1 }
+                .onSuccess {
+                    // Las fuentes a veces repiten un manga (en la misma página o en la siguiente): se descarta,
+                    // porque dos elementos con la misma clave cierran la app.
+                    val ya = lista.mapTo(HashSet()) { v -> v.url }
+                    lista.addAll(it.mangas.filter { n -> ya.add(n.url) })
+                    hay = it.haySiguiente; pagina += 1
+                }
                 .onFailure { error = it.message ?: "No se pudo cargar" }
             cargando = false
         }

@@ -69,7 +69,7 @@ fun BusquedaGlobalScreen(
             launch {
                 limite.withPermit {
                     resultados[f.id] = try {
-                        EstadoBusqueda.Hecho(motor.buscar(f, enviada.trim(), 1).mangas)
+                        EstadoBusqueda.Hecho(motor.buscar(f, enviada.trim(), 1).mangas.distinctBy { it.url })
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {

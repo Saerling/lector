@@ -1,5 +1,8 @@
 package com.example.lector
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import android.Manifest
 import android.app.KeyguardManager
 import android.content.Intent
@@ -61,6 +64,8 @@ class MainActivity : ComponentActivity() {
 
     // Bloqueo de la app (Ajustes → Seguridad): se pide el PIN / huella del sistema al volver.
     private var bloqueada by mutableStateOf(false)
+    // Detalle del último cierre inesperado (se enseña al abrir).
+    private var fallo by mutableStateOf<String?>(null)
     private var salioEn = 0L
 
     private val desbloqueo = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
@@ -70,6 +75,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Fallos.instalar(applicationContext)
+        if (savedInstanceState == null) fallo = Fallos.recoger(applicationContext)
         almacen = Almacen.obtener(applicationContext)
         aplicarBarras(oscuro = almacen.modoTema != ModoTema.CLARO)
         com.example.lector.ui.Imagenes.iniciar(applicationContext)
@@ -87,6 +94,7 @@ class MainActivity : ComponentActivity() {
                 bloqueada = bloqueada, alDesbloquear = ::pedirDesbloqueo,
                 alCambiarTema = { aplicarBarras(it) },
             )
+            fallo?.let { texto -> DialogoFallo(texto) { fallo = null } }
         }
     }
 
@@ -277,7 +285,7 @@ private fun Contenido(almacen: Almacen, destino: String?, alConsumirDestino: () 
                 }
                 importando = false
                 if (nuevo == null) {
-                    Toast.makeText(contexto, "No se pudo abrir ese archivo", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(contexto, "No se pudo abrir ese archivo (¿PDF con contraseña o archivo dañado?)", Toast.LENGTH_SHORT).show()
                 }
                 comics = almacen.cargar()
             }
@@ -354,4 +362,31 @@ private fun Contenido(almacen: Almacen, destino: String?, alConsumirDestino: () 
             }
         }
     }
+}
+
+/** Aviso de que la app se cerró la última vez, con el detalle para copiar y mandarlo. */
+@Composable
+private fun DialogoFallo(texto: String, alCerrar: () -> Unit) {
+    val ctx = LocalContext.current
+    AlertDialog(
+        onDismissRequest = alCerrar,
+        title = { Text("La app se cerró por un error") },
+        text = {
+            androidx.compose.foundation.layout.Column(
+                Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())
+            ) {
+                Text("Copia este detalle y mándalo para poder arreglarlo:")
+                Spacer(Modifier.size(8.dp))
+                Text(texto, style = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp)))
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("Error de Lector", texto))
+                Toast.makeText(ctx, "Copiado", Toast.LENGTH_SHORT).show()
+            }) { Text("Copiar") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = alCerrar) { Text("Cerrar") } },
+    )
 }

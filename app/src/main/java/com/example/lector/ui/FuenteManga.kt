@@ -222,7 +222,7 @@ fun FichaMangaScreen(
     // Recomendaciones (AniList) del título.
     LaunchedEffect(tituloFicha, fi != null) {
         if (fi != null && recomendaciones == null) {
-            recomendaciones = withContext(Dispatchers.IO) { runCatching { Anilist.recomendaciones(tituloFicha) }.getOrDefault(emptyList()) }
+            recomendaciones = withContext(Dispatchers.IO) { runCatching { Anilist.recomendaciones(tituloFicha).distinctBy { it.id } }.getOrDefault(emptyList()) }
         }
     }
 

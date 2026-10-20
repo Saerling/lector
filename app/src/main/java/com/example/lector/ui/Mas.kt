@@ -50,7 +50,7 @@ fun MasScreen(almacen: Almacen, onRuta: (Ruta) -> Unit, onAdd: () -> Unit, onAdd
         Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), Alignment.Center) { LogoApp(Modifier.size(96.dp)) }
         FilaSwitch("Modo incógnito", "No se anota el historial de lectura", almacen.incognito) { almacen.incognito = it }
         Divisor()
-        FilaAjuste(Icons.Rounded.Add, "Añadir cómic", "Archivo .cbz o .zip de tu móvil", onAdd)
+        FilaAjuste(Icons.Rounded.Add, "Añadir cómic", "Archivo .cbz, .zip o .pdf de tu móvil", onAdd)
         FilaAjuste(Icons.Rounded.Add, "Añadir carpeta", "Una carpeta de imágenes (o con capítulos)", onAddFolder)
         Divisor()
         val pendientes = Descargas.cola.size

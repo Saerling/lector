@@ -736,6 +736,13 @@ class Almacen private constructor(private val contexto: Context) {
         val id = UUID.randomUUID().toString()
         val archivo = archivoDe(id)
 
+        // PDF: cada página se dibuja como imagen y se empaqueta como .cbz (así el visor lo abre igual).
+        val mime = runCatching { contexto.contentResolver.getType(uri) }.getOrNull()
+        if (mime == "application/pdf" || nombre.endsWith(".pdf", ignoreCase = true)) {
+            return if (Pdf.aCbz(contexto, uri, archivo)) registrar(id, archivo, nombre.substringBeforeLast('.'))
+            else { archivo.delete(); null }
+        }
+
         val copiado = contexto.contentResolver.openInputStream(uri)?.use { entrada ->
             archivo.outputStream().use { salida -> entrada.copyTo(salida) }
             true
