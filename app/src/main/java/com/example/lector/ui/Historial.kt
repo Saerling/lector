@@ -87,7 +87,7 @@ fun HistorialScreen(
             Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LText("Historial", LectorType.Display.copy(fontSize = 30.sp, letterSpacing = (-1).sp), Modifier.weight(1f), maxLines = 1)
+            LText("Historial", LectorType.Display, Modifier.weight(1f), maxLines = 1)
             Box(Modifier.size(44.dp).pressable { buscando = !buscando; if (!buscando) consulta = "" }, Alignment.Center) {
                 Icon(if (buscando) Icons.Rounded.Close else Icons.Rounded.Search, "Buscar", tint = LectorColors.Text)
             }

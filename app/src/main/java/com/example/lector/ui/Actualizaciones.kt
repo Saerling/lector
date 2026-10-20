@@ -136,7 +136,7 @@ fun ActualizacionesScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        LText("Actualizaciones", LectorType.Display.copy(fontSize = 30.sp, letterSpacing = (-1).sp), maxLines = 1)
+                        LText("Actualizaciones", LectorType.Display, maxLines = 1)
                         LText(
                             if (Actualizador.corriendo) {
                                 if (Actualizador.total > 0) "Revisando ${Actualizador.hechas} de ${Actualizador.total}…" else "Preparando la revisión…"

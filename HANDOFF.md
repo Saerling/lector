@@ -380,6 +380,33 @@ Rama de GitHub: `claude/komikku` (no se tocó `main`). El workflow compila el AP
   (merge), feed multi‑fuente, portada panorámica, extensiones privadas, búsquedas guardadas CON filtros.
 - La migración sigue sin mover las descargas de la fuente vieja.
 
+## 2p. PASO 16 — Arreglo de extensiones en el APK release + diseño de musicfy (2026-10-20)
+**Arreglo:** en el APK *release*, R8 marcaba como `final` métodos de la API de fuentes que la app no sobrescribe
+(p. ej. `HttpSource.fetchRelatedMangaList`) y las extensiones que sí los sobrescriben no cargaban
+(«overrides final method»). `proguard-rules.pro` ahora usa `-keep class … { *; }` SIN `allowoptimization`
+para `eu.kanade`, `tachiyomi`, `kotlin`, `okhttp3`, `okio`, `jsoup`, `rx`, `quickjs`, `injekt`, `androidx.preference`.
+
+**Diseño de musicfy** (https://github.com/realidkroo/musicfy, GPL‑3.0): se reprodujo su lenguaje visual con
+código PROPIO (no se copió código suyo):
+- `ui/Cristal.kt` (nuevo): cristal esmerilado. `Modifier.raizCristal(estado)` graba la app en un `GraphicsLayer`;
+  `FondoCristal` lo vuelve a dibujar desenfocado (RenderEffect, Android 12+) con tinte #131313 al 78 %, grano y
+  línea de 2 px; `CristalProgresivo` para cabeceras. `CristalApp` = lo que hay bajo la barra. En Android 8–11 no
+  hay desenfoque (tinte casi opaco). Una pieza de cristal NUNCA debe estar dentro de la raíz que dibuja.
+- `ui/Theme.kt` / `Theme.kt`: grises de musicfy (#141416 campos, #0B0B0C hojas, #2C2C2E botones…), Inter
+  SemiBold con interletrado −0.05 em, paleta por defecto **«Musicfy»** (gris claro monocromo; en tema claro, casi negro).
+- `ui/Components.kt`: barra flotante de cristal de 64 dp con píldora que se estira al cambiar de pestaña, iconos
+  contorno→relleno y rebote; mini lector de cristal con portada redonda y anillo de progreso.
+- `ui/Estilo.kt`: avisos como las tarjetas de musicfy (caen con muelle, se cierran arrastrando hacia arriba).
+- `ui/Filas.kt`: `PaginaAjustes` con título grande que se pliega junto al botón atrás (con desenfoque) sobre una
+  cabecera de cristal; filas en tarjetas con icono en círculo claro; `Interruptor` y `Marca` propios; `ChipSel`
+  con esquinas que rebotan; `TituloSeccion` en mayúsculas grises.
+- `ui/Comunes.kt`: `HojaLector` (hojas #0B0B0C, asa gris) y `Hojas`: con una hoja abierta la app se aleja (MainActivity).
+- `ui/LectorApp.kt`: pestañas que se deslizan hacia su lado; al abrir una ficha la página de debajo retrocede
+  (escala 0.92, se apaga) y la ficha crece con muelle; al cerrar, curva de 560 ms.
+- `ui/Explorar.kt`: `CampoBusqueda` como el de musicfy (48 dp, foco más claro, botón borrar).
+- Sin probar en móvil. Pendiente si se quiere más parecido: cabeceras plegables con buscador en Explorar /
+  Biblioteca (el `SearchGlassTopBar` de musicfy) y la transición «la portada crece hasta la página» (shared element).
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,
