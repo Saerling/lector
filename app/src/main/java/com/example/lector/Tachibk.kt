@@ -146,7 +146,13 @@ object Tachibk {
         val paginas = HashMap<String, Int>()
         val nuevos = ArrayList<Almacen.NuevoEnLinea>()
         val historialNuevo = ArrayList<EntradaHistorial>()
-        val extras = ArrayList<TachibkFormato.MangaLigero>() // los que traen categorías, AniList o datos editados
+        // De los que traen categorías, AniList o datos editados se guarda solo eso (no sus capítulos).
+        class Extra(
+            val fuente: Long, val url: String, val autor: String?, val descripcion: String?, val generos: List<String>, val estado: Int,
+            val categorias: List<Long>, val seguimiento: List<TachibkFormato.Seguimiento>,
+            val tituloPropio: String?, val autorPropio: String?, val descripcionPropia: String?, val generosPropios: List<String>, val estadoPropio: Int,
+        )
+        val extras = ArrayList<Extra>()
         var total = 0
         var favoritos = 0
         val porFuente = HashMap<Long, Int>()
@@ -169,7 +175,10 @@ object Tachibk {
                     )
                     if (m.categorias.isNotEmpty() || m.seguimiento.isNotEmpty() || m.tituloPropio != null || m.autorPropio != null ||
                         m.descripcionPropia != null || m.generosPropios.isNotEmpty() || m.estadoPropio != 0
-                    ) extras += m
+                    ) extras += Extra(
+                        m.fuente, m.url, m.autor, m.descripcion, m.generos, m.estado, m.categorias, m.seguimiento,
+                        m.tituloPropio, m.autorPropio, m.descripcionPropia, m.generosPropios, m.estadoPropio,
+                    )
                 }
                 m.ultimaLectura?.takeIf { it.ultimaLectura > 0 }?.let { h ->
                     val cap = m.conEstado.firstOrNull { it.url == h.url }

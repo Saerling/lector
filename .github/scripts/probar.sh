@@ -45,7 +45,7 @@ probar_copias() {
     sleep 3
     adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui-copia-$f.xml >/dev/null 2>&1
     # Espera a que termine (como mucho 4 minutos).
-    for i in $(seq 1 48); do adb logcat -d | grep -q "restaurar ms=\|LectorCopia" && break; sleep 5; done
+    for i in $(seq 1 96); do adb logcat -d | grep -q "restaurar ms=\|LectorCopia" && break; sleep 5; done
     adb logcat -d > "logcat-$ETIQUETA-copia-$f.txt"
     {
       echo "===== Restaurar $f ($ETIQUETA) ====="

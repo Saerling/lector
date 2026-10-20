@@ -158,6 +158,6 @@ fun main() {
     check(v.customTitle == "Mi One Piece" && v.customStatus == 2, "Komikku: datos editados")
     check(!vuelta.backupManga[1].favorite, "Mihon: no favorito")
     check(vuelta.backupCategories.map { it.name to it.order } == listOf("Leyendo" to 0L, "Pendiente" to 1L, "Ocultos" to 2L) && vuelta.backupCategories[2].hidden, "Mihon: categorías")
-    generarEnorme("/tmp/claude-0/pt/enorme.tachibk", 2000, 250)
+    generarEnorme("/tmp/claude-0/pt/enorme.tachibk", 6500, 150)
     println(if (fallos == 0) "TODO OK" else "FALLOS: $fallos")
 }
