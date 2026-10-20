@@ -1,24 +1,26 @@
 # Reglas adaptadas de Komikku/Mihon.
 # Las extensiones son APK aparte que se cargan en tiempo de ejecución y usan las clases de la app por su nombre:
 # no se ofusca nada y se conservan las APIs que pueden llamar.
+# OJO: -keep SIN allowoptimization. Con allowoptimization R8 marcaba como `final` métodos que la app no sobrescribe
+# (p. ej. HttpSource.fetchRelatedMangaList) y las extensiones que sí los sobrescriben fallaban al cargar
+# ("overrides final method").
 -dontobfuscate
 -keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
 
--keep,allowoptimization class eu.kanade.** { public protected *; }
--keep,allowoptimization class tachiyomi.** { public protected *; }
--keep,allowoptimization class mihon.** { public protected *; }
--keep,allowoptimization class exh.** { public protected *; }
--keep,allowoptimization class kotlin.** { public protected *; }
--keep,allowoptimization class kotlinx.coroutines.** { public protected *; }
--keep,allowoptimization class kotlinx.serialization.** { public protected *; }
--keep,allowoptimization class kotlinx.serialization.json.** { public protected *; }
--keep,allowoptimization class okhttp3.** { public protected *; }
--keep,allowoptimization class okio.** { public protected *; }
--keep,allowoptimization class org.jsoup.** { public protected *; }
--keep,allowoptimization class rx.** { public protected *; }
--keep,allowoptimization class app.cash.quickjs.** { public protected *; }
--keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
--keep,allowoptimization class androidx.preference.** { public protected *; }
+-keep class eu.kanade.** { *; }
+-keep class tachiyomi.** { *; }
+-keep class mihon.** { *; }
+-keep class exh.** { *; }
+-keep class kotlinx.coroutines.** { *; }
+-keep class kotlinx.serialization.** { *; }
+-keep class kotlinx.serialization.json.** { *; }
+-keep class okhttp3.** { *; }
+-keep class okio.** { *; }
+-keep class org.jsoup.** { *; }
+-keep class rx.** { *; }
+-keep class app.cash.quickjs.** { *; }
+-keep class uy.kohesive.injekt.** { *; }
+-keep class androidx.preference.** { *; }
 -keep class com.example.lector.ext.** { *; }
 
 -dontwarn org.conscrypt.**
@@ -30,3 +32,7 @@
 -dontwarn org.jspecify.**
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn edu.umd.cs.findbugs.annotations.**
+-keep class kotlin.** { *; }
+-keep class kotlin.Metadata { *; }
+-keep interface eu.kanade.** { *; }
+-keep interface okhttp3.** { *; }
