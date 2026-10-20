@@ -447,6 +447,24 @@ código PROPIO (no se copió código suyo):
 - Hooks de prueba (solo APK depurable): `--es destino probar-restaurar:<ruta>` y `--es destino probar-copia`.
 - Versión 0.5 (code 5).
 
+## 2t. PASO 20 — Bibliotecas enormes (6.000+ mangas) sin quedarse sin memoria (2026-10-20, **probado en emulador**)
+Cierre por `OutOfMemoryError` en un móvil con >6.000 mangas. Cambios:
+- `Persistencia.kt`: lo que crece con la biblioteca sale de SharedPreferences (Android lo carga entero y lo reescribe
+  entero en cada cambio). Escrituras en un hilo de fondo, agrupadas, línea a línea, con .tmp + renombrar.
+  - Capítulos leídos: `ConjuntoLargo` (huellas de 64 bits de «fuente|url», sin objetos por elemento) en
+    `filesDir/estado_capitulos/leidos.bin`. Antes era un Set<String> que se COPIABA ENTERO en cada capítulo leído.
+    `ExtManager.leidos` ahora es un Int (versión) para claves de remember; `esLeido()`, `totalLeidos`.
+  - Marcados y páginas: `estado_capitulos/marcados.txt` y `paginas.txt`.
+  - Capítulos conocidos: un archivo por manga en `filesDir/conocidos/` (`CapitulosConocidos`).
+  - Biblioteca: `filesDir/biblioteca.json` (antes la clave «comics» de las preferencias).
+  - Todo se migra solo la primera vez desde el formato anterior.
+- `.tachibk`: restaurar lee la copia por partes desde el gzip (`Proto.recorrerFlujo` + `Proto.Cursor`, sin copias)
+  y solo crea textos de los capítulos con progreso; exportar escribe manga a manga (`TachibkFormato.EscritorFlujo`).
+- Copia .json: los leídos van como binario en base64 (`leidos_b64`); se siguen leyendo `leidos` y `leidos_h`.
+- Medido en el emulador (APK release) con `pruebas/tachibk/enorme.tachibk` (6.500 mangas, 975.000 capítulos,
+  145 MB sin comprimir): restaurar 25 s, Java heap ~100 MB; reabrir y exportar 29 s (622.600 capítulos con progreso).
+- Versión 0.6 (code 6).
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,
