@@ -85,6 +85,7 @@ object TareaCopia {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
+                android.util.Log.w("LectorCopia", "La copia falló", e)
                 Informe(titulo, emptyList(), errores = listOf(e.message ?: e.javaClass.simpleName))
             }.copy(duracionMs = SystemClock.elapsedRealtime() - inicio)
             informe = r
