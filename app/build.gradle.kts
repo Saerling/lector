@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.lector"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 3
+        versionName = "0.3"
     }
 
     buildTypes {
@@ -64,7 +64,14 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // --- Motor de fuentes (paso 4): source-api de Komikku/Mihon ---
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    // Mismas versiones que Komikku: las extensiones se compilan contra ellas y llaman a sus métodos por nombre
+    // (con 1.10.2 faltaba runBlockingK y la app se cerraba con NoSuchMethodError al cargar una fuente).
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("com.squareup.okio:okio:3.17.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-protobuf:1.11.0")
+    implementation("io.github.pdvrieze.xmlutil:core-android:0.91.3")
+    implementation("io.github.pdvrieze.xmlutil:serialization:0.91.3")
     implementation("com.squareup.okhttp3:okhttp:5.3.2")
     // Módulos de OkHttp que las extensiones usan por nombre (Brotli, DoH, logging, zstd), como en Komikku.
     implementation("com.squareup.okhttp3:okhttp-brotli:5.3.2")

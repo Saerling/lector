@@ -103,13 +103,15 @@ fun Inicio(
         repeat(60) {
             if (fuente != null) return@repeat
             ext.instaladas.firstOrNull { it.pkg == pkg }?.let { e -> if (!e.confiable) ext.confiar(e) }
-            fuente = ext.fuentes.firstOrNull { it.pkg == pkg }
+            fuente = ext.fuentes.filter { it.pkg == pkg }.let { l -> l.firstOrNull { it.lang == "es" } ?: l.firstOrNull { it.lang == "en" } ?: l.firstOrNull() }
             if (fuente == null) kotlinx.coroutines.delay(500)
         }
         // El id puede ser provisional hasta que la extensión termina de cargar: se espera a que no cambie.
         repeat(20) {
             kotlinx.coroutines.delay(1000)
-            val ahora = ext.fuentes.firstOrNull { it.pkg == pkg && it.nombre == fuente?.nombre } ?: ext.fuentes.firstOrNull { it.pkg == pkg }
+            val delPaquete = ext.fuentes.filter { it.pkg == pkg }
+            val ahora = delPaquete.firstOrNull { it.nombre == fuente?.nombre && it.lang == fuente?.lang }
+                ?: delPaquete.firstOrNull { it.lang == "es" } ?: delPaquete.firstOrNull()
             if (ahora != null) fuente = ahora
         }
         android.util.Log.i("LectorPrueba", "fuente=${fuente?.nombre} id=${fuente?.id}")

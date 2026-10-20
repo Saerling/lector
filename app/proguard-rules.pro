@@ -46,3 +46,8 @@
 -keep class app.cash.zipline.** { *; }
 -dontwarn com.squareup.zstd.**
 -dontwarn org.brotli.**
+
+# Librerías que también usan las extensiones (TachiyomiSY/Komikku las incluyen).
+-keep class nl.adaptivity.xmlutil.** { *; }
+-dontwarn nl.adaptivity.xmlutil.**
+-dontwarn javax.xml.stream.**

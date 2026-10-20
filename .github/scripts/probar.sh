@@ -13,7 +13,7 @@ probar() {
   adb shell am force-stop com.example.lector
   adb logcat -c
   adb shell am start -n com.example.lector/.MainActivity --es destino "probar:$pkg"
-  sleep 95
+  sleep 80
   adb exec-out screencap -p > "captura-$ETIQUETA-$pkg.png"
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "ui-$pkg.xml" >/dev/null 2>&1
   adb logcat -d > "logcat-$ETIQUETA-$pkg.txt"
@@ -28,5 +28,8 @@ probar() {
 }
 probar "https://github.com/keiyoushi/extensions/releases/download/d0c0864/tachiyomi-es.cerberusseries-v1.6.1.apk" eu.kanade.tachiyomi.extension.es.cerberusseries
 probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-es.anzmanga-v1.6.0.apk" eu.kanade.tachiyomi.extension.es.anzmanga
+probar "https://github.com/keiyoushi/extensions/releases/download/4c8cda7/tachiyomi-all.webtoons-v1.6.2.apk" eu.kanade.tachiyomi.extension.all.webtoons
+probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-all.myreadingmanga-v1.6.0.apk" eu.kanade.tachiyomi.extension.all.myreadingmanga
+probar "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tachiyomi-all.imhentai-v1.6.25.apk" eu.kanade.tachiyomi.extension.all.imhentai
 cat fallos.txt
 exit 0
