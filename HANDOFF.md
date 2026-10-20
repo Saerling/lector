@@ -433,6 +433,20 @@ código PROPIO (no se copió código suyo):
   **Probado** en el ordenador con la librería de Mihon y sus modelos, en los dos sentidos: `pruebas/tachibk/`.
 - Versión 0.4 (code 4).
 
+## 2s. PASO 19 — Avance e informe de las copias + restauración rápida (2026-10-20, **probado en emulador**)
+- `TareaCopia.kt`: crear/restaurar corren en segundo plano (sigue aunque cambies de pantalla), con avance en
+  `estado`, notificación con barra (canal «copias», id 105) e `Informe` (bien / avisos / errores + duración).
+  Al terminar: notificación con resumen (tocarla abre el informe, destino `copia`) y `terminadas++` (MainActivity
+  relee la biblioteca).
+- `ui/IslaCopia.kt`: píldora pequeña arriba con anillo y «líquido» de avance; tocarla despliega el paso actual; al
+  terminar muestra el resultado 8 s y abre `InformeCopia` (hoja con Correcto / Avisos / Errores).
+- Rapidez: antes la restauración de Mihon reescribía la biblioteca, los leídos y el historial POR CADA MANGA.
+  Ahora todo se calcula en memoria y se guarda en lote: `Almacen.anadirVariosEnLinea`, `registrarConocidosVarios`,
+  `anadirCategoriasVarios`, `anadirHistorialVarios`; `ExtManager.importarEstados`. Medido en el emulador con
+  `pruebas/tachibk/grande.tachibk` (600 mangas, 48.000 capítulos): restaurar < 4 s; crear la .tachibk 2 s.
+- Hooks de prueba (solo APK depurable): `--es destino probar-restaurar:<ruta>` y `--es destino probar-copia`.
+- Versión 0.5 (code 5).
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,
