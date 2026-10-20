@@ -106,6 +106,12 @@ fun Inicio(
             fuente = ext.fuentes.firstOrNull { it.pkg == pkg }
             if (fuente == null) kotlinx.coroutines.delay(500)
         }
+        // El id puede ser provisional hasta que la extensión termina de cargar: se espera a que no cambie.
+        repeat(20) {
+            kotlinx.coroutines.delay(1000)
+            val ahora = ext.fuentes.firstOrNull { it.pkg == pkg && it.nombre == fuente?.nombre } ?: ext.fuentes.firstOrNull { it.pkg == pkg }
+            if (ahora != null) fuente = ahora
+        }
         android.util.Log.i("LectorPrueba", "fuente=${fuente?.nombre} id=${fuente?.id}")
         fuente?.let { fuenteId = it.id; desdeNovedades = false; ruta = Ruta.FuenteDetalle }
     }

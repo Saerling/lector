@@ -13,7 +13,7 @@ probar() {
   adb shell am force-stop com.example.lector
   adb logcat -c
   adb shell am start -n com.example.lector/.MainActivity --es destino "probar:$pkg"
-  sleep 75
+  sleep 95
   adb exec-out screencap -p > "captura-$ETIQUETA-$pkg.png"
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "ui-$pkg.xml" >/dev/null 2>&1
   adb logcat -d > "logcat-$ETIQUETA-$pkg.txt"
