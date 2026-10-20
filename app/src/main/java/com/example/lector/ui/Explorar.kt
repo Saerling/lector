@@ -465,9 +465,45 @@ private fun ExtensionesTab(
         .sortedBy { it.nombre.lowercase() }
         .groupBy { it.lang }.toSortedMap(compareBy<String> { nombreIdioma(it) })
 
+    // «Confiar en todas»: las instaladas que aún no son de confianza (con una sola confirmación).
+    val sinConfianza = ext.instaladas.filter { !it.confiable }
+    var confirmarTodas by remember { mutableStateOf(false) }
+    if (confirmarTodas) {
+        AlertDialog(
+            onDismissRequest = { confirmarTodas = false },
+            title = { Text("¿Confiar en ${sinConfianza.size} extensiones?") },
+            text = {
+                Text(
+                    "Una extensión de confianza puede ejecutar su código dentro de la app. Hazlo solo si las instalaste " +
+                        "tú desde listados que conoces.\n\n" + sinConfianza.take(12).joinToString("\n") { "• " + it.nombre } +
+                        if (sinConfianza.size > 12) "\n… y ${sinConfianza.size - 12} más" else ""
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    sinConfianza.forEach { ext.confiar(it) }
+                    confirmarTodas = false
+                    Avisos.mostrar("${sinConfianza.size} extensiones de confianza")
+                }) { Text("Confiar en todas") }
+            },
+            dismissButton = { TextButton(onClick = { confirmarTodas = false }) { Text("Cancelar") } },
+        )
+    }
+
     Column(Modifier.fillMaxSize()) {
         if (buscando) Box(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) { CampoBusqueda(consulta, onConsulta, "Buscar extensiones") }
         if (ext.cargando) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (sinConfianza.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LText(
+                    "${sinConfianza.size} sin confianza", LectorType.Body, Modifier.weight(1f), color = LectorColors.Muted, maxLines = 1,
+                )
+                PillButton("Confiar en todas", Icons.Rounded.Check, { confirmarTodas = true })
+            }
+        }
         LazyColumn(contentPadding = PaddingValues(bottom = 190.dp)) {
             if (ext.repos.none { it.activo }) {
                 item { Aviso("No tienes ningún listado de extensiones activo.", "Añadir listado", onRepos) }

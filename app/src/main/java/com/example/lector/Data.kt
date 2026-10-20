@@ -125,7 +125,7 @@ enum class EscalaPagina { AJUSTAR, AJUSTAR_ANCHO, AJUSTAR_ALTO, ORIGINAL }
 enum class ModoTema { SISTEMA, OSCURO_PURO, OSCURO, CLARO }
 
 /** Vista de las listas de una fuente (Explorar). */
-enum class VistaExplorar { CUADRICULA, LISTA }
+enum class VistaExplorar { CUADRICULA, LISTA, COMPACTA, PORTADAS }
 
 // Guarda la biblioteca: copia cada .cbz a la memoria de la app y recuerda el progreso.
 // UNA sola instancia por proceso (Almacen.obtener): la usan la interfaz y los trabajos en segundo plano.
@@ -360,6 +360,13 @@ class Almacen private constructor(private val contexto: Context) {
     // ---- Explorar ----
     var ocultarEnBiblioteca by prefBool(prefs, "ocultar_en_biblioteca", false)
     var vistaExplorar by prefEnum(prefs, "vista_explorar", VistaExplorar.CUADRICULA)
+    /** Catálogo de una fuente: columnas (0 = automático), filtro «en la biblioteca» y orden (0 fuente · 1 título). */
+    var explorarColumnas by prefInt(prefs, "explorar_columnas", 0)
+    var explorarEnBiblioteca by prefEnum(prefs, "explorar_en_biblioteca", if (prefs.getBoolean("ocultar_en_biblioteca", false)) Tri.EXCLUIR else Tri.IGNORAR)
+    var explorarOrden by prefInt(prefs, "explorar_orden", 0)
+    var explorarDescendente by prefBool(prefs, "explorar_desc", false)
+    /** Pestaña de la biblioteca en la que estabas (se vuelve a ella al volver a la biblioteca o abrir la app). */
+    var ultimaPestanaBiblioteca by prefString(prefs, "ultima_pestana_biblioteca", "")
     var globalSoloAncladas by prefBool(prefs, "global_ancladas", false)
 
     // ---- Seguridad y privacidad ----

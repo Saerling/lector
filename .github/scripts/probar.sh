@@ -25,6 +25,15 @@ probar() {
     adb shell pidof com.example.lector >/dev/null && echo "La app sigue abierta" || echo "LA APP NO ESTÁ ABIERTA"
     echo "Textos en pantalla: $(grep -o 'text="[^"]*"' "ui-$pkg.xml" 2>/dev/null | sed 's/text=//' | grep -v '""' | head -25 | tr '\n' ' ')"
   } >> fallos.txt
+  # Desplazar hasta abajo varias veces (carga infinita) y comprobar que no sale ningún error.
+  for k in 1 2 3 4 5 6; do adb shell input swipe 540 1800 540 500 250; sleep 3; done
+  sleep 6
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "ui2-$pkg.xml" >/dev/null 2>&1
+  {
+    if grep -qi "coroutine\|left the composition" "ui2-$pkg.xml"; then echo "ERROR TRAS DESPLAZAR: $(grep -oi 'text="[^"]*coroutine[^"]*"' "ui2-$pkg.xml" | head -1)"; else echo "Tras desplazar: sin errores"; fi
+    echo "Tras desplazar se ven: $(grep -o 'text="[^"]*"' "ui2-$pkg.xml" 2>/dev/null | sed 's/text=//' | grep -v '""' | tail -6 | tr '\n' ' ')"
+    adb shell pidof com.example.lector >/dev/null || echo "LA APP SE CERRÓ AL DESPLAZAR"
+  } >> fallos.txt
 }
 probar "https://github.com/keiyoushi/extensions/releases/download/d0c0864/tachiyomi-es.cerberusseries-v1.6.1.apk" eu.kanade.tachiyomi.extension.es.cerberusseries
 probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-es.anzmanga-v1.6.0.apk" eu.kanade.tachiyomi.extension.es.anzmanga

@@ -1,5 +1,9 @@
 package com.example.lector.ui
 
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import android.content.ClipData
@@ -392,11 +396,18 @@ private fun NavegarFuente(
     // Al cambiar de modo, de búsqueda o de filtros se vuelve a empezar por la página 1.
     LaunchedEffect(modo, enviada, recarga) {
         lista.clear(); pagina = 1; hay = true; error = null; cargando = true
-        runCatching { pedir(1) }
-            .onSuccess { lista.addAll(it.mangas.distinctBy { m -> m.url }); hay = it.haySiguiente }
-            .onFailure { error = it.message ?: "No se pudo cargar" }
-        cargando = false
+        try {
+            val r = pedir(1)
+            lista.addAll(r.mangas.distinctBy { m -> m.url }); hay = r.haySiguiente
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // se cambió de pestaña o de búsqueda: no es un error
+        } catch (e: Throwable) {
+            error = e.message ?: "No se pudo cargar"
+        } finally {
+            cargando = false
+        }
     }
+    var hojaVista by remember { mutableStateOf(false) }
 
     if (webAbierta && f.baseUrl.isNotBlank()) {
         WebViewScreen(f.baseUrl, f.nombre, motor.cabeceras(f)) {
@@ -433,6 +444,9 @@ private fun NavegarFuente(
             ChipSel("Populares", modo == 0) { modo = 0 }
             ChipSel("Recientes", modo == 1) { modo = 1 }
             if (filtros != null) ChipSel(if (aplicados != null) "Filtros ✓" else "Filtros", aplicados != null) { panel = true }
+            // Filtro / Ordenar / Mostrar del catálogo (como la hoja de la biblioteca).
+            val activos = almacen.explorarEnBiblioteca != com.example.lector.Tri.IGNORAR || almacen.explorarOrden != 0 || almacen.explorarDescendente
+            ChipSel(if (activos) "Vista ✓" else "Vista", activos) { hojaVista = true }
         }
         // Búsquedas guardadas (TachiyomiSY/Komikku): tocar = repetirla · mantener pulsado = borrarla.
         val guardadas = ext.busquedas(f.id)
@@ -468,6 +482,7 @@ private fun NavegarFuente(
                 }
             }
         }
+        if (hojaVista) HojaVistaCatalogo(almacen, filtros != null, alFiltrosFuente = { hojaVista = false; panel = true }) { hojaVista = false }
         if (guardar) {
             var nombre by remember { mutableStateOf(enviada) }
             AlertDialog(
@@ -491,21 +506,33 @@ private fun NavegarFuente(
                 onCerrar = { panel = false },
             )
         }
-        val enLista = almacen.vistaExplorar == com.example.lector.VistaExplorar.LISTA
-        val visibles = if (almacen.ocultarEnBiblioteca) lista.filter { "${f.id}|${it.url}" !in enBiblioteca } else lista
+        val vista = almacen.vistaExplorar
+        val enLista = vista == com.example.lector.VistaExplorar.LISTA
+        // Filtro «en la biblioteca» y orden (sobre lo ya cargado; «orden de la fuente» = como lo da la fuente).
+        val filtroBiblio = almacen.explorarEnBiblioteca
+        val visibles = lista.filter { filtroBiblio.deja("${f.id}|${it.url}" in enBiblioteca) }.let { l ->
+            when (almacen.explorarOrden) {
+                1 -> l.sortedBy { it.titulo.lowercase() }.let { if (almacen.explorarDescendente) it.asReversed() else it }
+                else -> if (almacen.explorarDescendente) l.asReversed() else l
+            }
+        }
         suspend fun cargarMas() {
             if (cargando || !hay || lista.isEmpty()) return
             cargando = true
-            runCatching { pedir(pagina + 1) }
-                .onSuccess {
-                    // Las fuentes a veces repiten un manga (en la misma página o en la siguiente): se descarta,
-                    // porque dos elementos con la misma clave cierran la app.
-                    val ya = lista.mapTo(HashSet()) { v -> v.url }
-                    lista.addAll(it.mangas.filter { n -> ya.add(n.url) })
-                    hay = it.haySiguiente; pagina += 1
-                }
-                .onFailure { error = it.message ?: "No se pudo cargar" }
-            cargando = false
+            try {
+                val r = pedir(pagina + 1)
+                // Las fuentes a veces repiten un manga (en la misma página o en la siguiente): se descarta,
+                // porque dos elementos con la misma clave cierran la app.
+                val ya = lista.mapTo(HashSet()) { v -> v.url }
+                lista.addAll(r.mangas.filter { n -> ya.add(n.url) })
+                hay = r.haySiguiente; pagina += 1
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // la pantalla se cerró a mitad: no es un error que haya que enseñar
+            } catch (e: Throwable) {
+                error = e.message ?: "No se pudo cargar"
+            } finally {
+                cargando = false
+            }
         }
         // Desplazamiento infinito: al acercarse al final se pide la siguiente página.
         val cercaDelFinal by remember {
@@ -514,9 +541,18 @@ private fun NavegarFuente(
                 info.totalItemsCount > 0 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 7
             }
         }
-        LaunchedEffect(cercaDelFinal, cargando, hay) { if (cercaDelFinal && !cargando && hay && error == null) cargarMas() }
+        // Una sola corrutina que escucha y carga de una en una. (Antes se reiniciaba al cambiar «cargando» y cancelaba la
+        // carga a medias: de ahí el «The coroutine scope left the composition» en rojo.)
+        LaunchedEffect(Unit) {
+            snapshotFlow { cercaDelFinal && !cargando && hay && error == null && lista.isNotEmpty() }
+                .collect { listo -> if (listo) cargarMas() }
+        }
         LazyVerticalGrid(
-            if (enLista) GridCells.Fixed(1) else GridCells.Adaptive(108.dp),
+            when {
+                enLista -> GridCells.Fixed(1)
+                almacen.explorarColumnas > 0 -> GridCells.Fixed(almacen.explorarColumnas)
+                else -> GridCells.Adaptive(if (vista == com.example.lector.VistaExplorar.PORTADAS) 96.dp else 108.dp)
+            },
             state = rejilla,
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 40.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -531,7 +567,7 @@ private fun NavegarFuente(
                     Spacer(Modifier.width(14.dp))
                     LText(m.titulo, LectorType.Body, Modifier.weight(1f), maxLines = 2)
                     if (esta) EnBiblioteca()
-                } else Column(mod) {
+                } else if (vista == com.example.lector.VistaExplorar.CUADRICULA) Column(mod) {
                     Box {
                         ImagenRemota(
                             m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(14.dp)).alpha(if (esta) 0.55f else 1f),
@@ -541,6 +577,17 @@ private fun NavegarFuente(
                     }
                     Spacer(Modifier.height(6.dp))
                     LText(m.titulo, LectorType.Label, maxLines = 2)
+                } else Box(mod.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(14.dp))) {
+                    // Compacta (título sobre la portada) o solo portadas.
+                    ImagenRemota(m.portadaUrl, Modifier.fillMaxSize().alpha(if (esta) 0.55f else 1f), motor.cabeceras(f))
+                    if (vista == com.example.lector.VistaExplorar.COMPACTA) {
+                        Box(
+                            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000))))
+                                .padding(start = 8.dp, end = 8.dp, top = 22.dp, bottom = 8.dp),
+                        ) { LText(m.titulo, LectorType.Label, color = Color.White, maxLines = 2) }
+                    }
+                    if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                 }
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -552,6 +599,55 @@ private fun NavegarFuente(
                             scope.launch { cargarMas() }
                         })
                         !cargando && lista.isEmpty() && error == null -> LText("Sin resultados", LectorType.Label, color = LectorColors.Muted)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+/** Hoja Filtro / Ordenar / Mostrar del catálogo de una fuente (los ajustes se guardan para todas las fuentes). */
+@Composable
+private fun HojaVistaCatalogo(almacen: com.example.lector.Almacen, hayFiltrosFuente: Boolean, alFiltrosFuente: () -> Unit, alCerrar: () -> Unit) {
+    var pestana by remember { mutableIntStateOf(0) }
+    HojaLector(alCerrar) {
+        PestanasPildora(listOf("Filtro", "Ordenar", "Mostrar"), pestana, { pestana = it })
+        Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(bottom = 28.dp)) {
+            when (pestana) {
+                0 -> {
+                    FilaTri("En la biblioteca", almacen.explorarEnBiblioteca) { almacen.explorarEnBiblioteca = it }
+                    if (hayFiltrosFuente) {
+                        Spacer(Modifier.height(8.dp))
+                        FilaAjuste(Icons.Rounded.Search, "Filtros de la fuente", "Género, estado, orden… (los de la extensión)", alFiltrosFuente)
+                    }
+                }
+                1 -> {
+                    listOf("Orden de la fuente", "Título").forEachIndexed { i, n ->
+                        FilaOrden(n, almacen.explorarOrden == i, !almacen.explorarDescendente) {
+                            if (almacen.explorarOrden == i) almacen.explorarDescendente = !almacen.explorarDescendente
+                            else { almacen.explorarOrden = i; almacen.explorarDescendente = false }
+                        }
+                    }
+                    LText(
+                        "Se ordena lo que ya se cargó. Para otro orden de la web usa «Filtros de la fuente».",
+                        LectorType.Label, Modifier.padding(horizontal = 24.dp, vertical = 10.dp), color = LectorColors.Muted,
+                    )
+                }
+                else -> {
+                    TituloSeccion("Vista")
+                    listOf(
+                        com.example.lector.VistaExplorar.CUADRICULA to "Cuadrícula cómoda (título debajo)",
+                        com.example.lector.VistaExplorar.COMPACTA to "Cuadrícula compacta (título sobre la portada)",
+                        com.example.lector.VistaExplorar.PORTADAS to "Solo portadas",
+                        com.example.lector.VistaExplorar.LISTA to "Lista",
+                    ).forEach { (v, n) -> FilaRadio(n, almacen.vistaExplorar == v) { almacen.vistaExplorar = v } }
+                    if (almacen.vistaExplorar != com.example.lector.VistaExplorar.LISTA) {
+                        TituloSeccion("Columnas")
+                        val cols = listOf(0, 2, 3, 4, 5, 6)
+                        FilaChips(listOf("Auto", "2", "3", "4", "5", "6"), cols.indexOf(almacen.explorarColumnas).coerceAtLeast(0)) {
+                            almacen.explorarColumnas = cols[it]
+                        }
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import androidx.compose.runtime.snapshotFlow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -196,7 +197,13 @@ fun BibliotecaScreen(
         }.ifEmpty { listOf(GrupoBiblioteca("", "Predeterminada", emptyList(), null)) }
     }
 
-    val pager = rememberPagerState { grupos.size }
+    // Se vuelve a la pestaña en la que estabas (también al salir de la biblioteca o cerrar la app).
+    val inicial = remember { grupos.indexOfFirst { it.clave == almacen.ultimaPestanaBiblioteca }.coerceAtLeast(0) }
+    val pager = rememberPagerState(initialPage = inicial) { grupos.size }
+    val gruposActuales by rememberUpdatedState(grupos)
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.settledPage }.collect { p -> gruposActuales.getOrNull(p)?.let { almacen.ultimaPestanaBiblioteca = it.clave } }
+    }
     val grupoActual = grupos.getOrNull(pager.currentPage.coerceAtMost(grupos.lastIndex)) ?: grupos.first()
     val seleccionados = remember(seleccion, comics) { comics.filter { it.id in seleccion } }
     val enSeleccion = seleccion.isNotEmpty()

@@ -291,8 +291,10 @@ fun AjExplorarScreen(almacen: Almacen, ext: ExtManager, onBack: () -> Unit, onRu
         FilaSwitch("Mostrar contenido +18", "Fuentes y extensiones para adultos", ext.mostrarNsfw) { ext.alternarNsfw() }
         Divisor()
         TituloSeccion("Navegar una fuente")
-        FilaChips(listOf("Cuadrícula", "Lista"), almacen.vistaExplorar.ordinal) { almacen.vistaExplorar = VistaExplorar.entries[it] }
-        FilaSwitch("Esconder lo que ya está en la biblioteca", null, almacen.ocultarEnBiblioteca) { almacen.ocultarEnBiblioteca = it }
+        FilaChips(listOf("Cuadrícula", "Lista", "Compacta", "Solo portadas"), almacen.vistaExplorar.ordinal) { almacen.vistaExplorar = VistaExplorar.entries[it] }
+        FilaSwitch("Esconder lo que ya está en la biblioteca", null, almacen.explorarEnBiblioteca == com.example.lector.Tri.EXCLUIR) {
+            almacen.explorarEnBiblioteca = if (it) com.example.lector.Tri.EXCLUIR else com.example.lector.Tri.IGNORAR
+        }
         FilaSwitch("Búsqueda global solo en fuentes ancladas", "Más rápida si tienes muchas fuentes", almacen.globalSoloAncladas) { almacen.globalSoloAncladas = it }
         Divisor()
         TituloSeccion("Extensiones")
