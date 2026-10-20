@@ -407,6 +407,20 @@ código PROPIO (no se copió código suyo):
 - Sin probar en móvil. Pendiente si se quiere más parecido: cabeceras plegables con buscador en Explorar /
   Biblioteca (el `SearchGlassTopBar` de musicfy) y la transición «la portada crece hasta la página» (shared element).
 
+## 2q. PASO 17 — Cierres al abrir catálogos (2026-10-20, **probado en emulador** con el APK release)
+- Release: R8 quitaba clases con métodos nativos (zstd/brotli) → SIGABRT al recibir la respuesta. `proguard-rules.pro`
+  conserva `native <methods>`, `com.squareup.zstd`, `org.brotli`.
+- Las extensiones de Keiyoushi están compiladas contra **kotlinx-coroutines 1.11.0** (llaman a `runBlockingK`): con
+  1.10.2 había `NoSuchMethodError`. Ahora las librerías coinciden con Komikku (coroutines 1.11.0, okio 3.17.0,
+  serialization json/protobuf 1.11.0, xmlutil 0.91.3). **Regla: al actualizar Komikku, igualar estas versiones.**
+- `Fallos.kt`: guarda el último cierre (traza) y lo enseña al abrir la app con botón «Copiar».
+- `Pdf.kt`: importar PDF (cada página → JPEG dentro de un .cbz).
+- `.github/workflows/probar.yml` + `.github/scripts/probar.sh`: en cada push a `claude/**` arranca un emulador
+  (API 34), instala el APK release (compilado con `-Pprueba`, que lo hace depurable) y 5 extensiones, abre el
+  catálogo con el intent `--es destino probar:<paquete>` (solo funciona en APK depurables) y publica en el resumen
+  del run los títulos que se ven, si la app sigue abierta y las trazas de cierre.
+- Versión 0.3 (code 3).
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,
