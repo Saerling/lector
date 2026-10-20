@@ -23,6 +23,8 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("debug")
+            // Solo para la prueba automática en el emulador (gradle assembleRelease -Pprueba).
+            isDebuggable = project.hasProperty("prueba")
         }
     }
 
