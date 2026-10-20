@@ -117,4 +117,105 @@ object Proto {
 
         fun aBytes(): ByteArray = o.toByteArray()
     }
+
+    /**
+     * Lectura sin copias: recorre los campos de [b] entre [desde] y [hasta]. Para mensajes y textos guarda solo dónde
+     * empiezan y cuánto miden; el texto se crea únicamente si se pide ([texto]). Así una copia enorme no llena la memoria.
+     */
+    class Cursor(val b: ByteArray, desde: Int = 0, private val hasta: Int = b.size) {
+        private var i = desde
+        var numero = 0; private set
+        var tipo = 0; private set
+        var valor = 0L; private set
+        var inicio = 0; private set
+        var largo = 0; private set
+
+        private fun varint(): Long {
+            var r = 0L
+            var s = 0
+            while (true) {
+                if (i >= hasta) error("Fin inesperado")
+                val x = b[i++].toInt() and 0xFF
+                r = r or ((x and 0x7F).toLong() shl s)
+                if (x and 0x80 == 0) return r
+                s += 7
+                if (s > 63) error("Varint demasiado largo")
+            }
+        }
+
+        /** Avanza al siguiente campo. false al terminar. */
+        fun siguiente(): Boolean {
+            if (i >= hasta) return false
+            val tag = varint()
+            numero = (tag ushr 3).toInt()
+            tipo = (tag and 7).toInt()
+            when (tipo) {
+                0 -> valor = varint()
+                1 -> { var v = 0L; for (k in 0 until 8) v = v or ((b[i + k].toLong() and 0xFF) shl (8 * k)); i += 8; valor = v }
+                5 -> { var v = 0L; for (k in 0 until 4) v = v or ((b[i + k].toLong() and 0xFF) shl (8 * k)); i += 4; valor = v }
+                2 -> {
+                    val n = varint().toInt()
+                    require(n >= 0 && i + n <= hasta) { "Longitud no válida" }
+                    inicio = i; largo = n; i += n
+                }
+                else -> error("Tipo de campo protobuf no admitido: $tipo")
+            }
+            return true
+        }
+
+        /** Para listas «empaquetadas» de enteros: lee el siguiente varint del cursor. */
+        fun siguienteVarintEmpaquetado(): Boolean {
+            if (i >= hasta) return false
+            valor = varint()
+            return true
+        }
+
+        fun texto(): String = String(b, inicio, largo, Charsets.UTF_8)
+        fun bool(): Boolean = valor != 0L
+        fun float(): Float = java.lang.Float.intBitsToFloat(valor.toInt())
+        /** Cursor sobre el mensaje del campo actual (sin copiar). */
+        fun sub(): Cursor = Cursor(b, inicio, inicio + largo)
+    }
+
+    /**
+     * Recorre el mensaje raíz leyendo de un flujo (p. ej. gzip) campo a campo: cada campo delimitado (un manga, una
+     * categoría…) se entrega como su propio arreglo pequeño. Nunca está la copia entera descomprimida en memoria.
+     */
+    fun recorrerFlujo(entrada: java.io.InputStream, alCampo: (numero: Int, datos: ByteArray) -> Unit) {
+        val e = java.io.BufferedInputStream(entrada, 64 * 1024)
+        fun varint(): Long? {
+            var r = 0L
+            var s = 0
+            while (true) {
+                val x = e.read()
+                if (x < 0) { if (s == 0) return null else error("Fin inesperado") }
+                r = r or ((x and 0x7F).toLong() shl s)
+                if (x and 0x80 == 0) return r
+                s += 7
+                if (s > 63) error("Varint demasiado largo")
+            }
+        }
+        while (true) {
+            val tag = varint() ?: return
+            val num = (tag ushr 3).toInt()
+            when ((tag and 7).toInt()) {
+                0 -> varint()
+                1 -> repeat(8) { e.read() }
+                5 -> repeat(4) { e.read() }
+                2 -> {
+                    val n = varint()!!.toInt()
+                    require(n >= 0) { "Longitud no válida" }
+                    val datos = ByteArray(n)
+                    var leidos = 0
+                    while (leidos < n) {
+                        val r = e.read(datos, leidos, n - leidos)
+                        if (r < 0) error("Fin inesperado")
+                        leidos += r
+                    }
+                    alCampo(num, datos)
+                }
+                else -> error("Tipo de campo protobuf no admitido")
+            }
+        }
+    }
 }

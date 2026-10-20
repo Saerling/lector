@@ -118,15 +118,15 @@ object Tachibk {
     suspend fun restaurar(ctx: Context, bytes: ByteArray, avance: TareaCopia.Avance? = null): TareaCopia.Informe {
         val almacen = Almacen.obtener(ctx)
         val ext = ExtManager.obtener(ctx)
-        avance?.paso(0.05f, "Leyendo la copia…")
-        val copia = TachibkFormato.decodificar(bytes)
+        avance?.paso(0.03f, "Leyendo la copia…")
+        // Primera pasada (rápida): categorías, fuentes y listados. Los mangas se leen después, de uno en uno.
+        val cabecera = TachibkFormato.leerCabecera(bytes)
         val errores = ArrayList<String>()
-        avance?.paso(0.15f, "${copia.mangas.size} mangas en la copia")
 
         // Categorías: «order» de la copia → id en Lector (se crean las que falten, por nombre).
         var catsNuevas = 0
         val porOrden = HashMap<Long, String>()
-        copia.categorias.forEach { c ->
+        cabecera.categorias.forEach { c ->
             runCatching {
                 val existente = almacen.categorias().firstOrNull { it.nombre.equals(c.nombre, ignoreCase = true) }
                 val id = existente?.id ?: almacen.crearCategoria(c.nombre)?.also { catsNuevas++ }
@@ -137,33 +137,42 @@ object Tachibk {
             }.onFailure { errores += "Categoría «${c.nombre}»: ${it.message}" }
         }
 
-        // 1) Todo en memoria.
-        val leidos = HashSet<String>()
+        // Segunda pasada: los mangas de uno en uno; solo se guarda en memoria lo que hay que restaurar
+        // (capítulos leídos / marcados / a medias), no la lista completa de capítulos de cada manga.
+        // Los capítulos «conocidos» no se guardan: la primera actualización de cada manga los toma como base.
+        // Leídos como huellas de 64 bits (no textos): cientos de miles de capítulos caben en pocos MB.
+        val leidos = ConjuntoLargo(4096)
         val marcados = HashSet<String>()
         val paginas = HashMap<String, Int>()
         val nuevos = ArrayList<Almacen.NuevoEnLinea>()
-        val conocidos = HashMap<String, List<String>>()
         val historialNuevo = ArrayList<EntradaHistorial>()
-        val favoritos = copia.mangas.filter { it.favorito }
-        copia.mangas.forEachIndexed { i, m ->
-            if (i % 25 == 0) avance?.paso(0.15f + 0.45f * i / copia.mangas.size.coerceAtLeast(1), "Mangas: $i de ${copia.mangas.size}")
+        val extras = ArrayList<TachibkFormato.MangaLigero>() // los que traen categorías, AniList o datos editados
+        var total = 0
+        var favoritos = 0
+        val porFuente = HashMap<Long, Int>()
+        TachibkFormato.recorrerMangas(bytes) { m ->
+            total++
+            if (total % 25 == 0) avance?.paso(0.05f + 0.6f * (total.toFloat() / (total + 50)).coerceAtMost(0.99f), "Mangas leídos: $total")
             runCatching {
                 val titulo = m.titulo.ifBlank { m.url }
-                m.capitulos.forEach { c ->
-                    val k = "${m.fuente}|${c.url}"
-                    if (c.leido) leidos += k
-                    if (c.marcado) marcados += k
-                    if (!c.leido && c.pagina > 0) paginas[k] = c.pagina.toInt()
+                m.conEstado.forEach { c ->
+                    if (c.leido) leidos.add(ConjuntoLargo.clave(m.fuente, c.url))
+                    if (c.marcado) marcados += "${m.fuente}|${c.url}"
+                    if (!c.leido && c.pagina > 0) paginas["${m.fuente}|${c.url}"] = c.pagina.toInt()
                 }
                 if (m.favorito) {
+                    favoritos++
+                    porFuente[m.fuente] = (porFuente[m.fuente] ?: 0) + 1
                     nuevos += Almacen.NuevoEnLinea(
-                        m.fuente, m.url, titulo, m.portada, m.capitulos.size, m.capitulos.count { it.leido },
+                        m.fuente, m.url, titulo, m.portada, m.totalCapitulos, m.conEstado.count { it.leido },
                         m.autor, m.estado, m.generos, m.descripcion, m.anadido,
                     )
-                    if (m.capitulos.isNotEmpty()) conocidos["${m.fuente}|${m.url}"] = m.capitulos.map { it.url }
+                    if (m.categorias.isNotEmpty() || m.seguimiento.isNotEmpty() || m.tituloPropio != null || m.autorPropio != null ||
+                        m.descripcionPropia != null || m.generosPropios.isNotEmpty() || m.estadoPropio != 0
+                    ) extras += m
                 }
-                m.historial.maxByOrNull { it.ultimaLectura }?.takeIf { it.ultimaLectura > 0 }?.let { h ->
-                    val cap = m.capitulos.firstOrNull { it.url == h.url }
+                m.ultimaLectura?.takeIf { it.ultimaLectura > 0 }?.let { h ->
+                    val cap = m.conEstado.firstOrNull { it.url == h.url }
                     historialNuevo += EntradaHistorial(
                         m.fuente, m.url, titulo, m.portada, h.url, cap?.nombre.orEmpty(), (cap?.pagina ?: 0L).toInt(), 0, h.ultimaLectura,
                     )
@@ -171,17 +180,17 @@ object Tachibk {
             }.onFailure { errores += "«${m.titulo.ifBlank { m.url }}»: ${it.message ?: it.javaClass.simpleName}" }
         }
 
-        // 2) Una escritura por tipo de dato.
-        avance?.paso(0.65f, "Guardando la biblioteca…")
+        // Una escritura por tipo de dato.
+        avance?.paso(0.7f, "Guardando la biblioteca…")
         val (porClave, anadidos) = almacen.anadirVariosEnLinea(nuevos)
-        avance?.paso(0.72f, "Guardando capítulos leídos…")
+        nuevos.clear()
+        avance?.paso(0.78f, "Guardando capítulos leídos…")
         ext.importarEstados(leidos, marcados, paginas)
-        almacen.registrarConocidosVarios(conocidos)
-        avance?.paso(0.8f, "Guardando categorías e historial…")
+        avance?.paso(0.84f, "Guardando categorías e historial…")
         val categoriasDe = HashMap<String, Set<String>>()
         var anilist = 0
         var editados = 0
-        favoritos.forEach { m ->
+        extras.forEach { m ->
             val comic = porClave["${m.fuente}|${m.url}"] ?: return@forEach
             runCatching {
                 val ids = m.categorias.mapNotNull { porOrden[it] }.toSet()
@@ -204,10 +213,10 @@ object Tachibk {
         almacen.anadirCategoriasVarios(categoriasDe)
         almacen.anadirHistorialVarios(historialNuevo)
 
-        // 3) Listados de extensiones (se comprueban por internet: se espera un poco a cada uno).
+        // Listados de extensiones (se comprueban por internet: se espera un poco a cada uno).
         var listadosOk = 0
-        copia.listados.forEachIndexed { i, url ->
-            avance?.paso(0.88f + 0.1f * i / copia.listados.size, "Añadiendo listados de extensiones…")
+        cabecera.listados.forEachIndexed { i, url ->
+            avance?.paso(0.9f + 0.09f * i / cabecera.listados.size, "Añadiendo listados de extensiones…")
             val listo = CompletableDeferred<String?>()
             ext.anadirRepo(url) { listo.complete(it) }
             val r = withTimeoutOrNull(20_000) { listo.await() }
@@ -222,15 +231,15 @@ object Tachibk {
 
         // Fuentes que faltan por instalar.
         val instaladas = ext.fuentes.map { it.id }.toSet()
-        val nombres = copia.fuentes.associate { it.id to it.nombre }
-        val faltan = favoritos.groupBy { it.fuente }.filterKeys { it !in instaladas }
-            .map { (id, l) -> "${nombres[id]?.takeIf { it.isNotBlank() } ?: "Fuente $id"} (${l.size})" }
+        val nombres = cabecera.fuentes.associate { it.id to it.nombre }
+        val faltan = porFuente.filterKeys { it !in instaladas }.entries.sortedByDescending { it.value }
+            .map { (id, n) -> "${nombres[id]?.takeIf { it.isNotBlank() } ?: "Fuente $id"} ($n)" }
 
         return TareaCopia.Informe(
             titulo = "Restaurar copia de Mihon / Komikku",
             bien = listOfNotNull(
-                "$anadidos mangas añadidos a la biblioteca" + if (favoritos.size > anadidos) " (${favoritos.size - anadidos} ya estaban)" else "",
-                "${leidos.size} capítulos leídos".takeIf { leidos.isNotEmpty() },
+                "$anadidos mangas añadidos a la biblioteca" + if (favoritos > anadidos) " (${favoritos - anadidos} ya estaban)" else "",
+                "${leidos.size} capítulos leídos".takeIf { leidos.size > 0 },
                 "${marcados.size} capítulos marcados".takeIf { marcados.isNotEmpty() },
                 "${paginas.size} capítulos a medias (con su página)".takeIf { paginas.isNotEmpty() },
                 "$catsNuevas categorías nuevas".takeIf { catsNuevas > 0 },

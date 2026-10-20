@@ -106,7 +106,7 @@ fun EstadisticasScreen(comics: List<Comic>, almacen: Almacen, ext: ExtManager, o
         Fila2(StatCardMod("$sinEmpezar", "Sin empezar"), StatCardMod("$seguidos", "Con seguimiento"))
 
         TituloSeccion("Capítulos")
-        Fila2(StatCardMod("${ext.leidos.size}", "Leídos"), StatCardMod("$sinLeer", "Sin leer"))
+        Fila2(StatCardMod("${ext.totalLeidos}", "Leídos"), StatCardMod("$sinLeer", "Sin leer"))
         Fila2(StatCardMod("$capsTotales", "En total"), StatCardMod("${descargas.first}", "Descargados"))
         LText(
             "Las descargas ocupan ${Formatter.formatShortFileSize(ctx, descargas.second)}",

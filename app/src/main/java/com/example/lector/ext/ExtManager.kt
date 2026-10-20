@@ -14,6 +14,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
@@ -51,6 +52,45 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     private val prefs = app.getSharedPreferences("lector_ext", Context.MODE_PRIVATE)
+
+    // Capítulos leídos, marcados y páginas: en archivos propios con escrituras agrupadas (ver Persistencia.kt).
+    // Antes iban en las preferencias y se reescribía todo al terminar CADA capítulo.
+    private val carpetaEstado = java.io.File(app.filesDir, "estado_capitulos").apply { mkdirs() }
+    private val archLeidos = com.example.lector.ArchivoConjuntoLargo(java.io.File(carpetaEstado, "leidos.bin"))
+    private val archMarcados = com.example.lector.ArchivoAgrupado(java.io.File(carpetaEstado, "marcados.txt"))
+    private val archPaginas = com.example.lector.ArchivoAgrupado(java.io.File(carpetaEstado, "paginas.txt"))
+
+    /** Lee un conjunto de su archivo; la primera vez lo trae de las preferencias (versiones anteriores) y lo borra de ahí. */
+    private fun cargarConjunto(arch: com.example.lector.ArchivoAgrupado, clave: String): Set<String> {
+        if (arch.existe()) return runCatching { arch.leer().toHashSet() }.getOrDefault(HashSet())
+        val viejo = runCatching { prefs.getStringSet(clave, null)?.toHashSet() }.getOrNull() ?: HashSet()
+        runCatching { com.example.lector.Persistencia.escribirLineas(java.io.File(carpetaEstado, "$clave.txt"), viejo.asSequence()) }
+        prefs.edit().remove(clave).apply()
+        return viejo
+    }
+
+    private fun guardarLeidos() { versionLeidos++; archLeidos.guardar(leidosH) }
+
+    /**
+     * Capítulos leídos: huellas de 64 bits de «fuente|url» (ver [com.example.lector.ConjuntoLargo]). La primera vez se
+     * migran desde el formato anterior (texto en leidos.txt o en las preferencias).
+     */
+    private fun cargarLeidos(): com.example.lector.ConjuntoLargo {
+        if (archLeidos.existe()) runCatching { return archLeidos.leer() }
+        val c = com.example.lector.ConjuntoLargo()
+        val txt = java.io.File(carpetaEstado, "leidos.txt")
+        val viejos: Collection<String> = if (txt.exists()) com.example.lector.Persistencia.leerLineas(txt)
+            else runCatching { prefs.getStringSet("leidos", null) }.getOrNull().orEmpty()
+        viejos.forEach { k -> com.example.lector.ConjuntoLargo.claveDeTexto(k)?.let { c.add(it) } }
+        runCatching { archLeidos.escribirYa(c) }
+        txt.delete()
+        prefs.edit().remove("leidos").apply()
+        return c
+    }
+
+    private fun claveCap(fuenteId: Long, url: String) = com.example.lector.ConjuntoLargo.clave(fuenteId, url)
+    private fun leidoTexto(k: String) = com.example.lector.ConjuntoLargo.claveDeTexto(k)?.let { leidosH.contains(it) } == true
+    private fun guardarMarcados() { val m = marcados; archMarcados.guardar { m.asSequence() } }
 
     /** Se completa cuando ya se leyeron las extensiones instaladas y sus fuentes (lo esperan los trabajos de fondo). */
     private val listo = kotlinx.coroutines.CompletableDeferred<Unit>()
@@ -114,17 +154,28 @@ class ExtManager private constructor(private val app: Context) {
     var novedades by mutableStateOf(cargarNovedades()); private set
 
     // Capítulos leídos online ("fuenteId|urlCapítulo") y modo del lector online (0 tira · 1 paginado → · 2 paginado ←).
-    var leidos by mutableStateOf(prefs.getStringSet("leidos", emptySet())?.toSet() ?: emptySet()); private set
+    private val leidosH: com.example.lector.ConjuntoLargo = cargarLeidos()
+    /** Sube cada vez que cambia algún «leído»: las pantallas que lo leen se repintan. */
+    var versionLeidos by mutableIntStateOf(0); private set
+    /** Valor que cambia cuando cambian los leídos (para usarlo como clave de remember). */
+    val leidos: Int get() = versionLeidos
+    /** Cuántos capítulos hay marcados como leídos. */
+    val totalLeidos: Int get() { @Suppress("UNUSED_VARIABLE") val v = versionLeidos; return leidosH.size }
     var modoLector by mutableStateOf(prefs.getInt("modo_lector", 0)); private set
 
     // Capítulos marcados con el marcador ("fuenteId|urlCapítulo"); se alternan deslizando la fila hacia la izquierda.
-    var marcados by mutableStateOf(prefs.getStringSet("marcados", emptySet())?.toSet() ?: emptySet()); private set
+    var marcados by mutableStateOf(cargarConjunto(archMarcados, "marcados")); private set
 
     // Página por la que vas en cada capítulo SIN terminar ("fuenteId|url" -> página, desde 0).
     private val paginasCap = mutableStateMapOf<String, Int>().also { m ->
         runCatching {
-            val o = JSONObject(prefs.getString("paginas_cap", "{}") ?: "{}")
-            o.keys().forEach { k -> m[k] = o.getInt(k) }
+            if (archPaginas.existe()) {
+                archPaginas.leer().forEach { l -> val i = l.lastIndexOf('\t'); if (i > 0) l.substring(i + 1).toIntOrNull()?.let { m[l.substring(0, i)] = it } }
+            } else {
+                val o = JSONObject(prefs.getString("paginas_cap", "{}") ?: "{}")
+                o.keys().forEach { k -> m[k] = o.getInt(k) }
+                prefs.edit().remove("paginas_cap").apply()
+            }
         }
     }
 
@@ -628,42 +679,40 @@ class ExtManager private constructor(private val app: Context) {
      * Importa de golpe capítulos leídos, marcados y páginas (claves «fuente|url»), con una escritura de cada cosa.
      * Lo usan las restauraciones de copias: hacerlo manga a manga reescribía todo cada vez y era muy lento.
      */
-    fun importarEstados(leidosNuevos: Collection<String>, marcadosNuevos: Collection<String>, paginas: Map<String, Int>) {
-        if (leidosNuevos.isNotEmpty()) {
-            leidos = leidos + leidosNuevos
-            prefs.edit().putStringSet("leidos", leidos).apply()
+    fun importarEstados(leidosNuevos: com.example.lector.ConjuntoLargo, marcadosNuevos: Collection<String>, paginas: Map<String, Int>) {
+        if (leidosNuevos.size > 0) {
+            leidosH.addAll(leidosNuevos)
+            guardarLeidos()
         }
         if (marcadosNuevos.isNotEmpty()) {
             marcados = marcados + marcadosNuevos
-            prefs.edit().putStringSet("marcados", marcados).apply()
+            guardarMarcados()
         }
         var cambio = false
-        leidosNuevos.forEach { if (paginasCap.remove(it) != null) cambio = true }
-        paginas.forEach { (k, v) -> if (v > 0 && k !in leidos && paginasCap[k] != v) { paginasCap[k] = v; cambio = true } }
+        paginasCap.keys.toList().forEach { k -> if (leidoTexto(k)) { paginasCap.remove(k); cambio = true } }
+        paginas.forEach { (k, v) -> if (v > 0 && !leidoTexto(k) && paginasCap[k] != v) { paginasCap[k] = v; cambio = true } }
         if (cambio) guardarPaginasCap()
     }
 
     /** Marca varios capítulos como leídos de una vez (una sola escritura). */
     fun marcarLeidos(fuenteId: Long, urls: Collection<String>) {
         if (urls.isEmpty()) return
-        val claves = urls.map { "$fuenteId|$it" }
         var cambioPaginas = false
-        claves.forEach { if (paginasCap.remove(it) != null) cambioPaginas = true }
+        urls.forEach { u -> if (paginasCap.remove("$fuenteId|$u") != null) cambioPaginas = true; leidosH.add(claveCap(fuenteId, u)) }
         if (cambioPaginas) guardarPaginasCap()
-        leidos = leidos + claves
-        prefs.edit().putStringSet("leidos", leidos).apply()
+        guardarLeidos()
     }
 
     fun desmarcarLeidos(fuenteId: Long, urls: Collection<String>) {
         if (urls.isEmpty()) return
-        leidos = leidos - urls.map { "$fuenteId|$it" }.toSet()
-        prefs.edit().putStringSet("leidos", leidos).apply()
+        urls.forEach { leidosH.remove(claveCap(fuenteId, it)) }
+        guardarLeidos()
     }
 
     fun marcarVarios(fuenteId: Long, urls: Collection<String>, marcar: Boolean) {
         val claves = urls.map { "$fuenteId|$it" }.toSet()
         marcados = if (marcar) marcados + claves else marcados - claves
-        prefs.edit().putStringSet("marcados", marcados).apply()
+        guardarMarcados()
     }
 
     // ---- Lista de capítulos de la ficha: filtros y orden (como Komikku) ----
@@ -709,7 +758,8 @@ class ExtManager private constructor(private val app: Context) {
     // ---- Copia de seguridad: lo que guarda este gestor (capítulos leídos, marcas, listados…) ----
     fun exportar(): JSONObject {
         val o = JSONObject()
-        o.put("leidos", JSONArray(leidos.toList()))
+        // Los leídos van como huellas (números): mucho más pequeños que los textos «fuente|url».
+        o.put("leidos_h", JSONArray().also { a -> leidosH.aArreglo().forEach { a.put(it) } })
         o.put("marcados", JSONArray(marcados.toList()))
         o.put("paginas_cap", JSONObject().also { j -> paginasCap.forEach { (k, v) -> j.put(k, v) } })
         o.put("repos", JSONArray(prefs.getString("repos", "[]")))
@@ -725,9 +775,11 @@ class ExtManager private constructor(private val app: Context) {
 
     fun importar(o: JSONObject) {
         fun conjunto(a: JSONArray?): Set<String> = if (a == null) emptySet() else (0 until a.length()).map { a.getString(it) }.toSet()
-        leidos = leidos + conjunto(o.optJSONArray("leidos"))
+        o.optJSONArray("leidos")?.let { a -> for (i in 0 until a.length()) com.example.lector.ConjuntoLargo.claveDeTexto(a.getString(i))?.let { leidosH.add(it) } }
+        o.optJSONArray("leidos_h")?.let { a -> for (i in 0 until a.length()) leidosH.add(a.getLong(i)) }
+        versionLeidos++
         marcados = marcados + conjunto(o.optJSONArray("marcados"))
-        o.optJSONObject("paginas_cap")?.let { j -> j.keys().forEach { k -> if ("$k" !in leidos) paginasCap[k] = j.optInt(k) } }
+        o.optJSONObject("paginas_cap")?.let { j -> j.keys().forEach { k -> if (!leidoTexto(k)) paginasCap[k] = j.optInt(k) } }
         fijadas = fijadas + conjunto(o.optJSONArray("fijadas"))
         confiadas += conjunto(o.optJSONArray("confiadas"))
         o.optJSONArray("novedades")?.let { a -> fijarNovedades(novedades + (0 until a.length()).map { a.getLong(it) }) }
@@ -746,8 +798,8 @@ class ExtManager private constructor(private val app: Context) {
             if (nuevos.isNotEmpty()) { repos = repos + nuevos; guardarRepos(repos) }
         }
         o.optJSONObject("busquedas")?.let { b -> val e = prefs.edit(); b.keys().forEach { k -> e.putString(k, b.getJSONArray(k).toString()) }; e.apply(); busquedasVersion++ }
-        prefs.edit().putStringSet("leidos", leidos).putStringSet("marcados", marcados)
-            .putStringSet("fijadas", fijadas).putStringSet("confiadas", confiadas.toSet()).apply()
+        guardarLeidos(); guardarMarcados()
+        prefs.edit().putStringSet("fijadas", fijadas).putStringSet("confiadas", confiadas.toSet()).apply()
         guardarPaginasCap()
         confiadasVersion++
         actualizarLista()
@@ -756,9 +808,8 @@ class ExtManager private constructor(private val app: Context) {
     fun marcarLeido(fuenteId: Long, url: String) {
         val k = "$fuenteId|$url"
         if (paginasCap.remove(k) != null) guardarPaginasCap() // terminado: ya no hay "página por la que vas"
-        if (k in leidos) return
-        leidos = leidos + k
-        prefs.edit().putStringSet("leidos", leidos).apply()
+        if (!leidosH.add(claveCap(fuenteId, url))) return
+        guardarLeidos()
     }
 
     /** Página por la que ibas en un capítulo (0 si no lo empezaste o ya está leído). */
@@ -773,19 +824,19 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     private fun guardarPaginasCap() {
-        val o = JSONObject()
-        paginasCap.forEach { (k, v) -> o.put(k, v) }
-        prefs.edit().putString("paginas_cap", o.toString()).apply()
+        val copia = paginasCap.toMap()
+        archPaginas.guardar { copia.asSequence().map { (k, v) -> "$k\t$v" } }
     }
 
-    fun esLeido(fuenteId: Long, url: String) = "$fuenteId|$url" in leidos
+    fun esLeido(fuenteId: Long, url: String): Boolean {
+        @Suppress("UNUSED_VARIABLE") val v = versionLeidos // para que Compose se entere de los cambios
+        return leidosH.contains(claveCap(fuenteId, url))
+    }
 
     /** Vuelve a dejar un capítulo como no leído. */
     fun desmarcarLeido(fuenteId: Long, url: String) {
-        val k = "$fuenteId|$url"
-        if (k !in leidos) return
-        leidos = leidos - k
-        prefs.edit().putStringSet("leidos", leidos).apply()
+        if (!leidosH.remove(claveCap(fuenteId, url))) return
+        guardarLeidos()
     }
 
     /**
@@ -803,10 +854,9 @@ class ExtManager private constructor(private val app: Context) {
             // Las fuentes listan lo más nuevo primero: los leídos son los últimos de la lista.
             nuevos.takeLast(respaldo.coerceIn(0, nuevos.size))
         }
-        val claves = aMarcar.map { "$nuevaFuente|${it.url}" }.toSet()
-        if (claves.isNotEmpty()) {
-            leidos = leidos + claves
-            prefs.edit().putStringSet("leidos", leidos).apply()
+        if (aMarcar.isNotEmpty()) {
+            aMarcar.forEach { leidosH.add(claveCap(nuevaFuente, it.url)) }
+            guardarLeidos()
         }
         return nuevos.count { esLeido(nuevaFuente, it.url) }
     }
@@ -816,7 +866,7 @@ class ExtManager private constructor(private val app: Context) {
     fun alternarMarcado(fuenteId: Long, url: String) {
         val k = "$fuenteId|$url"
         marcados = if (k in marcados) marcados - k else marcados + k
-        prefs.edit().putStringSet("marcados", marcados).apply()
+        guardarMarcados()
     }
 
     fun cambiarModoLector(m: Int) {

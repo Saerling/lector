@@ -33,28 +33,44 @@ probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiy
 probar "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tachiyomi-all.imhentai-v1.6.25.apk" eu.kanade.tachiyomi.extension.all.imhentai
 # ---- Copias de seguridad: restaurar una copia grande de Mihon (600 mangas, 48.000 capítulos) y volver a exportarla ----
 probar_copias() {
-  local dir=/data/user/0/com.example.lector/files
   adb shell am force-stop com.example.lector
-  adb push pruebas/tachibk/grande.tachibk /data/local/tmp/grande.tachibk
-  adb shell chmod 644 /data/local/tmp/grande.tachibk
-  adb shell run-as com.example.lector cp /data/local/tmp/grande.tachibk files/grande.tachibk
-  adb shell run-as com.example.lector ls -la files/
+  for f in grande enorme; do
+    adb push pruebas/tachibk/$f.tachibk /data/local/tmp/$f.tachibk
+    adb shell chmod 644 /data/local/tmp/$f.tachibk
+    adb shell run-as com.example.lector cp /data/local/tmp/$f.tachibk files/$f.tachibk
+  done
+  for f in grande enorme; do
+    adb logcat -c
+    adb shell am start -n com.example.lector/.MainActivity --es destino "probar-restaurar:/data/user/0/com.example.lector/files/$f.tachibk"
+    sleep 3
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui-copia-$f.xml >/dev/null 2>&1
+    # Espera a que termine (como mucho 4 minutos).
+    for i in $(seq 1 48); do adb logcat -d | grep -q "restaurar ms=\|LectorCopia" && break; sleep 5; done
+    adb logcat -d > "logcat-$ETIQUETA-copia-$f.txt"
+    {
+      echo "===== Restaurar $f ($ETIQUETA) ====="
+      grep -o "restaurar ms=.*" "logcat-$ETIQUETA-copia-$f.txt" | cut -c1-600 | tail -1
+      grep -A8 "LectorCopia" "logcat-$ETIQUETA-copia-$f.txt" | head -10
+      grep -B2 -A25 "FATAL EXCEPTION\|OutOfMemoryError" "logcat-$ETIQUETA-copia-$f.txt" | head -40
+      adb shell pidof com.example.lector >/dev/null && echo "La app sigue abierta" || echo "LA APP NO ESTÁ ABIERTA"
+      echo "Durante: $(grep -o 'text="[^"]*"' ui-copia-$f.xml 2>/dev/null | sed 's/text=//' | grep -v '""' | head -6 | tr '\n' ' ')"
+      echo "Memoria tras restaurar:"; adb shell dumpsys meminfo com.example.lector | grep -E "Java Heap|TOTAL PSS|TOTAL:" | head -3
+    } >> fallos.txt
+  done
+  # Volver a abrir la app con la biblioteca enorme y crear una copia de ella.
+  adb shell am force-stop com.example.lector
   adb logcat -c
-  adb shell am start -n com.example.lector/.MainActivity --es destino "probar-restaurar:$dir/grande.tachibk"
-  sleep 4
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui-copia.xml >/dev/null 2>&1
-  sleep 40
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui-copia-fin.xml >/dev/null 2>&1
   adb shell am start -n com.example.lector/.MainActivity --es destino "probar-copia"
-  sleep 20
-  adb logcat -d > "logcat-$ETIQUETA-copias.txt"
+  for i in $(seq 1 36); do adb logcat -d | grep -q "crear ms=\|LectorCopia" && break; sleep 5; done
+  sleep 3
+  adb logcat -d > "logcat-$ETIQUETA-crear.txt"
   {
-    echo "===== Copias ($ETIQUETA) ====="
-    grep -A6 "LectorPrueba\|LectorCopia" "logcat-$ETIQUETA-copias.txt" | tail -14
-    grep -A30 "FATAL EXCEPTION" "logcat-$ETIQUETA-copias.txt" | head -40
+    echo "===== Reabrir y crear copia ($ETIQUETA) ====="
+    grep -o "crear ms=.*" "logcat-$ETIQUETA-crear.txt" | cut -c1-400 | tail -1
+    grep -A8 "LectorCopia" "logcat-$ETIQUETA-crear.txt" | head -10
+    grep -B2 -A25 "FATAL EXCEPTION\|OutOfMemoryError" "logcat-$ETIQUETA-crear.txt" | head -40
     adb shell pidof com.example.lector >/dev/null && echo "La app sigue abierta" || echo "LA APP NO ESTÁ ABIERTA"
-    echo "Durante: $(grep -o 'text="[^"]*"' ui-copia.xml 2>/dev/null | sed 's/text=//' | grep -v '""' | head -8 | tr '\n' ' ')"
-    echo "Al final: $(grep -o 'text="[^"]*"' ui-copia-fin.xml 2>/dev/null | sed 's/text=//' | grep -v '""' | head -8 | tr '\n' ' ')"
+    echo "Memoria:"; adb shell dumpsys meminfo com.example.lector | grep -E "Java Heap|TOTAL PSS|TOTAL:" | head -3
   } >> fallos.txt
 }
 probar_copias

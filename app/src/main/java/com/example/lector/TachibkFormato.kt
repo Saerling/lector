@@ -190,4 +190,111 @@ object TachibkFormato {
         val listados = raiz.mensajes(106).mapNotNull { it.texto(1)?.trim()?.takeIf { u -> u.startsWith("http") } }
         return Copia(mangas, categorias, fuentes, listados)
     }
+
+    // ───────── Leer por partes (para restaurar sin llenar la memoria) ─────────
+
+    /** Un manga con lo justo para restaurar: de sus capítulos solo los que tienen algo (leído, marcado o página). */
+    class MangaLigero(
+        val fuente: Long, val url: String, val titulo: String, val autor: String?, val descripcion: String?,
+        val generos: List<String>, val estado: Int, val portada: String?, val anadido: Long, val favorito: Boolean,
+        val totalCapitulos: Int, val conEstado: List<Capitulo>, val categorias: List<Long>,
+        val seguimiento: List<Seguimiento>, val ultimaLectura: Historial?,
+        val tituloPropio: String?, val autorPropio: String?, val descripcionPropia: String?,
+        val generosPropios: List<String>, val estadoPropio: Int,
+    )
+
+    private fun flujo(bytes: ByteArray): java.io.InputStream =
+        if (bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) GZIPInputStream(bytes.inputStream(), 64 * 1024)
+        else bytes.inputStream()
+
+    /** Primera pasada: categorías, fuentes y listados (los mangas se saltan sin descodificarlos). */
+    fun leerCabecera(bytes: ByteArray): Copia {
+        val cats = ArrayList<Categoria>(); val fuentes = ArrayList<Fuente>(); val listados = ArrayList<String>()
+        Proto.recorrerFlujo(flujo(bytes)) { num, datos ->
+            when (num) {
+                2 -> {
+                    val c = Proto.Cursor(datos); var nombre: String? = null; var orden = cats.size.toLong(); var oculta = false
+                    while (c.siguiente()) when (c.numero) { 1 -> nombre = c.texto().trim(); 2 -> orden = c.valor; 900 -> oculta = c.bool() }
+                    if (!nombre.isNullOrEmpty()) cats += Categoria(nombre!!, orden, oculta)
+                }
+                101 -> {
+                    val c = Proto.Cursor(datos); var n = ""; var id = 0L
+                    while (c.siguiente()) when (c.numero) { 1 -> n = c.texto(); 2 -> id = c.valor }
+                    fuentes += Fuente(n, id)
+                }
+                106 -> {
+                    val c = Proto.Cursor(datos)
+                    while (c.siguiente()) if (c.numero == 1 && c.tipo == 2) c.texto().trim().takeIf { it.startsWith("http") }?.let { listados += it }
+                }
+            }
+        }
+        return Copia(emptyList(), cats, fuentes, listados)
+    }
+
+    /** Segunda pasada: entrega los mangas de uno en uno (nunca están todos a la vez en memoria). */
+    fun recorrerMangas(bytes: ByteArray, alManga: (MangaLigero) -> Unit) {
+        Proto.recorrerFlujo(flujo(bytes)) { num, datos -> if (num == 1) leerMangaLigero(datos)?.let(alManga) }
+    }
+
+    private fun leerMangaLigero(datos: ByteArray): MangaLigero? {
+        val c = Proto.Cursor(datos)
+        var fuente = 0L; var url: String? = null; var titulo = ""; var autor: String? = null; var desc: String? = null
+        val generos = ArrayList<String>(); var estado = 0; var portada: String? = null; var anadido = 0L; var favorito = true
+        var total = 0; val conEstado = ArrayList<Capitulo>(); val cats = ArrayList<Long>(); val segs = ArrayList<Seguimiento>()
+        var ultima: Historial? = null
+        var tP: String? = null; var aP: String? = null; var dP: String? = null; val gP = ArrayList<String>(); var eP = 0
+        while (c.siguiente()) {
+            when (c.numero) {
+                1 -> fuente = c.valor
+                2 -> url = c.texto()
+                3 -> titulo = c.texto()
+                5 -> autor = c.texto()
+                6 -> desc = c.texto()
+                7 -> generos += c.texto()
+                8 -> estado = c.valor.toInt()
+                9 -> portada = c.texto()
+                13 -> anadido = c.valor
+                16 -> { total++; leerCapitulo(c.sub())?.let { conEstado += it } }
+                17 -> if (c.tipo == 0) cats += c.valor else { val p = c.sub(); while (p.siguienteVarintEmpaquetado()) cats += p.valor }
+                18 -> {
+                    val t = c.sub(); var serv = 0; var m100 = 0L; var m3 = 0L; var tt = ""; var ult = 0f
+                    while (t.siguiente()) when (t.numero) { 1 -> serv = t.valor.toInt(); 3 -> m3 = t.valor; 5 -> tt = t.texto(); 6 -> ult = t.float(); 100 -> m100 = t.valor }
+                    segs += Seguimiento(serv, if (m100 > 0) m100 else m3, tt, ult)
+                }
+                100 -> favorito = c.bool()
+                104 -> {
+                    val h = c.sub(); var u: String? = null; var cuando = 0L
+                    while (h.siguiente()) when (h.numero) { 1 -> u = h.texto(); 2 -> cuando = h.valor }
+                    if (u != null && cuando > (ultima?.ultimaLectura ?: 0L)) ultima = Historial(u!!, cuando)
+                }
+                602 -> eP = c.valor.toInt()
+                800 -> tP = c.texto()
+                802 -> aP = c.texto()
+                804 -> dP = c.texto()
+                805 -> gP += c.texto()
+            }
+        }
+        val u = url ?: return null
+        return MangaLigero(fuente, u, titulo, autor, desc, generos, estado, portada, anadido, favorito, total, conEstado, cats, segs, ultima, tP, aP, dP, gP, eP)
+    }
+
+    /** Un capítulo: solo se crean sus textos si tiene algo que restaurar. */
+    private fun leerCapitulo(c: Proto.Cursor): Capitulo? {
+        var uIni = -1; var uLar = 0; var nIni = -1; var nLar = 0
+        var leido = false; var marcado = false; var pagina = 0L; var numero = -1f
+        while (c.siguiente()) when (c.numero) {
+            1 -> { uIni = c.inicio; uLar = c.largo }
+            2 -> { nIni = c.inicio; nLar = c.largo }
+            4 -> leido = c.bool()
+            5 -> marcado = c.bool()
+            6 -> pagina = c.valor
+            9 -> numero = c.float()
+        }
+        if (uIni < 0 || (!leido && !marcado && pagina <= 0)) return null
+        return Capitulo(
+            url = String(c.b, uIni, uLar, Charsets.UTF_8),
+            nombre = if (nIni >= 0) String(c.b, nIni, nLar, Charsets.UTF_8) else "",
+            leido = leido, marcado = marcado, pagina = pagina, numero = numero,
+        )
+    }
 }

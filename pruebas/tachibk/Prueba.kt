@@ -121,6 +121,7 @@ fun main() {
         backupCategories = listOf(BackupCategory("Leyendo", 0), BackupCategory("Pendiente", 1), BackupCategory("Ocultos", 2, hidden = true)),
         backupSources = listOf(BackupSource("Fuente X", idNegativo)),
     )
+    pruebaLigera(mihon)
     val crudo = ProtoBuf.encodeToByteArray(Backup.serializer(), mihon)
     val gz = ByteArrayOutputStream().also { o -> GZIPOutputStream(o).use { it.write(crudo) } }.toByteArray()
     check(TachibkFormato.esTachibk(gz), "detecta .tachibk")
@@ -157,5 +158,6 @@ fun main() {
     check(v.customTitle == "Mi One Piece" && v.customStatus == 2, "Komikku: datos editados")
     check(!vuelta.backupManga[1].favorite, "Mihon: no favorito")
     check(vuelta.backupCategories.map { it.name to it.order } == listOf("Leyendo" to 0L, "Pendiente" to 1L, "Ocultos" to 2L) && vuelta.backupCategories[2].hidden, "Mihon: categorías")
+    generarEnorme("/tmp/claude-0/pt/enorme.tachibk", 2000, 250)
     println(if (fallos == 0) "TODO OK" else "FALLOS: $fallos")
 }

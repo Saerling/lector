@@ -354,12 +354,13 @@ private fun CabeceraGrupo(
 
 @Composable
 private fun FilaActualizacion(
-    a: ActualizacionCap, comic: Comic?, almacen: Almacen, ext: ExtManager, leidos: Set<String>,
+    a: ActualizacionCap, comic: Comic?, almacen: Almacen, ext: ExtManager, leidos: Int,
     seleccionado: Boolean, enSeleccion: Boolean,
     onClick: () -> Unit, onLargo: () -> Unit, sangria: Boolean = false,
 ) {
     val ctx = LocalContext.current
-    val leido = "${a.fuenteId}|${a.capUrl}" in leidos
+    // [leidos] solo sirve para repintar cuando cambia algún «leído».
+    val leido = leidos.let { ext.esLeido(a.fuenteId, a.capUrl) }
     val nombre = a.capNombre.trim().trimEnd(':').trim().ifBlank { "Capítulo" }
     val k = clave(a)
     val fraccion = Descargas.progreso[k] ?: if (Descargas.enCola(k)) 0f else null

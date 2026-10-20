@@ -142,6 +142,8 @@ class Almacen private constructor(private val contexto: Context) {
     private val carpetaComics = File(contexto.filesDir, "comics").apply { mkdirs() }
     private val carpetaPortadas = File(contexto.filesDir, "portadas").apply { mkdirs() }
     private val carpetaDescargas = File(contexto.filesDir, "descargas").apply { mkdirs() }
+    /** Capítulos conocidos de cada manga: un archivo por manga (antes estaban en las preferencias). */
+    private val conocidos = CapitulosConocidos(contexto.filesDir)
 
     /** Sube cada vez que cambia la biblioteca: las pantallas que lo leen se refrescan. */
     var version by mutableIntStateOf(0)
@@ -658,8 +660,34 @@ class Almacen private constructor(private val contexto: Context) {
     private fun JSONArray?.aLista(): List<String> =
         if (this == null) emptyList() else List(length()) { optString(it) }.filter { it.isNotBlank() }
 
+    /** La biblioteca en su propio archivo (antes era un texto dentro de las preferencias, reescrito entero en cada cambio). */
+    private val archivoBiblioteca = File(contexto.filesDir, "biblioteca.json")
+    private val guardadoProgramado = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private fun textoBiblioteca(): String =
+        if (archivoBiblioteca.exists()) archivoBiblioteca.readText() else prefs.getString("comics", "[]") ?: "[]"
+
+    /** Escribe la biblioteca en segundo plano, agrupando los cambios seguidos en una sola escritura. */
+    private fun programarGuardado() {
+        if (!guardadoProgramado.compareAndSet(false, true)) return
+        Persistencia.hilo.schedule({
+            guardadoProgramado.set(false)
+            runCatching { escribirBiblioteca() }
+        }, 300, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
+
+    private fun escribirBiblioteca() {
+        val lista = synchronized(this) { cacheComics } ?: return
+        val json = JSONArray()
+        lista.forEach { json.put(it.aJson()) }
+        val tmp = File(archivoBiblioteca.path + ".tmp")
+        tmp.writeText(json.toString())
+        if (!tmp.renameTo(archivoBiblioteca)) { archivoBiblioteca.delete(); tmp.renameTo(archivoBiblioteca) }
+        if (prefs.contains("comics")) prefs.edit().remove("comics").apply() // ya migrada
+    }
+
     private fun leerComics(): List<Comic> = runCatching {
-        val json = JSONArray(prefs.getString("comics", "[]"))
+        val json = JSONArray(textoBiblioteca())
         List(json.length()) { i ->
             val o = json.getJSONObject(i)
             Comic(
@@ -707,9 +735,7 @@ class Almacen private constructor(private val contexto: Context) {
         synchronized(this) {
             if (lista == cacheComics) return // nada cambió: no reescribe el JSON
             cacheComics = lista.toList()
-            val json = JSONArray()
-            lista.forEach { json.put(it.aJson()) }
-            prefs.edit().putString("comics", json.toString()).apply()
+            programarGuardado()
             version++
         }
     }
@@ -1364,15 +1390,30 @@ class Almacen private constructor(private val contexto: Context) {
     }
 
     /** Capítulos ya conocidos de muchos mangas («fuente|url» → urls), en una sola escritura. */
-    fun registrarConocidosVarios(mapa: Map<String, Collection<String>>) {
-        if (mapa.isEmpty()) return
-        val ed = prefs.edit()
-        mapa.forEach { (clave, urls) ->
+    fun registrarConocidosVarios(mapa: Map<Pair<Long, String>, Collection<String>>) {
+        mapa.forEach { (k, urls) ->
             if (urls.isEmpty()) return@forEach
-            val k = "cc|$clave"
-            ed.putStringSet(k, prefs.getStringSet(k, null).orEmpty() + urls)
+            conocidos.guardar(k.first, k.second, conocidos.leer(k.first, k.second).orEmpty() + urls)
         }
-        ed.apply()
+    }
+
+    /**
+     * Las versiones anteriores guardaban los capítulos conocidos de cada manga en las preferencias («cc|fuente|url»):
+     * con una biblioteca grande eran decenas de MB cargados en memoria siempre. Se pasan a archivos y se borran de ahí.
+     */
+    private fun migrarConocidos() {
+        val claves = prefs.all.keys.filter { it.startsWith("cc|") }
+        if (claves.isEmpty()) return
+        val ed = prefs.edit()
+        claves.forEach { k ->
+            val resto = k.removePrefix("cc|")
+            val fuente = resto.substringBefore('|').toLongOrNull()
+            val url = resto.substringAfter('|', "")
+            val urls = runCatching { prefs.getStringSet(k, null) }.getOrNull()
+            if (fuente != null && url.isNotEmpty() && urls != null) runCatching { conocidos.guardarYa(fuente, url, urls) }
+            ed.remove(k)
+        }
+        ed.commit()
     }
 
     /** Añade categorías a muchos cómics de una vez (id del cómic → ids de categorías). */
@@ -1513,7 +1554,7 @@ class Almacen private constructor(private val contexto: Context) {
 
     /** URLs de capítulos conocidas de un manga (las que se guardaron al revisar). Vacío si nunca se revisó. */
     fun capitulosConocidos(fuenteId: Long, urlManga: String): Set<String> =
-        prefs.getStringSet("cc|$fuenteId|$urlManga", null)?.toSet().orEmpty()
+        conocidos.leer(fuenteId, urlManga).orEmpty()
 
     /**
      * Compara los capítulos que ofrece la fuente con los que ya conocíamos de ese manga.
@@ -1525,20 +1566,19 @@ class Almacen private constructor(private val contexto: Context) {
         fuenteId: Long, urlManga: String, titulo: String, portadaUrl: String?, caps: List<CapituloFuente>,
     ): List<CapituloFuente> {
         if (caps.isEmpty()) return emptyList()
-        val clave = "cc|$fuenteId|$urlManga"
-        val actuales = caps.map { it.url }.toSet()
-        val conocidos = prefs.getStringSet(clave, null)
-        if (conocidos == null) {
-            prefs.edit().putStringSet(clave, actuales).apply()
+        val actuales = caps.mapTo(HashSet()) { it.url }
+        val ya = conocidos.leer(fuenteId, urlManga)
+        if (ya == null) {
+            conocidos.guardar(fuenteId, urlManga, actuales)
             return emptyList()
         }
-        val nuevos = caps.filter { it.url !in conocidos }
+        val nuevos = caps.filter { it.url !in ya }
         // Se guarda siempre la lista actual (así, "marcar todo como leído" conoce todos los capítulos).
         if (nuevos.isEmpty()) {
-            if (actuales != conocidos) prefs.edit().putStringSet(clave, conocidos + actuales).apply()
+            if (!ya.containsAll(actuales)) conocidos.guardar(fuenteId, urlManga, ya + actuales)
             return emptyList()
         }
-        prefs.edit().putStringSet(clave, conocidos + actuales).apply()
+        conocidos.guardar(fuenteId, urlManga, ya + actuales)
         val ahora = System.currentTimeMillis()
         val entradas = nuevos.map {
             ActualizacionCap(fuenteId, urlManga, titulo, portadaUrl, it.url, it.nombre, it.numero, it.fecha, it.scanlator, ahora)
@@ -1550,7 +1590,7 @@ class Almacen private constructor(private val contexto: Context) {
     }
 
     private fun olvidarCapitulos(fuenteId: Long, urlManga: String) {
-        prefs.edit().remove("cc|$fuenteId|$urlManga").apply()
+        conocidos.olvidar(fuenteId, urlManga)
         val lista = actualizaciones.filterNot { it.fuenteId == fuenteId && it.urlManga == urlManga }
         if (lista.size != actualizaciones.size) {
             actualizaciones = lista
@@ -1713,6 +1753,7 @@ class Almacen private constructor(private val contexto: Context) {
 
     init {
         runCatching { migrarDescargasViejas() }
+        runCatching { migrarConocidos() }
         // Los cómics de antes no tenían fecha de añadido: se usa el orden en que estaban.
         runCatching {
             val l = cargar()
