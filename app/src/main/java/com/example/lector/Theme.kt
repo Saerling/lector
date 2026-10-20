@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import java.io.File
@@ -27,13 +29,17 @@ val Inter = FontFamily(
 )
 
 // Una paleta es, en el fondo, un color de acento. El fondo sigue siendo negro puro.
+// La primera, «Musicfy», es monocroma (gris claro sobre negro), como musicfy: es la de por defecto.
 data class Paleta(val nombre: String, val color: Color)
 
 object Paletas {
     // Esta paleta toma el color de tu fondo de pantalla (Android 12 o superior).
     const val SISTEMA = "Sistema"
 
+    const val MONO = "Musicfy"
+
     val fijas = listOf(
+        Paleta(MONO, Color(0xFFE0E0E0)),
         Paleta("Rojo", Color(0xFFFA233B)),
         Paleta("Naranja", Color(0xFFFF8A3D)),
         Paleta("Dorado", Color(0xFFF2C14E)),
@@ -54,6 +60,8 @@ fun colorDePaleta(nombre: String, oscuro: Boolean = true): Color {
         val ctx = LocalContext.current
         return if (oscuro) dynamicDarkColorScheme(ctx).primary else androidx.compose.material3.dynamicLightColorScheme(ctx).primary
     }
+    // El gris claro de «Musicfy» no se vería sobre fondo claro: ahí es casi negro.
+    if ((nombre == Paletas.MONO || Paletas.fijas.none { it.nombre == nombre }) && !oscuro) return Color(0xFF1C1C1E)
     return (Paletas.fijas.firstOrNull { it.nombre == nombre } ?: Paletas.porDefecto).color
 }
 
@@ -114,11 +122,13 @@ private val EsquemaPuro = darkColorScheme(
     surface = Color.Black,
     onSurface = Color(0xFFE6E1E5),
     surfaceVariant = Color(0xFF1A1A1A),
-    onSurfaceVariant = Color(0xFFCAC4D0),
-    surfaceContainer = Color(0xFF1A1A1A),
-    surfaceContainerHigh = Color(0xFF212121),
-    surfaceContainerHighest = Color(0xFF2A2A2A),
-    surfaceContainerLow = Color(0xFF121212),
+    onSurfaceVariant = Color(0xFF9A9AA0),
+    surfaceContainer = Color(0xFF141416),
+    surfaceContainerHigh = Color(0xFF1E1E21),
+    surfaceContainerHighest = Color(0xFF2C2C2E),
+    surfaceContainerLow = Color(0xFF0B0B0C),
+    secondaryContainer = Color(0xFF2C2C2E),
+    onSecondaryContainer = Color.White,
 )
 
 // Oscuro "normal": grises en vez de negro puro.
@@ -152,22 +162,25 @@ private val EsquemaClaro = lightColorScheme(
     surfaceContainerLow = Color(0xFFFFFFFF),
 )
 
+// Como musicfy: Inter SemiBold en todo y el interletrado un poco cerrado (-0.05 em).
+private fun TextStyle.mf(f: FontFamily) = copy(fontFamily = f, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.05).em)
+
 private fun Typography.conFuente(f: FontFamily) = copy(
-    displayLarge = displayLarge.copy(fontFamily = f),
-    displayMedium = displayMedium.copy(fontFamily = f),
-    displaySmall = displaySmall.copy(fontFamily = f),
-    headlineLarge = headlineLarge.copy(fontFamily = f),
-    headlineMedium = headlineMedium.copy(fontFamily = f),
-    headlineSmall = headlineSmall.copy(fontFamily = f),
-    titleLarge = titleLarge.copy(fontFamily = f),
-    titleMedium = titleMedium.copy(fontFamily = f),
-    titleSmall = titleSmall.copy(fontFamily = f),
-    bodyLarge = bodyLarge.copy(fontFamily = f),
-    bodyMedium = bodyMedium.copy(fontFamily = f),
-    bodySmall = bodySmall.copy(fontFamily = f),
-    labelLarge = labelLarge.copy(fontFamily = f),
-    labelMedium = labelMedium.copy(fontFamily = f),
-    labelSmall = labelSmall.copy(fontFamily = f),
+    displayLarge = displayLarge.mf(f),
+    displayMedium = displayMedium.mf(f),
+    displaySmall = displaySmall.mf(f),
+    headlineLarge = headlineLarge.mf(f),
+    headlineMedium = headlineMedium.mf(f),
+    headlineSmall = headlineSmall.mf(f),
+    titleLarge = titleLarge.mf(f),
+    titleMedium = titleMedium.mf(f),
+    titleSmall = titleSmall.mf(f),
+    bodyLarge = bodyLarge.mf(f),
+    bodyMedium = bodyMedium.mf(f),
+    bodySmall = bodySmall.mf(f),
+    labelLarge = labelLarge.mf(f),
+    labelMedium = labelMedium.mf(f),
+    labelSmall = labelSmall.mf(f),
 )
 
 @Composable

@@ -1,5 +1,17 @@
 package com.example.lector.ui
 
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
@@ -393,41 +405,88 @@ object Avisos {
     fun ocultar(id: Long) { _actual.update { if (it?.id == id) null else it } }
 }
 
-/** Se pone una sola vez, encima de toda la app. */
+/** Curva de los avisos (salida rápida, llegada suave). */
+private val AvisoEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
+/** Un aviso «de error» (para pintar la cruz roja en vez del icono). */
+private fun esError(t: String): Boolean {
+    val x = t.lowercase()
+    return x.startsWith("no se pudo") || x.startsWith("error") || x.contains("falló") || x.startsWith("no hay")
+}
+
+/**
+ * Avisos como los de musicfy: una tarjeta oscura de 30 dp de radio que cae desde arriba con un muelle, con un
+ * cuadrado claro con icono a la izquierda y un visto a la derecha. Se arrastra hacia arriba para cerrarla y,
+ * mientras se sujeta, no se cierra sola. Se pone una sola vez, encima de toda la app.
+ */
 @Composable
 fun AvisosHost(modifier: Modifier = Modifier) {
     val aviso by Avisos.actual.collectAsState()
-    LaunchedEffect(aviso?.id) {
-        val a = aviso ?: return@LaunchedEffect
+    Box(modifier.fillMaxWidth().statusBarsPadding().padding(top = 8.dp, start = 14.dp, end = 14.dp), Alignment.TopCenter) {
+        AnimatedContent(
+            targetState = aviso,
+            contentKey = { it?.id },
+            contentAlignment = Alignment.TopCenter,
+            transitionSpec = {
+                (slideInVertically(spring(dampingRatio = 0.74f, stiffness = Spring.StiffnessMedium)) { -it - 40 } +
+                    fadeIn(tween(160)) + scaleIn(tween(320, easing = AvisoEasing), initialScale = 0.92f))
+                    .togetherWith(slideOutVertically(tween(260, easing = AvisoEasing)) { -it - 40 } + fadeOut(tween(200)))
+                    .using(SizeTransform(clip = false) { _, _ -> tween(1) })
+            },
+            label = "avisos",
+        ) { a -> if (a != null) TarjetaAviso(a) else Spacer(Modifier.height(0.dp)) }
+    }
+}
+
+@Composable
+private fun TarjetaAviso(a: Aviso) {
+    val scope = rememberCoroutineScope()
+    val subida = remember(a.id) { Animatable(0f) }
+    var sujeto by remember(a.id) { mutableStateOf(false) }
+    LaunchedEffect(a.id, sujeto) {
+        if (sujeto) return@LaunchedEffect
         delay(if (a.texto.length > 40) 3500L else 2400L)
         Avisos.ocultar(a.id)
     }
-    Box(modifier.fillMaxWidth().statusBarsPadding().padding(top = 12.dp, start = 24.dp, end = 24.dp), Alignment.TopCenter) {
-        AnimatedContent(
-            targetState = aviso,
-            transitionSpec = {
-                (fadeIn(tween(260, easing = EnfasisEasing)) +
-                    slideInVertically(tween(380, easing = EnfasisEasing)) { -it } +
-                    scaleIn(tween(380, easing = EnfasisEasing), initialScale = 0.9f))
-                    .togetherWith(
-                        fadeOut(tween(180)) + slideOutVertically(tween(260, easing = EnfasisEasing)) { -it }
-                    ).using(SizeTransform(clip = false))
-            },
-            label = "avisos",
-        ) { a ->
-            if (a == null) {
-                Spacer(Modifier.height(0.dp))
-            } else {
-                val forma = SuaveShape(26.dp)
-                Box(
-                    Modifier.widthIn(max = 380.dp).clip(forma).background(if (TemaActual.oscuro) Color(0xF01E1E20) else Color(0xF2FFFFFF))
-                        .border(1.dp, LectorColors.GlassBorderBrush, forma)
-                        .pointerInput(a.id) {
-                            detectVerticalDragGestures { _, dy -> if (dy < -6f) Avisos.ocultar(a.id) }
-                        }
-                        .padding(horizontal = 22.dp, vertical = 14.dp),
-                ) { LText(a.texto, LectorType.Body, maxLines = 3) }
+    val error = remember(a.texto) { esError(a.texto) }
+    val forma = RoundedCornerShape(30.dp)
+    val claro = Color(0xFFD9D9D9)
+    Row(
+        Modifier.widthIn(max = 480.dp).fillMaxWidth()
+            .graphicsLayer { translationY = subida.value }
+            .shadow(14.dp, forma, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
+            .clip(forma).background(LectorColors.Aviso)
+            .pointerInput(a.id) {
+                detectVerticalDragGestures(
+                    onDragStart = { sujeto = true },
+                    onDragEnd = {
+                        sujeto = false
+                        if (subida.value < -28.dp.toPx()) Avisos.ocultar(a.id)
+                        else scope.launch { subida.animateTo(0f, spring(dampingRatio = 0.7f)) }
+                    },
+                    onDragCancel = { sujeto = false; scope.launch { subida.animateTo(0f, spring(dampingRatio = 0.7f)) } },
+                ) { _, dy -> scope.launch { subida.snapTo((subida.value + dy).coerceAtMost(0f)) } }
             }
+            .defaultMinSize(minHeight = 68.dp)
+            .padding(start = 12.dp, end = 18.dp, top = 11.dp, bottom = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (error) {
+            Box(Modifier.padding(start = 4.dp).size(30.dp).clip(CircleShape).background(Color(0xFFEE5A52)), Alignment.Center) {
+                Icon(Icons.Rounded.Close, null, tint = Color.Black, modifier = Modifier.size(18.dp))
+            }
+        } else {
+            Box(Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(claro), Alignment.Center) {
+                Icon(Icons.Rounded.Info, null, tint = Color(0xFF232323), modifier = Modifier.size(24.dp))
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        LText(
+            a.texto, LectorType.Body.copy(fontSize = 17.sp, lineHeight = 21.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
+            Modifier.weight(1f), maxLines = 3,
+        )
+        if (!error) Box(Modifier.padding(start = 12.dp).size(26.dp).clip(CircleShape).background(claro), Alignment.Center) {
+            Icon(Icons.Rounded.Check, null, tint = Color(0xFF232323), modifier = Modifier.size(16.dp))
         }
     }
 }

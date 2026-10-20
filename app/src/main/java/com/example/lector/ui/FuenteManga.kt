@@ -720,8 +720,7 @@ fun FichaMangaScreen(
 
     // ---- Hoja de los capítulos: Filtro / Ordenar / Mostrar ----
     if (hojaCaps) {
-        val estado = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(onDismissRequest = { hojaCaps = false }, sheetState = estado, containerColor = LectorColors.Card, contentColor = LectorColors.Text) {
+        HojaLector({ hojaCaps = false }) {
             PestanasPildora(listOf("Filtro", "Ordenar", "Mostrar"), pestanaHoja, { pestanaHoja = it })
             Column(Modifier.fillMaxWidth().padding(bottom = 28.dp)) {
                 when (pestanaHoja) {

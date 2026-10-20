@@ -413,8 +413,7 @@ fun BibliotecaScreen(
 
     // ---- Hoja: Filtro / Ordenar / Mostrar ----
     if (hoja) {
-        val estado = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(onDismissRequest = { hoja = false }, sheetState = estado, containerColor = LectorColors.Card, contentColor = LectorColors.Text) {
+        HojaLector({ hoja = false }) {
             PestanasPildora(listOf("Filtro", "Ordenar", "Mostrar"), pestanaHoja, { pestanaHoja = it })
             Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(bottom = 28.dp)) {
                 when (pestanaHoja) {

@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.lector.ui.ArranqueOverlay
 import com.example.lector.ui.Inicio
 import com.example.lector.ui.LectorTab
@@ -196,7 +197,26 @@ fun App(
     LaunchedEffect(oscuro) { alCambiarTema(oscuro) }
     LectorTheme(acento = colorDePaleta(almacen.paleta, oscuro), oscuro = oscuro, puro = puro) {
         Box(Modifier.fillMaxSize().background(com.example.lector.ui.LectorColors.Bg)) {
-            Contenido(almacen, destino, alConsumirDestino)
+            // Mientras hay una hoja inferior abierta, la app se aleja un poco y redondea las esquinas (musicfy).
+            val alejar by androidx.compose.animation.core.animateFloatAsState(
+                if (com.example.lector.ui.Hojas.abiertas > 0) 1f else 0f,
+                androidx.compose.animation.core.spring(
+                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                    stiffness = androidx.compose.animation.core.Spring.StiffnessLow,
+                    visibilityThreshold = 0.0005f,
+                ),
+                label = "alejar",
+            )
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    if (alejar > 0f) {
+                        val e = 1f - 0.08f * alejar
+                        scaleX = e; scaleY = e
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape((28f * alejar).dp)
+                        clip = true
+                    }
+                },
+            ) { Contenido(almacen, destino, alConsumirDestino) }
             if (arranque) ArranqueOverlay { arranque = false }
             if (bloqueada) PantallaBloqueo(alDesbloquear)
         }

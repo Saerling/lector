@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import androidx.compose.ui.focus.onFocusChanged
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.LruCache
@@ -615,22 +616,29 @@ private fun Subtitulo(partes: List<String>, nsfw: Boolean) {
 
 @Composable
 internal fun CampoBusqueda(valor: String, alCambiar: (String) -> Unit, pista: String) {
+    // Campo de búsqueda de musicfy: píldora de 48 dp, #141416 (un escalón más claro con el foco), pista gris.
+    var foco by remember { mutableStateOf(false) }
+    val fondo by animateColorAsState(if (foco) LectorColors.CardHigh else LectorColors.Card, tween(160), label = "campo")
     BasicTextField(
         value = valor, onValueChange = alCambiar, singleLine = true,
-        textStyle = LectorType.Body.copy(color = LectorColors.Text),
+        textStyle = LectorType.Body.copy(color = LectorColors.Text, fontSize = 15.sp),
         cursorBrush = SolidColor(LectorColors.Text),
+        modifier = Modifier.onFocusChanged { foco = it.isFocused },
         decorationBox = { inner ->
             Row(
-                Modifier.fillMaxWidth().clip(CircleShape).background(LectorColors.Card)
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                Modifier.fillMaxWidth().height(48.dp).clip(CircleShape).background(fondo).padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Rounded.Search, null, tint = LectorColors.Muted, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(12.dp))
-                Box(Modifier.weight(1f)) {
-                    if (valor.isEmpty()) LText(pista, LectorType.Body, color = LectorColors.Muted)
+                Icon(Icons.Rounded.Search, null, tint = LectorColors.Pista, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (valor.isEmpty()) LText(pista, LectorType.Body.copy(fontSize = 15.sp), color = LectorColors.Pista, maxLines = 1)
                     inner()
                 }
+                if (valor.isNotEmpty()) Icon(
+                    Icons.Rounded.Close, "Borrar", tint = LectorColors.Pista,
+                    modifier = Modifier.size(20.dp).pressable { alCambiar("") },
+                )
             }
         }
     )

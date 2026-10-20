@@ -29,6 +29,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lector.Tri
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 
 /** Una acción de la barra flotante de selección (Marcar leído, Descargar, Borrar…). */
 class AccionBarra(val icono: ImageVector, val texto: String, val alPulsar: () -> Unit)
@@ -166,4 +174,34 @@ fun PestanasPildora(titulos: List<String>, elegida: Int, onElegir: (Int) -> Unit
             ) { LText(t, LectorType.Body, color = if (i == elegida) acento else LectorColors.Text, maxLines = 1) }
         }
     }
+}
+
+
+/** Cuántas hojas inferiores hay abiertas: mientras haya alguna, la app de detrás retrocede (ver MainActivity). */
+object Hojas {
+    var abiertas by mutableIntStateOf(0)
+}
+
+/**
+ * Hoja inferior al estilo de musicfy: fondo #0B0B0C con esquinas de 28 dp, asa gris y la app de detrás se
+ * aleja un poco (se encoge y redondea) mientras está abierta.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HojaLector(onCerrar: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val estado = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    DisposableEffect(Unit) {
+        Hojas.abiertas++
+        onDispose { Hojas.abiertas-- }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onCerrar, sheetState = estado,
+        containerColor = LectorColors.Hoja, contentColor = LectorColors.Text,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        scrimColor = Color.Black.copy(alpha = 0.45f),
+        dragHandle = {
+            Box(Modifier.padding(top = 10.dp, bottom = 14.dp).size(36.dp, 4.dp).clip(CircleShape).background(LectorColors.Muted.copy(alpha = 0.5f)))
+        },
+        content = content,
+    )
 }

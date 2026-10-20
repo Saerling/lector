@@ -26,6 +26,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.lector.Almacen
 import com.example.lector.Comic
 import com.example.lector.ext.CapituloFuente
@@ -147,13 +151,34 @@ fun Inicio(
         else -> ""
     }
 
+    // Como en musicfy: al abrir una ficha (o un cómic) la página de debajo retrocede (se encoge y se apaga) con
+    // el muelle con el que se abre; al volver, avanza con una curva suave de 560 ms.
+    val abiertaEncima = detalleId != null || pila.isNotEmpty()
+    val retroceso = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(abiertaEncima) {
+        if (abiertaEncima) retroceso.animateTo(1f, spring(dampingRatio = 0.88f, stiffness = 150f, visibilityThreshold = 0.001f))
+        else retroceso.animateTo(0f, tween(560, easing = CierreEasing))
+    }
+
     Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
+      // Todo lo que queda bajo la barra flotante: se graba para el cristal esmerilado de la barra y el mini lector.
+      Box(Modifier.fillMaxSize().raizCristal(CristalApp)) {
         AnimatedContent(
             targetState = tab, label = "tabs",
+            modifier = Modifier.graphicsLayer {
+                val r = retroceso.value
+                if (r > 0f) {
+                    val e = 1f - 0.08f * r
+                    scaleX = e; scaleY = e
+                    alpha = 1f - 0.55f * r
+                }
+            },
+            // Las pestañas se deslizan un octavo de pantalla hacia el lado de la pestaña nueva, con un fundido.
             transitionSpec = {
+                val derecha = targetState.ordinal > initialState.ordinal
                 ContentTransform(
-                    fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.97f),
-                    fadeOut(tween(110)),
+                    slideInHorizontally(tween(260, easing = EnfasisEasing)) { if (derecha) it / 8 else -it / 8 } + fadeIn(tween(200)),
+                    slideOutHorizontally(tween(260, easing = EnfasisEasing)) { if (derecha) -it / 8 else it / 8 } + fadeOut(tween(200)),
                 )
             }
         ) { t ->
@@ -291,11 +316,10 @@ fun Inicio(
             key(r) {
                 AnimatedVisibility(
                     visible = r in pila && detalleId == null,
-                    enter = slideInHorizontally(tween(330, easing = EnfasisEasing)) { it / 8 } +
-                        scaleIn(tween(330, easing = EnfasisEasing), initialScale = 0.96f) +
-                        fadeIn(tween(260, easing = EnfasisEasing)),
-                    exit = slideOutHorizontally(tween(240, easing = EnfasisEasing)) { it / 8 } +
-                        scaleOut(tween(240, easing = EnfasisEasing), targetScale = 0.97f) + fadeOut(tween(160)),
+                    // La página «crece» al abrirse (muelle suave, interrumpible) y se encoge al cerrarse.
+                    enter = scaleIn(spring(dampingRatio = 0.88f, stiffness = 150f), initialScale = 0.86f) +
+                        fadeIn(tween(240)),
+                    exit = scaleOut(tween(420, easing = CierreEasing), targetScale = 0.88f) + fadeOut(tween(300, easing = CierreEasing)),
                 ) {
                     // Fondo opaco y toques propios: la pantalla de debajo no se ve ni recibe toques.
                     Box(Modifier.fillMaxSize().background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {
@@ -332,7 +356,9 @@ fun Inicio(
             }
         }
 
-        // Mini lector + barra flotante: se esconden hacia abajo cuando hay una página encima.
+      }
+
+        // Mini lector + barra flotante (de cristal): se esconden hacia abajo cuando hay una página encima.
         AnimatedVisibility(
             visible = !hayCapa,
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -340,7 +366,7 @@ fun Inicio(
             exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(160)),
         ) {
             Column(
-                Modifier.navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = 8.dp)
+                Modifier.navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 8.dp)
             ) {
                 // El botón de reanudar abre la ficha del último manga leído (no el capítulo).
                 if (tab != LectorTab.Library) {
@@ -354,9 +380,10 @@ fun Inicio(
                             value = fuenteMini?.let { Motor.actual?.cabecerasCargando(it) }.orEmpty()
                         }
                         MiniReaderGenerico(
-                            e.titulo, e.capNombre,
+                            e.titulo, e.capNombre.trim().trimEnd(':').trim().ifBlank { "Seguir leyendo" },
                             onClick = { abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, null) },
-                        ) { m -> ImagenRemota(e.portadaUrl, m.clip(SuaveShape(12.dp)), cabeceras) }
+                            progreso = if (e.total > 0) ((e.pagina + 1).toFloat() / e.total).coerceIn(0f, 1f) else null,
+                        ) { m -> ImagenRemota(e.portadaUrl, m.clip(CircleShape), cabeceras) }
                         Spacer(Modifier.height(8.dp))
                     } else if (ultimo != null) {
                         MiniReader(ultimo, almacen, onClick = { abrirDetalle(ultimo) })
@@ -371,3 +398,6 @@ fun Inicio(
         AvisosHost(Modifier.align(Alignment.TopCenter))
     }
 }
+
+/** Curva de cierre de las páginas (empieza suave: un primer fotograma lento no se nota). */
+val CierreEasing = CubicBezierEasing(0.4f, 0f, 0.1f, 1f)

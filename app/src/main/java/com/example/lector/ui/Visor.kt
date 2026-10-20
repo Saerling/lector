@@ -653,11 +653,7 @@ fun Visor(
     }
 
     if (hoja) {
-        val estadoHoja = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
-            onDismissRequest = { hoja = false }, sheetState = estadoHoja,
-            containerColor = LectorColors.Card, contentColor = LectorColors.Text,
-        ) {
+        HojaLector({ hoja = false }) {
             Column(Modifier.fillMaxWidth().heightIn(max = (conf.screenHeightDp * 0.75f).dp).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                 run {
                     AjustesVisorContenido(
