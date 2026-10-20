@@ -18,6 +18,9 @@ data class ExtDisponible(
     val fuentes: List<FuenteInfo>,
     val repoUrl: String,
     val repoSigla: String,
+    // De Komikku: versión de la librería de extensiones y clave de firma del listado que la ofrece.
+    val libVersion: Double = 0.0,
+    val firma: String = "",
 )
 
 /** Una extensión que ya está instalada en el móvil. */
@@ -32,6 +35,10 @@ data class ExtInstalada(
     val firma: String,
     val repoSigla: String?,
     val actualizacion: ExtDisponible?,
+    // De Komikku (ExtensionLoader): versión de librería, todas las firmas SHA-256 y motivo por el que no se puede cargar.
+    val libVersion: Double = 0.0,
+    val firmas: List<String> = emptyList(),
+    val errorCarga: String? = null,
 )
 
 /** Una fuente lista para usar (de una extensión instalada y de confianza). */
@@ -50,9 +57,15 @@ data class RepoExt(
     val nombre: String,
     val activo: Boolean = true,
     val web: String? = null,
+    // De Komikku (ExtensionStore): etiqueta corta, clave de firma, formato clásico, lista aparte y contacto.
+    val etiqueta: String = "",
+    val claveFirma: String = "",
+    val esLegacy: Boolean = false,
+    val urlLista: String? = null,
+    val discord: String? = null,
 ) {
     /** Siglas que se ven junto a la versión: "@KEI". */
-    val sigla: String get() = nombre.filter { it.isLetterOrDigit() }.take(3).uppercase()
+    val sigla: String get() = etiqueta.ifBlank { nombre }.filter { it.isLetterOrDigit() }.take(3).uppercase()
 }
 
 enum class Fase { DESCARGANDO, INSTALANDO, ERROR }

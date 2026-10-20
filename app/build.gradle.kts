@@ -63,4 +63,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-okio:1.11.0")
     implementation("androidx.preference:preference-ktx:1.2.1")
     implementation("com.github.mihonapp:injekt:91edab2317")
+    // Motor de JavaScript que usan las extensiones (JavaScriptEngine), la misma librería y versión que Komikku.
+    implementation("com.github.zhanghai.quickjs-java:quickjs-android:547f5b1597")
 }

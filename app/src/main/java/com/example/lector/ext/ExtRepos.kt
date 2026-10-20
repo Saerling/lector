@@ -139,59 +139,168 @@ object ExtRepos {
         }
     }
 
-    fun leerIndice(bytes: ByteArray, urlIndice: String, repo: RepoExt): List<ExtDisponible> {
-        val datos = if (bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte())
-            GZIPInputStream(bytes.inputStream()).use { it.readBytes() } else bytes
-        val base = base(urlIndice)
-        val esJson = datos.firstOrNull { !it.toInt().toChar().isWhitespace() }?.toInt()?.toChar() == '['
-        return if (esJson) leerJson(datos, base, repo) else leerProtobuf(datos, base, repo)
+    // ───────────────────────────────────────────────────────────────────────────────────────────
+    // Lectura de listados (tiendas) de extensiones. Port de Komikku:
+    //   data/.../ExtensionStoreService.kt (fetch y getExtensions) y los modelos NetworkExtensionStore,
+    //   NetworkLegacyExtension y NetworkLegacyExtensionRepo.
+    // Formatos que entiende, igual que Komikku:
+    //   · "[...": índice clásico index.min.json (+ repo.json con nombre, web y clave de firma)
+    //   · "{...": repo.json clásico (con "index_v2" apuntando al índice nuevo) o tienda nueva en JSON
+    //   · otro:   tienda nueva en protobuf (index.pb), con o sin gzip
+    // ───────────────────────────────────────────────────────────────────────────────────────────
+
+    class FuenteCruda(val id: Long, val nombre: String, val lang: String, val home: String)
+
+    class ExtCruda(
+        val nombre: String, val pkg: String, val apk: String, val icono: String, val lib: Double,
+        val code: Long, val version: String, val nsfw: Boolean, val lang: String, val fuentes: List<FuenteCruda>,
+    )
+
+    /** Un listado ya leído: sus datos y, si venía en el mismo archivo, la lista de extensiones. */
+    class TiendaLeida(val repo: RepoExt, val crudas: List<ExtCruda>?)
+
+    private fun descomprimir(bytes: ByteArray): ByteArray {
+        val gz = bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+        return if (gz) GZIPInputStream(bytes.inputStream()).use { it.readBytes() } else bytes
     }
 
-    // ---- JSON clásico (Suwayomi y la mayoría de listados) ----
-    private fun leerJson(datos: ByteArray, base: String, repo: RepoExt): List<ExtDisponible> {
-        val arr = JSONArray(String(datos, Charsets.UTF_8))
-        val salida = ArrayList<ExtDisponible>()
+    private fun sinBom(b: ByteArray): ByteArray =
+        if (b.size >= 3 && b[0] == 0xEF.toByte() && b[1] == 0xBB.toByte() && b[2] == 0xBF.toByte()) b.copyOfRange(3, b.size) else b
+
+    private fun descargarLista(url: String): ByteArray = sinBom(descomprimir(descargar(url)))
+
+    private const val CORCHETE = 0x5B.toByte() // '['
+    private const val LLAVE = 0x7B.toByte() // '{'
+
+    /** Equivale a ExtensionStoreService.fetch: lee un listado y devuelve sus datos. Lanza error si no es válido. */
+    fun leerTienda(url: String): TiendaLeida {
+        val datos = descargarLista(url)
+        if (datos.isEmpty()) error("El listado está vacío")
+        return when (datos[0]) {
+            CORCHETE -> {
+                // Índice clásico: los datos del listado están en repo.json, junto al índice.
+                val sufijo = listOf("/index.min.json", "/index.json").firstOrNull { url.endsWith(it) }
+                    ?: error("La dirección de un listado clásico debe terminar en /index.min.json")
+                val repoUrl = url.removeSuffix(sufijo) + "/repo.json"
+                val meta = runCatching { String(descargarLista(repoUrl), Charsets.UTF_8) }.getOrNull()
+                if (meta == null) {
+                    // Listado sin repo.json (los hay antiguos): se usa el propio índice, sin clave de firma.
+                    val repo = RepoExt(url, nombreDe(url), true, webDe(url), esLegacy = true)
+                    TiendaLeida(repo, crudasClasicas(datos, url.substringBeforeLast('/')))
+                } else {
+                    val t = leerRepoClasico(JSONObject(meta), repoUrl)
+                    if (t.repo.url == repoUrl) TiendaLeida(t.repo, crudasClasicas(datos, repoUrl.substringBeforeLast('/'))) else t
+                }
+            }
+            LLAVE -> {
+                val o = JSONObject(String(datos, Charsets.UTF_8))
+                if (o.has("meta")) leerRepoClasico(o, url) else leerTiendaJson(o, url)
+            }
+            else -> leerTiendaProto(datos, url)
+        }
+    }
+
+    // repo.json clásico: { "meta": { name, shortName, website, signingKeyFingerprint }, "index_v2": "..." }
+    private fun leerRepoClasico(o: JSONObject, url: String): TiendaLeida {
+        val v2 = o.optString("index_v2").ifBlank { null }
+        if (v2 != null) return leerTienda(v2)
+        val m = o.getJSONObject("meta")
+        val nombre = m.optString("name").ifBlank { m.optString("shortName") }.ifBlank { nombreDe(url) }
+        val repo = RepoExt(
+            url = url, nombre = nombre, activo = true,
+            web = m.optString("website").ifBlank { webDe(url) },
+            etiqueta = m.optString("shortName").ifBlank { nombre },
+            claveFirma = m.optString("signingKeyFingerprint"),
+            esLegacy = true,
+        )
+        return TiendaLeida(repo, null)
+    }
+
+    // Tienda nueva en JSON (mismos campos que el protobuf, con nombres en camelCase).
+    private fun leerTiendaJson(o: JSONObject, url: String): TiendaLeida {
+        val contacto = o.optJSONObject("contact")
+        val nombre = o.optString("name").ifBlank { nombreDe(url) }
+        val repo = RepoExt(
+            url = url, nombre = nombre, activo = true,
+            web = contacto?.optString("website")?.ifBlank { null } ?: webDe(url),
+            etiqueta = o.optString("badgeLabel").ifBlank { nombre },
+            claveFirma = o.optString("signingKey"),
+            esLegacy = false,
+            urlLista = o.optString("extensionListUrl").ifBlank { null },
+            discord = contacto?.optString("discord")?.ifBlank { null },
+        )
+        return TiendaLeida(repo, o.optJSONObject("extensionList")?.optJSONArray("extensions")?.let { crudasJson(it) })
+    }
+
+    private fun avisoEsNsfw(v: Any?): Boolean = when (v) {
+        is Number -> v.toInt() >= 2 // 2 = MIXED, 3 = NSFW
+        is String -> v.contains("MIXED", true) || v.contains("NSFW", true)
+        else -> false
+    }
+
+    private fun langDe(fuentes: List<FuenteCruda>): String {
+        val l = fuentes.map { it.lang }.toSet()
+        return if (l.size == 1) l.first() else "all"
+    }
+
+    private fun crudasJson(arr: org.json.JSONArray): List<ExtCruda> {
+        val salida = ArrayList<ExtCruda>()
         for (i in 0 until arr.length()) {
             runCatching {
                 val o = arr.getJSONObject(i)
-                val pkg = o.getString("pkg")
-                val langExt = o.optString("lang", "")
-                val fuentes = ArrayList<FuenteInfo>()
-                o.optJSONArray("sources")?.let { s ->
-                    for (j in 0 until s.length()) {
-                        val so = s.getJSONObject(j)
-                        fuentes += FuenteInfo(
-                            id = so.optString("id", "0").toLongOrNull() ?: 0L,
-                            nombre = so.optString("name"),
-                            lang = so.optString("lang", langExt),
-                            baseUrl = so.optString("baseUrl"),
-                            pkg = pkg,
-                        )
-                    }
+                val fa = o.optJSONArray("sources")
+                val fuentes = (0 until (fa?.length() ?: 0)).map { j ->
+                    val so = fa!!.getJSONObject(j)
+                    FuenteCruda(so.optString("id", "0").toLongOrNull() ?: 0L, so.optString("name"), so.optString("language"), so.optString("homeUrl"))
                 }
-                salida += ExtDisponible(
-                    nombre = o.getString("name").removePrefix("Tachiyomi: "),
-                    pkg = pkg,
-                    apkUrl = "$base/apk/${o.getString("apk")}",
-                    iconoUrl = "$base/icon/$pkg.png",
-                    lang = langExt,
-                    versionCode = o.optLong("code"),
-                    versionName = o.optString("version"),
-                    nsfw = o.optInt("nsfw") == 1,
-                    fuentes = fuentes,
-                    repoUrl = repo.url,
-                    repoSigla = repo.sigla,
+                val res = o.optJSONObject("resources")
+                salida += ExtCruda(
+                    nombre = o.getString("name"), pkg = o.getString("packageName"),
+                    apk = res?.optString("apkUrl").orEmpty(), icono = res?.optString("iconUrl").orEmpty(),
+                    lib = o.opt("extensionLib")?.toString()?.toDoubleOrNull() ?: 0.0,
+                    code = o.optLong("versionCode"), version = o.optString("versionName"),
+                    nsfw = avisoEsNsfw(o.opt("contentWarning")), lang = langDe(fuentes), fuentes = fuentes,
                 )
             }
         }
         return salida
     }
 
-    // ---- Protobuf (index.pb de Keiyoushi) ----
-    // ¡OJO! ESQUEMA INFERIDO de una descripción de terceros, NO verificado contra el .proto oficial:
-    //   campo 101 (repetido) = Extensión { 1 nombre, 2 pkg, 3 {1 apkUrl, 2 iconoUrl}, 5 versionCode,
-    //   6 versionName, 8 (repetido) Fuente { 1 id, 2 nombre, 3 lang, 4 baseUrl } }.
-    // Si algún campo no sale bien, comprobar el esquema real y corregir aquí (ver HANDOFF.md).
+    // index.min.json clásico (NetworkLegacyExtension): apk e icono salen de la carpeta del listado.
+    private fun crudasClasicas(datos: ByteArray, base: String): List<ExtCruda> {
+        val arr = JSONArray(String(datos, Charsets.UTF_8))
+        val salida = ArrayList<ExtCruda>()
+        for (i in 0 until arr.length()) {
+            runCatching {
+                val o = arr.getJSONObject(i)
+                val pkg = o.getString("pkg")
+                val lang = o.optString("lang", "")
+                val nombre = o.getString("name").substringAfter("Tachiyomi: ")
+                val sa = o.optJSONArray("sources")
+                val fuentes = if (sa == null || sa.length() == 0) {
+                    listOf(FuenteCruda(0L, nombre, lang, ""))
+                } else (0 until sa.length()).map { j ->
+                    val so = sa.getJSONObject(j)
+                    FuenteCruda(so.optString("id", "0").toLongOrNull() ?: 0L, so.optString("name"), so.optString("lang", lang), so.optString("baseUrl"))
+                }
+                val version = o.optString("version")
+                salida += ExtCruda(
+                    nombre = nombre, pkg = pkg, apk = "$base/apk/${o.getString("apk")}", icono = "$base/icon/$pkg.png",
+                    lib = version.substringBeforeLast('.').toDoubleOrNull() ?: 0.0,
+                    code = o.optLong("code"), version = version, nsfw = o.optInt("nsfw") == 1,
+                    lang = lang, fuentes = fuentes,
+                )
+            }
+        }
+        return salida
+    }
+
+    // ---- Protobuf: esquema real de NetworkExtensionStore (Komikku) ----
+    //   Tienda:    1 nombre, 2 etiqueta, 3 clave de firma, 4 contacto{1 web, 2 discord},
+    //              101 lista{1 (repetido) extensión}, 102 dirección de la lista aparte
+    //   Extensión: 1 nombre, 2 paquete, 3 recursos{1 apk, 2 icono}, 4 extensionLib (texto), 5 versionCode,
+    //              6 versionName, 7 aviso de contenido (0 sin dato, 1 seguro, 2 mixto, 3 NSFW),
+    //              8 (repetido) fuente{1 id, 2 nombre, 3 idioma, 4 web, 5 espejos, 7 mensaje}
     private fun campos(b: ByteArray, cb: (num: Int, valor: Long, datos: ByteArray?) -> Unit) {
         var p = 0
         fun varint(): Long {
@@ -223,68 +332,103 @@ object ExtRepos {
         }
     }
 
-    private fun leerProtobuf(datos: ByteArray, base: String, repo: RepoExt): List<ExtDisponible> {
-        fun abs(u: String) = if (u.startsWith("http")) u else "$base/${u.trimStart('/')}"
-        val salida = ArrayList<ExtDisponible>()
-        campos(datos) { num, _, bytes ->
-            if (num != 101 || bytes == null) return@campos
-            runCatching {
-                var nombre = ""
-                var pkg = ""
-                var apk = ""
-                var icono = ""
-                var vcode = 0L
-                var vname = ""
-                val fuentes = ArrayList<FuenteInfo>()
-                campos(bytes) { n, v, d ->
-                    when (n) {
-                        1 -> nombre = d?.toString(Charsets.UTF_8) ?: ""
-                        2 -> pkg = d?.toString(Charsets.UTF_8) ?: ""
-                        3 -> if (d != null) campos(d) { n2, _, d2 ->
-                            if (d2 != null && n2 == 1) apk = d2.toString(Charsets.UTF_8)
-                            if (d2 != null && n2 == 2) icono = d2.toString(Charsets.UTF_8)
-                        }
-                        5 -> vcode = v
-                        6 -> vname = d?.toString(Charsets.UTF_8) ?: ""
-                        8 -> if (d != null) {
-                            var id = 0L
-                            var sn = ""
-                            var sl = ""
-                            var sb = ""
-                            campos(d) { n2, v2, d2 ->
-                                when (n2) {
-                                    1 -> id = d2?.toString(Charsets.UTF_8)?.toLongOrNull() ?: v2
-                                    2 -> sn = d2?.toString(Charsets.UTF_8) ?: ""
-                                    3 -> sl = d2?.toString(Charsets.UTF_8) ?: ""
-                                    4 -> sb = d2?.toString(Charsets.UTF_8) ?: ""
-                                }
-                            }
-                            fuentes += FuenteInfo(id, sn, sl, sb, pkg)
-                        }
-                    }
-                }
-                if (pkg.isEmpty()) return@runCatching
-                val idiomas = fuentes.map { it.lang }.filter { it.isNotEmpty() }.distinct()
-                val lang = when {
-                    idiomas.size == 1 -> idiomas[0]
-                    idiomas.size > 1 -> "all"
-                    else -> pkg.removePrefix("eu.kanade.tachiyomi.extension.").substringBefore('.').ifEmpty { "all" }
-                }
-                salida += ExtDisponible(
-                    nombre = nombre.removePrefix("Tachiyomi: "),
-                    pkg = pkg,
-                    apkUrl = if (apk.isEmpty()) "" else abs(apk),
-                    iconoUrl = if (icono.isEmpty()) "" else abs(icono),
-                    lang = lang,
-                    versionCode = vcode,
-                    versionName = vname,
-                    nsfw = false,
-                    fuentes = fuentes.map { it.copy(pkg = pkg) },
-                    repoUrl = repo.url,
-                    repoSigla = repo.sigla,
-                )
+    private fun txt(d: ByteArray?) = d?.toString(Charsets.UTF_8).orEmpty()
+
+    private fun protoFuente(b: ByteArray): FuenteCruda {
+        var id = 0L; var n = ""; var l = ""; var h = ""
+        campos(b) { num, v, d ->
+            when (num) {
+                1 -> id = if (d != null) txt(d).toLongOrNull() ?: 0L else v
+                2 -> n = txt(d)
+                3 -> l = txt(d)
+                4 -> h = txt(d)
             }
         }
-        return salida
+        return FuenteCruda(id, n, l, h)
+    }
+
+    private fun protoExt(b: ByteArray): ExtCruda {
+        var nombre = ""; var pkg = ""; var apk = ""; var icono = ""; var lib = ""
+        var code = 0L; var version = ""; var aviso = 0L
+        val fuentes = ArrayList<FuenteCruda>()
+        campos(b) { n, v, d ->
+            when (n) {
+                1 -> nombre = txt(d)
+                2 -> pkg = txt(d)
+                3 -> if (d != null) campos(d) { n2, _, d2 ->
+                    if (n2 == 1) apk = txt(d2)
+                    if (n2 == 2) icono = txt(d2)
+                }
+                4 -> lib = txt(d)
+                5 -> code = v
+                6 -> version = txt(d)
+                7 -> aviso = v
+                8 -> if (d != null) fuentes += protoFuente(d)
+            }
+        }
+        require(pkg.isNotEmpty()) { "Extensión sin paquete" }
+        return ExtCruda(nombre, pkg, apk, icono, lib.toDoubleOrNull() ?: 0.0, code, version, aviso >= 2, langDe(fuentes), fuentes)
+    }
+
+    private fun protoLista(b: ByteArray): List<ExtCruda> {
+        val r = ArrayList<ExtCruda>()
+        campos(b) { n, _, d -> if (n == 1 && d != null) runCatching { r += protoExt(d) } }
+        return r
+    }
+
+    private fun leerTiendaProto(datos: ByteArray, url: String): TiendaLeida {
+        var nombre = ""; var etiqueta = ""; var clave = ""; var web = ""; var discord: String? = null
+        var urlLista: String? = null
+        var crudas: List<ExtCruda>? = null
+        campos(datos) { n, _, d ->
+            when (n) {
+                1 -> nombre = txt(d)
+                2 -> etiqueta = txt(d)
+                3 -> clave = txt(d)
+                4 -> if (d != null) campos(d) { n2, _, d2 ->
+                    if (n2 == 1) web = txt(d2)
+                    if (n2 == 2) discord = txt(d2).ifBlank { null }
+                }
+                101 -> if (d != null) crudas = protoLista(d)
+                102 -> urlLista = txt(d).ifBlank { null }
+            }
+        }
+        if (nombre.isEmpty() && clave.isEmpty() && crudas == null && urlLista == null) error("Formato de listado desconocido")
+        val nom = nombre.ifBlank { nombreDe(url) }
+        val repo = RepoExt(
+            url = url, nombre = nom, activo = true, web = web.ifBlank { webDe(url) },
+            etiqueta = etiqueta.ifBlank { nom }, claveFirma = clave, esLegacy = false,
+            urlLista = urlLista, discord = discord,
+        )
+        return TiendaLeida(repo, crudas)
+    }
+
+    /** Equivale a ExtensionStoreService.getExtensions: las extensiones que ofrece un listado. */
+    fun extensiones(t: TiendaLeida): List<ExtDisponible> {
+        val repo = t.repo
+        val base = repo.url.substringBeforeLast('/')
+        fun abs(u: String) = if (u.isEmpty() || u.startsWith("http")) u else "$base/${u.trimStart('/')}"
+        val crudas = t.crudas ?: run {
+            when {
+                repo.urlLista != null -> {
+                    val d = descargarLista(repo.urlLista)
+                    if (d.isNotEmpty() && d[0] == LLAVE) crudasJson(JSONObject(String(d, Charsets.UTF_8)).getJSONArray("extensions"))
+                    else protoLista(d)
+                }
+                !repo.esLegacy -> leerTienda(repo.url).crudas ?: error("El listado no incluye extensiones")
+                else -> {
+                    val indice = if (repo.url.endsWith("/repo.json")) repo.url.removeSuffix("/repo.json") + "/index.min.json" else repo.url
+                    crudasClasicas(descargarLista(indice), indice.substringBeforeLast('/'))
+                }
+            }
+        }
+        return crudas.map { e ->
+            ExtDisponible(
+                nombre = e.nombre, pkg = e.pkg, apkUrl = abs(e.apk), iconoUrl = abs(e.icono),
+                lang = e.lang, versionCode = e.code, versionName = e.version, nsfw = e.nsfw,
+                fuentes = e.fuentes.map { FuenteInfo(it.id, it.nombre, it.lang, it.home, e.pkg) },
+                repoUrl = repo.url, repoSigla = repo.sigla, libVersion = e.lib, firma = repo.claveFirma,
+            )
+        }
     }
 }

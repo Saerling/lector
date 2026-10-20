@@ -21,6 +21,11 @@ import androidx.core.content.pm.PackageInfoCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import eu.kanade.tachiyomi.source.ConfigurableSource
+import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -51,7 +56,22 @@ class ExtManager private constructor(private val app: Context) {
 
     // ---- Estado visible ----
     var repos by mutableStateOf(cargarRepos()); private set
+    // Todo lo que ofrecen los listados (una entrada por paquete y firma, como Komikku) y la vista reducida
+    // a una por paquete que usan las pantallas.
+    private var disponiblesTodas by mutableStateOf<List<ExtDisponible>>(emptyList())
     var disponibles by mutableStateOf<List<ExtDisponible>>(emptyList()); private set
+    // Fuentes reales leídas del código de cada extensión de confianza (como Komikku), y por qué no cargó alguna.
+    private val fuentesCargadas = mutableStateMapOf<String, List<FuenteInfo>>()
+    val erroresCarga = mutableStateMapOf<String, String>()
+
+    private fun reducirDisponibles() {
+        val firmas = instaladasRaw.associate { it.pkg to it.firmas }
+        disponibles = disponiblesTodas.groupBy { it.pkg }.values.map { g ->
+            val propias = firmas[g[0].pkg].orEmpty()
+            val mismas = g.filter { d -> d.firma.isBlank() || propias.any { it.equals(d.firma, true) } }
+            (if (propias.isNotEmpty() && mismas.isNotEmpty()) mismas else g).maxByOrNull { it.versionCode }!!
+        }
+    }
     private var instaladasRaw by mutableStateOf<List<ExtInstalada>>(emptyList())
     var cargando by mutableStateOf(false); private set
     var errores by mutableStateOf<List<String>>(emptyList()); private set
@@ -104,31 +124,86 @@ class ExtManager private constructor(private val app: Context) {
         (prefs.getStringSet("confiadas", emptySet()) ?: emptySet()).toMutableSet()
     private var confiadasVersion by mutableStateOf(0) // fuerza repintar al cambiar la confianza
 
-    /** Instaladas + si hay actualización + si son de confianza. */
+    /**
+     * Instaladas + si hay actualización + si son de confianza.
+     * Como en Komikku (TrustExtension): una extensión firmada con la clave de un listado añadido es de confianza;
+     * el resto necesita pulsar «Confiar». Hay actualización si el listado con LA MISMA firma ofrece una versión
+     * mayor o una versión de librería mayor (ExtensionManager.updateExists).
+     */
     val instaladas: List<ExtInstalada>
         get() {
             @Suppress("UNUSED_VARIABLE") val v = confiadasVersion
+            val clavesListados = repos.map { it.claveFirma }.filter { it.isNotBlank() }
             return instaladasRaw.map { e ->
                 val disp = disponibles.firstOrNull { it.pkg == e.pkg }
+                val candidato = disponiblesTodas
+                    .filter { d -> d.pkg == e.pkg && (d.firma.isBlank() || e.firmas.any { it.equals(d.firma, true) }) }
+                    .maxByOrNull { it.versionCode }
+                val deListado = e.firmas.any { f -> clavesListados.any { it.equals(f, true) } }
+                val reales = fuentesCargadas[e.pkg]?.map { it.lang }?.toSet()
                 e.copy(
-                    lang = disp?.lang ?: e.lang,
+                    lang = when {
+                        reales != null && reales.size == 1 -> reales.first()
+                        reales != null && reales.size > 1 -> "all"
+                        else -> disp?.lang ?: e.lang
+                    },
                     nsfw = e.nsfw || (disp?.nsfw == true),
-                    confiable = "${e.pkg}:${e.firma}" in confiadas,
-                    repoSigla = disp?.repoSigla,
-                    actualizacion = disp?.takeIf { it.versionCode > e.versionCode },
+                    confiable = deListado || "${e.pkg}:${e.firma}" in confiadas,
+                    repoSigla = (candidato ?: disp)?.repoSigla,
+                    actualizacion = candidato?.takeIf { it.versionCode > e.versionCode || it.libVersion > e.libVersion },
                 )
             }
         }
 
-    /** Fuentes de las extensiones instaladas y de confianza. */
+    /** Fuentes de las extensiones instaladas y de confianza (las reales si ya se cargaron; si no, las del listado). */
     val fuentes: List<FuenteUI>
-        get() = instaladas.filter { it.confiable }.flatMap { e ->
-            val lista = disponibles.firstOrNull { it.pkg == e.pkg }?.fuentes.orEmpty()
+        get() = instaladas.filter { it.confiable && it.errorCarga == null }.flatMap { e ->
+            val lista = fuentesCargadas[e.pkg]?.takeIf { it.isNotEmpty() }
+                ?: disponibles.firstOrNull { it.pkg == e.pkg }?.fuentes.orEmpty()
             val base = lista.ifEmpty {
                 listOf(FuenteInfo(e.pkg.hashCode().toLong(), e.nombre, e.lang, "", e.pkg))
             }
             base.map { FuenteUI(it.id, it.nombre.ifBlank { e.nombre }, it.lang.ifBlank { e.lang }, e.nsfw, e.pkg, it.baseUrl) }
         }
+
+    /**
+     * Fuentes de una extensión que tienen ajustes propios (ConfigurableSource). Vacío mientras la extensión
+     * no esté cargada; al terminar de cargar, las pantallas que lo leen se repintan solas.
+     */
+    fun configurables(pkg: String): List<ConfigurableSource> {
+        if (fuentesCargadas[pkg] == null) return emptyList()
+        val e = instaladas.firstOrNull { it.pkg == pkg } ?: return emptyList()
+        return CargadorExt.yaCargada(e)?.filterIsInstance<ConfigurableSource>().orEmpty()
+    }
+
+    /** Vuelve a crear las fuentes de una extensión para que lean sus ajustes nuevos. */
+    fun recargarExtension(pkg: String) {
+        CargadorExt.olvidar(pkg)
+        (Motor.actual as? MotorExt)?.olvidar()
+        scope.launch { cargarFuentesReales(pkg) }
+    }
+
+    /** Carga en segundo plano el código de las extensiones de confianza para conocer sus fuentes reales. */
+    private suspend fun cargarFuentesReales(solo: String? = null) {
+        val objetivos = instaladas.filter { it.confiable && it.errorCarga == null && (solo == null || it.pkg == solo) }
+        coroutineScope {
+            objetivos.map { e ->
+                async(Dispatchers.Default) {
+                    runCatching { CargadorExt.fuentes(app, e) }
+                        .onSuccess { src ->
+                            fuentesCargadas[e.pkg] = src.map {
+                                FuenteInfo(it.id, it.name, it.lang, (it as? HttpSource)?.baseUrl.orEmpty(), e.pkg)
+                            }
+                            erroresCarga.remove(e.pkg)
+                        }
+                        .onFailure {
+                            erroresCarga[e.pkg] = it.message ?: it.javaClass.simpleName
+                            android.util.Log.e("Lector", "No se pudo cargar la extensión ${e.pkg}", it)
+                        }
+                }
+            }.awaitAll()
+        }
+    }
 
     // ---- Receptores ----
     private val receptorPaquetes = object : BroadcastReceiver() {
@@ -170,16 +245,18 @@ class ExtManager private constructor(private val app: Context) {
         ContextCompat.registerReceiver(
             app, receptorInstalacion, IntentFilter(ACCION_INSTALAR), ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        // Motor de fuentes: ejecuta el código de las extensiones de confianza (Komikku source-api).
+        // Va ANTES de la carga en segundo plano: registra lo que las extensiones piden con Injekt.
+        runCatching { Motor.actual = MotorExt(app.applicationContext as android.app.Application, this) }
+            .onFailure { android.util.Log.e("Lector", "No se pudo iniciar el motor de fuentes", it) }
         // Leer el JSON de ~1500 extensiones y recorrer todos los paquetes del teléfono tardaba cientos de ms
         // EN EL HILO PRINCIPAL al abrir la app. Ahora va en segundo plano; las pantallas se rellenan solas.
         scope.launch {
             cargarCache()
             leerInstaladas()
             withContext(Dispatchers.Main) { actualizarLista() }
+            cargarFuentesReales()
         }
-        // Motor de fuentes: ejecuta el código de las extensiones de confianza (Komikku source-api).
-        runCatching { Motor.actual = MotorExt(app.applicationContext as android.app.Application, this) }
-            .onFailure { android.util.Log.e("Lector", "No se pudo iniciar el motor de fuentes", it) }
     }
 
     // ---- Listados (repositorios) ----
@@ -199,24 +276,31 @@ class ExtManager private constructor(private val app: Context) {
         if (s == null) return reposPorDefecto().also { guardarRepos(it) }
         return runCatching {
             val a = JSONArray(s)
-            val lista = (0 until a.length()).map {
+            (0 until a.length()).map {
                 val o = a.getJSONObject(it)
-                // El index.pb de Keiyoushi no se lee bien: se usa su index.min.json (mismo contenido, JSON estándar).
-                val url = o.getString("url").let { u ->
-                    if (u.contains("keiyoushi/extensions") && u.endsWith("/index.pb"))
-                        "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json" else u
-                }
-                RepoExt(url, o.getString("nombre"), o.optBoolean("activo", true), o.optString("web").ifBlank { null })
+                RepoExt(
+                    url = o.getString("url"),
+                    nombre = o.getString("nombre"),
+                    activo = o.optBoolean("activo", true),
+                    web = o.optString("web").ifBlank { null },
+                    etiqueta = o.optString("etiqueta"),
+                    claveFirma = o.optString("clave"),
+                    esLegacy = o.optBoolean("legacy", false),
+                    urlLista = o.optString("lista").ifBlank { null },
+                    discord = o.optString("discord").ifBlank { null },
+                )
             }
-            guardarRepos(lista)
-            lista
         }.getOrDefault(emptyList())
     }
 
     private fun guardarRepos(lista: List<RepoExt>) {
         val a = JSONArray()
         lista.forEach {
-            a.put(JSONObject().put("url", it.url).put("nombre", it.nombre).put("activo", it.activo).put("web", it.web ?: ""))
+            a.put(
+                JSONObject().put("url", it.url).put("nombre", it.nombre).put("activo", it.activo).put("web", it.web ?: "")
+                    .put("etiqueta", it.etiqueta).put("clave", it.claveFirma).put("legacy", it.esLegacy)
+                    .put("lista", it.urlLista ?: "").put("discord", it.discord ?: ""),
+            )
         }
         prefs.edit().putString("repos", a.toString()).apply()
     }
@@ -236,20 +320,22 @@ class ExtManager private constructor(private val app: Context) {
             var hallado: RepoExt? = null
             var primerError: String? = null
             for (url in candidatos) {
-                val prueba = RepoExt(url, ExtRepos.nombreDe(url), true, ExtRepos.webDe(url))
+                // Igual que Komikku al añadir una tienda: se lee el listado y se guardan sus datos (nombre, etiqueta, clave de firma…).
                 val r = runCatching {
-                    val lista = ExtRepos.leerIndice(ExtRepos.descargar(url), url, prueba)
-                    check(lista.isNotEmpty()) { "El listado está vacío o no tiene un formato conocido" }
+                    val t = ExtRepos.leerTienda(url)
+                    check(ExtRepos.extensiones(t).isNotEmpty()) { "El listado está vacío o no tiene un formato conocido" }
+                    t.repo
                 }
-                if (r.isSuccess) { hallado = prueba; break }
+                if (r.isSuccess) { hallado = r.getOrNull(); break }
                 if (primerError == null) primerError = r.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName }
             }
-            // Nombre y web bonitos desde repo.json (p. ej. «Kavita Extension Repo»).
-            val repo = hallado?.let { h ->
-                ExtRepos.meta(ExtRepos.base(h.url))?.let { (n, w) -> h.copy(nombre = n, web = w ?: h.web) } ?: h
-            }
             withContext(Dispatchers.Main) {
+                val repo = hallado
                 if (repo != null) {
+                    val repetido = repos.any {
+                        it.url == repo.url || (repo.claveFirma.isNotBlank() && it.claveFirma == repo.claveFirma && it.nombre == repo.nombre)
+                    }
+                    if (repetido) { alTerminar("Ese listado ya está añadido"); return@withContext }
                     repos = repos + repo
                     guardarRepos(repos)
                     actualizarLista()
@@ -283,30 +369,46 @@ class ExtManager private constructor(private val app: Context) {
         scope.launch {
             val nuevas = ArrayList<ExtDisponible>()
             val errs = ArrayList<String>()
+            val metas = HashMap<String, RepoExt>()
             repos.filter { it.activo }.forEach { r ->
-                // Si el índice falla o viene vacío, se prueban los otros nombres habituales del mismo listado.
+                // Si el listado falla o viene vacío, se prueban los otros nombres habituales de la misma carpeta.
                 val urls = listOf(r.url) + ExtRepos.candidatos(ExtRepos.base(r.url)).filter { it != r.url }
                 var primerError: String? = null
                 var leido = false
                 for (u in urls) {
-                    val res = runCatching { ExtRepos.leerIndice(ExtRepos.descargar(u), u, r) }
-                    val lista = res.getOrNull()
-                    if (!lista.isNullOrEmpty()) { nuevas += lista; leido = true; break }
+                    val res = runCatching { ExtRepos.leerTienda(u).let { t -> t.repo to ExtRepos.extensiones(t) } }
+                    val par = res.getOrNull()
+                    if (par != null && par.second.isNotEmpty()) {
+                        nuevas += par.second; metas[r.url] = par.first; leido = true; break
+                    }
                     if (primerError == null) primerError = res.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName } ?: "listado vacío"
                 }
                 if (!leido) errs += "${r.nombre}: ${primerError ?: "sin respuesta"}"
             }
-            // Si una extensión sale en varios listados, gana la versión más alta.
-            val unicas = nuevas.groupBy { it.pkg }.values.map { g -> g.maxByOrNull { it.versionCode }!! }
+            // Una entrada por paquete y firma (si hay copias en varios listados con la misma firma, gana la versión más alta).
+            val unicas = nuevas.groupBy { it.pkg to it.firma }.values.map { g -> g.maxByOrNull { it.versionCode }!! }
             withContext(Dispatchers.Main) {
                 if (unicas.isNotEmpty() || errs.isEmpty()) {
-                    disponibles = unicas
+                    disponiblesTodas = unicas
                     guardarCache(unicas)
+                    reducirDisponibles()
                     sincronizarIdiomas()
+                }
+                if (metas.isNotEmpty()) {
+                    repos = repos.map { r ->
+                        val m = metas[r.url] ?: return@map r
+                        r.copy(
+                            nombre = m.nombre, web = m.web ?: r.web, etiqueta = m.etiqueta, claveFirma = m.claveFirma,
+                            esLegacy = m.esLegacy, urlLista = m.urlLista, discord = m.discord,
+                        )
+                    }
+                    guardarRepos(repos)
                 }
                 errores = errs
                 cargando = false
             }
+            // Con las claves de firma recién conocidas, más extensiones pueden ser de confianza.
+            cargarFuentesReales()
         }
     }
 
@@ -316,7 +418,7 @@ class ExtManager private constructor(private val app: Context) {
             a.put(
                 JSONObject().put("nombre", e.nombre).put("pkg", e.pkg).put("apk", e.apkUrl).put("icono", e.iconoUrl)
                     .put("lang", e.lang).put("code", e.versionCode).put("version", e.versionName).put("nsfw", e.nsfw)
-                    .put("repo", e.repoUrl).put("sigla", e.repoSigla)
+                    .put("repo", e.repoUrl).put("sigla", e.repoSigla).put("lib", e.libVersion).put("firma", e.firma)
                     .put(
                         "fuentes",
                         JSONArray().also { fa ->
@@ -346,16 +448,22 @@ class ExtManager private constructor(private val app: Context) {
                         FuenteInfo(f.optString("id", "0").toLongOrNull() ?: 0L, f.optString("n"), f.optString("l"), f.optString("b"), pkg)
                     },
                     o.optString("repo"), o.optString("sigla"),
+                    libVersion = o.optDouble("lib", 0.0), firma = o.optString("firma"),
                 )
             }
+            disponiblesTodas = disponibles
+            reducirDisponibles()
             sincronizarIdiomas()
         }
     }
 
     // ---- Extensiones instaladas ----
-    /** Vuelve a leer las extensiones instaladas (en segundo plano). */
+    /** Vuelve a leer las extensiones instaladas (en segundo plano) y carga sus fuentes. */
     fun refrescarInstaladas() {
-        scope.launch { leerInstaladas() }
+        scope.launch {
+            leerInstaladas()
+            cargarFuentesReales()
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -363,36 +471,14 @@ class ExtManager private constructor(private val app: Context) {
         val pm = app.packageManager
         val nombres = runCatching { pm.getInstalledPackages(PackageManager.GET_CONFIGURATIONS) }
             .getOrDefault(emptyList())
-            .filter { p -> p.reqFeatures?.any { it.name == CARACTERISTICA } == true }
+            .filter { CargadorExt.esExtension(it) }
             .map { it.packageName }
-        val flags = PackageManager.GET_META_DATA or
-            (if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES)
         instaladasRaw = nombres.mapNotNull { n ->
-            runCatching {
-                val p = pm.getPackageInfo(n, flags)
-                val ai = p.applicationInfo ?: return@runCatching null
-                ExtInstalada(
-                    nombre = pm.getApplicationLabel(ai).toString().removePrefix("Tachiyomi: "),
-                    pkg = n,
-                    versionName = p.versionName ?: "",
-                    versionCode = PackageInfoCompat.getLongVersionCode(p),
-                    lang = n.removePrefix("eu.kanade.tachiyomi.extension.").substringBefore('.').ifEmpty { "all" },
-                    nsfw = ai.metaData?.getInt("tachiyomi.extension.nsfw", 0) == 1,
-                    confiable = false,
-                    firma = firma(p),
-                    repoSigla = null,
-                    actualizacion = null,
-                )
-            }.getOrNull()
+            runCatching { CargadorExt.leer(pm, pm.getPackageInfo(n, CargadorExt.FLAGS)) }.getOrNull()
         }.sortedBy { it.nombre.lowercase() }
+        fuentesCargadas.keys.filter { k -> instaladasRaw.none { it.pkg == k } }.forEach { fuentesCargadas.remove(it) }
+        reducirDisponibles()
         sincronizarIdiomas()
-    }
-
-    @Suppress("DEPRECATION")
-    private fun firma(p: PackageInfo): String {
-        val firmas = if (Build.VERSION.SDK_INT >= 28) p.signingInfo?.apkContentsSigners else p.signatures
-        val bytes = firmas?.firstOrNull()?.toByteArray() ?: return ""
-        return MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
     }
 
     // ---- Confianza (como en Mihon: hay que pulsar "Confiar" antes de usar una extensión) ----
@@ -400,6 +486,7 @@ class ExtManager private constructor(private val app: Context) {
         confiadas += "${e.pkg}:${e.firma}"
         prefs.edit().putStringSet("confiadas", confiadas.toSet()).apply()
         confiadasVersion++
+        scope.launch { cargarFuentesReales(e.pkg) }
     }
 
     fun dejarDeConfiar(e: ExtInstalada) {

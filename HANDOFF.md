@@ -263,6 +263,34 @@ Se revisó el código leyéndolo (no ejecutándolo). Lo que se cambió y por qu�
 - `press3D`/`pressableCon` usan `composed {}` en cada tarjeta de las cuadrículas (costoso): conviene migrarlos a `Modifier.Node` cuando se pueda probar.
 - La caché de disco de imágenes se indexa solo por URL (no por cabeceras).
 
+## 2j. PASO 10 — Funciones 14 y 15: ajustes de pantalla y de imagen también en el lector online (2026-10-19, **SIN compilar ni probar**)
+El lector local ya tenía fondo, orientación, brillo, grises, invertir, filtro de color y recorte de bordes; el online (`LeerOnlineScreen`) no.
+- `LectorScreen.kt`: `AjustesPantalla` y `construirFiltro` pasan de `private` a `internal` (misma lógica, ahora reutilizada).
+- `AjustesLector.kt`: las secciones «Pantalla» e «Imagen» salen de `DialogoLector` a `AjustesPantallaImagen(almacen)`; nuevo `DialogoPantallaLector(almacen, alCerrar)` (solo esas secciones, sin las opciones de navegación del lector local). El lector local se comporta igual.
+- `ui/FuenteManga.kt`: `LeerOnlineScreen` llama a `AjustesPantalla(almacen)` (orientación y brillo, se restauran al salir), pinta el fondo elegido, aplica el filtro de grises/invertido a cada `Image`, pone la capa de color encima de las páginas (debajo de las barras) y recorta bordes en los modos paginados (`produceState` en segundo plano con `Cbz.recortarBordes`; las páginas partidas en tiras no se recortan). El diálogo «Modo de lectura» gana el botón «Pantalla y color».
+- Sin dependencias nuevas. Sin probar: orientación al girar con el lector online abierto, recorte en páginas reales, filtro invertido con fondo blanco.
+- Sigue faltando en el lector online: zoom (pellizco/doble toque), autodesplazamiento, fondo inteligente.
+
+## 2k. PASO 11 — Extensiones portadas de Komikku (2026-10-19, **SIN compilar la app entera**; el lector de listados sí se compiló y probó aparte)
+Origen: `data/.../extension/service/ExtensionStoreService.kt` + modelos `NetworkExtensionStore`, `NetworkLegacyExtension(Repo)`; `app/.../extension/util/ExtensionLoader.kt`; `domain/.../TrustExtension.kt`; `ExtensionManager.updateExists`; `JavaScriptEngine`.
+- **CORRECCIÓN IMPORTANTE (ext/ExtRepos.kt):** el esquema protobuf que había aquí estaba mal (decía «101 repetido = extensión»). El real: tienda {1 nombre, 2 etiqueta, 3 clave de firma, 4 contacto{1 web, 2 discord}, 101 lista{1 repetido extensión}, 102 url de lista aparte}; extensión {1 nombre, 2 paquete, 3 {1 apk, 2 icono}, 4 lib (texto), 5 versionCode, 6 versionName, 7 aviso (≥2 = NSFW), 8 fuentes{1 id, 2 nombre, 3 idioma, 4 web}}. Probado con un index.pb sintético (con y sin gzip). Se quitó el apaño que cambiaba Keiyoushi a index.min.json.
+- `ExtRepos.leerTienda(url)` = `fetch` de Komikku: «[» índice clásico (lee repo.json; si trae `index_v2` salta al índice nuevo), «{» repo.json o tienda JSON, otro = protobuf; gzip automático. `ExtRepos.extensiones(tienda)` = `getExtensions`.
+- `RepoExt` guarda ahora etiqueta, clave de firma, legacy, lista aparte y discord (persistido en prefs; los listados guardados se actualizan solos al refrescar).
+- **ext/CargadorExt.kt (nuevo):** valida como Komikku: metadatos `tachiyomix.*`, versión de librería SOLO 1.4 y 1.6 (1.5 se rechaza, igual que Komikku), firmas SHA-256 de todas las del paquete, extensión sin firma = error. `ExtInstalada.errorCarga` dice el motivo. Carga real de las fuentes (id/nombre/idioma/baseUrl) en segundo plano; `ExtManager.erroresCarga` guarda los fallos de carga (la interfaz todavía NO los muestra).
+- **Confianza (como TrustExtension):** una extensión firmada con la clave de un listado añadido es de confianza sin pulsar «Confiar»; las demás siguen necesitando «Confiar».
+- **Actualizaciones:** solo cuenta el listado con la MISMA firma; hay actualización si sube versionCode o libVersion. `disponibles` sigue siendo una entrada por paquete (las pantallas no cambian); `disponiblesTodas` guarda una por paquete+firma.
+- **JavaScriptEngine** real con QuickJS (`com.github.zhanghai.quickjs-java:quickjs-android:547f5b1597`, misma versión que Komikku). OJO: dependencia nueva que baja de JitPack; si el build falla por ella, revisar esto primero.
+- NO portado todavía: extensiones privadas (APK dentro de la app), notificación de actualizaciones, pantalla de ajustes por fuente (ConfigurableSource / SourcePreferencesScreen), filtros de búsqueda de cada fuente, migración de fuente.
+
+## 2l. PASO 12 — Ajustes propios de cada fuente (2026-10-19, **SIN compilar**)
+Origen: Komikku `SourcePreferencesScreen`/`SourcePreferencesFragment` (usa un PreferenceFragmentCompat). Aquí NO hay FragmentActivity ni tema AppCompat, así que se hizo distinto: la extensión rellena el mismo `androidx.preference.PreferenceScreen` (`setupPreferenceScreen`) creado con `PreferenceManager(ctx)` (archivo `source_<id>`, el mismo que usa Komikku) y cada preferencia se dibuja en Compose.
+- `ui/AjustesFuente.kt` (nuevo): `AjustesFuenteScreen(ext, pkg, fuente, titulo, onBack)`. Soporta TwoStatePreference (Switch/CheckBox), EditTextPreference, ListPreference, MultiSelectListPreference, categorías/subpantallas aplanadas y Preference con onClick. Los cambios pasan por `callChangeListener` y luego se guardan, como el original. Respeta `isVisible`/`isEnabled` (dependencias). NO soportado: SeekBarPreference y el tipo de teclado de EditTextPreference (contraseña, número…).
+- Al salir tras cambiar algo: `ExtManager.recargarExtension(pkg)` descarta la extensión cargada (`CargadorExt.olvidar`) y las cabeceras/páginas guardadas (`MotorExt.olvidar`) para que la fuente se cree otra vez leyendo el dominio nuevo.
+- `ExtManager.configurables(pkg)`: fuentes con ajustes (vacío hasta que la extensión termina de cargar).
+- Puntos de entrada: detalle de la extensión («Ajustes de las fuentes») y engranaje en la cabecera de la fuente. El detalle de la extensión ahora enseña el motivo si no carga («Problema»: `errorCarga` / `ExtManager.erroresCarga`).
+- Posible fallo de compilación: `PreferenceManager(Context)` está marcado @RestrictTo en androidx.preference (solo es aviso de lint, no error de compilación).
+- Sigue sin hacer: filtros de búsqueda de cada fuente, migración de fuente, notificación de actualizaciones, extensiones privadas.
+
 ## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.

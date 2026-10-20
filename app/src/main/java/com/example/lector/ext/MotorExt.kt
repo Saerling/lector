@@ -43,9 +43,6 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
 
     private val ctx: Context = app
 
-    // pkg:versionCode:firma -> fuentes cargadas de esa extensión
-    private val cache = ConcurrentHashMap<String, List<Source>>()
-
     init {
         // Lo que las extensiones piden con Injekt.get<...>() / injectLazy<...>().
         Injekt.importModule(object : InjektModule {
@@ -58,35 +55,12 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         })
     }
 
-    private fun cargarExtension(pkg: String): List<Source> {
-        val pm = ctx.packageManager
-        val info = pm.getPackageInfo(pkg, PackageManager.GET_META_DATA)
-        val ai = info.applicationInfo ?: error("Sin información de aplicación para $pkg")
-        val claseMeta = ai.metaData?.getString("tachiyomi.extension.class")
-            ?: error("La extensión $pkg no declara tachiyomi.extension.class")
-        val cl = ChildFirstPathClassLoader(ai.sourceDir, null, ctx.classLoader)
-        return claseMeta.split(";")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .map { if (it.startsWith(".")) pkg + it else it }
-            .flatMap { nombre ->
-                when (val obj = Class.forName(nombre, false, cl).getDeclaredConstructor().newInstance()) {
-                    is Source -> listOf(obj)
-                    is SourceFactory -> obj.createSources()
-                    else -> error("Tipo de fuente desconocido: ${obj.javaClass}")
-                }
-            }
-    }
-
     private fun fuenteReal(f: FuenteUI): CatalogueSource {
         val e = ext.instaladas.firstOrNull { it.pkg == f.pkg }
             ?: error("La extensión de ${f.nombre} no está instalada")
         check(e.confiable) { "La extensión de ${f.nombre} no es de confianza" }
-        val clave = "${e.pkg}:${e.versionCode}:${e.firma}"
-        val lista = cache.getOrPut(clave) {
-            cache.keys.filter { it.startsWith("${e.pkg}:") }.forEach { cache.remove(it) } // versiones viejas
-            cargarExtension(e.pkg)
-        }
+        e.errorCarga?.let { error("No se puede usar ${f.nombre}: $it") }
+        val lista = CargadorExt.fuentes(ctx, e)
         val src = lista.filterIsInstance<CatalogueSource>().let { cs ->
             cs.firstOrNull { it.id == f.id }
                 ?: cs.firstOrNull { it.name == f.nombre && it.lang == f.lang }
@@ -209,6 +183,12 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
 
     private val cabecerasCache = ConcurrentHashMap<Long, Map<String, String>>()
 
+    /** Tras cambiar los ajustes de una fuente (dominio…): descarta cabeceras y listas de páginas guardadas. */
+    fun olvidar() {
+        cabecerasCache.clear()
+        synchronized(paginasCache) { paginasCache.clear() }
+    }
+
     private fun calcularCabeceras(fuente: FuenteUI): Map<String, String> = runCatching {
         val h = (fuenteReal(fuente) as? HttpSource)?.headers ?: return@runCatching emptyMap<String, String>()
         h.names().associateWith { h[it].orEmpty() }
@@ -221,7 +201,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
     override fun cabeceras(fuente: FuenteUI): Map<String, String> {
         cabecerasCache[fuente.id]?.let { return it }
         val e = ext.instaladas.firstOrNull { it.pkg == fuente.pkg } ?: return emptyMap()
-        if (!cache.containsKey("${e.pkg}:${e.versionCode}:${e.firma}")) return emptyMap()
+        if (CargadorExt.yaCargada(e) == null) return emptyMap()
         return calcularCabeceras(fuente).also { if (it.isNotEmpty()) cabecerasCache[fuente.id] = it }
     }
 

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -189,6 +190,13 @@ private fun DialogoAnadirRepo(ext: ExtManager, cerrar: () -> Unit) {
 fun ExtDetalleScreen(ext: ExtManager, pkg: String, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val e = ext.instaladas.firstOrNull { it.pkg == pkg }
+    var ajustesDe by remember { mutableStateOf<Long?>(null) }
+    val configurables = ext.configurables(pkg)
+    val abierta = ajustesDe?.let { id -> configurables.firstOrNull { it.id == id } }
+    if (abierta != null) {
+        AjustesFuenteScreen(ext, pkg, abierta, abierta.name) { ajustesDe = null }
+        return
+    }
     PaginaAjustes(e?.nombre ?: "Extensión", onBack) {
         if (e == null) {
             LText("Esta extensión ya no está instalada.", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
@@ -206,6 +214,7 @@ fun ExtDetalleScreen(ext: ExtManager, pkg: String, onBack: () -> Unit) {
         Dato("Versión", e.versionName)
         Dato("Listado", e.repoSigla?.let { "@$it" } ?: "—")
         Dato("Estado", if (e.confiable) "De confianza" else "Sin confianza")
+        (e.errorCarga ?: ext.erroresCarga[e.pkg])?.let { Dato("Problema", it) }
         Divisor()
         e.actualizacion?.let { a ->
             FilaAjuste(Icons.Rounded.Refresh, "Actualizar a ${a.versionName}", null) { ext.instalar(a) }
@@ -233,10 +242,19 @@ fun ExtDetalleScreen(ext: ExtManager, pkg: String, onBack: () -> Unit) {
                 LText("${nombreIdioma(f.lang)}  ·  ${f.baseUrl}", LectorType.Label, color = LectorColors.Muted, maxLines = 1)
             }
         }
-        LText(
-            "Los ajustes propios de cada fuente (dominio, inicio de sesión…) aparecerán cuando se conecte el motor de fuentes.",
-            LectorType.Label, Modifier.padding(24.dp), color = LectorColors.Muted
-        )
+        if (configurables.isNotEmpty()) {
+            Divisor()
+            TituloSeccion("Ajustes de las fuentes")
+            configurables.forEach { c ->
+                FilaAjuste(Icons.Rounded.Settings, c.name, "Dominio, inicio de sesión, calidad…") { ajustesDe = c.id }
+            }
+        } else {
+            LText(
+                if (e.confiable && e.errorCarga == null) "Esta extensión no tiene ajustes propios (o todavía se está cargando)."
+                else "Los ajustes propios de cada fuente aparecen cuando la extensión es de confianza y se puede cargar.",
+                LectorType.Label, Modifier.padding(24.dp), color = LectorColors.Muted
+            )
+        }
     }
 }
 
@@ -273,12 +291,23 @@ fun FuenteDetalleScreen(ext: ExtManager, fuenteId: Long, onManga: (MangaFuente) 
                 LectorType.Label, Modifier.padding(24.dp), color = LectorColors.Muted
             )
         }
-        else -> NavegarFuente(f, motor, onManga, onBack)
+        else -> {
+            val configurable = ext.configurables(f.pkg).firstOrNull { it.id == f.id }
+            var ajustes by remember { mutableStateOf(false) }
+            if (ajustes && configurable != null) {
+                AjustesFuenteScreen(ext, f.pkg, configurable, f.nombre) { ajustes = false }
+            } else {
+                NavegarFuente(f, motor, onManga, onBack, if (configurable != null) ({ ajustes = true }) else null)
+            }
+        }
     }
 }
 
 @Composable
-private fun NavegarFuente(f: FuenteUI, motor: MotorFuentes, onManga: (MangaFuente) -> Unit, onBack: () -> Unit) {
+private fun NavegarFuente(
+    f: FuenteUI, motor: MotorFuentes, onManga: (MangaFuente) -> Unit, onBack: () -> Unit,
+    onAjustes: (() -> Unit)? = null,
+) {
     val scope = rememberCoroutineScope()
     var modo by rememberSaveable { mutableStateOf(0) } // 0 populares · 1 recientes · 2 búsqueda
     var consulta by rememberSaveable { mutableStateOf("") }
@@ -310,7 +339,13 @@ private fun NavegarFuente(f: FuenteUI, motor: MotorFuentes, onManga: (MangaFuent
                 Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text)
             }
             Spacer(Modifier.width(14.dp))
-            LText(f.nombre, LectorType.Display.copy(fontSize = 26.sp), maxLines = 1)
+            LText(f.nombre, LectorType.Display.copy(fontSize = 26.sp), Modifier.weight(1f, fill = false), maxLines = 1)
+            if (onAjustes != null) {
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.size(44.dp).pressable(onAjustes).clip(CircleShape).background(LectorColors.PillFill), Alignment.Center) {
+                    Icon(Icons.Rounded.Settings, "Ajustes de la fuente", tint = LectorColors.Text)
+                }
+            }
         }
         Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ChipSel("Populares", modo == 0) { modo = 0 }

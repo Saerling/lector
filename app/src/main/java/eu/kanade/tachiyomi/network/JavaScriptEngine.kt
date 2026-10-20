@@ -1,13 +1,28 @@
 package eu.kanade.tachiyomi.network
 
 import android.content.Context
+import app.cash.quickjs.QuickJs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
- * Existe para que las extensiones que lo referencian carguen. QuickJS no está incluido todavía:
- * las que evalúen JavaScript fallarán con UnsupportedOperationException (ver HANDOFF).
+ * Util for evaluating JavaScript in sources.
+ * Igual que el de Komikku (core/common/.../network/JavaScriptEngine.kt): usa QuickJS.
  */
-@Suppress("UNUSED", "UNUSED_PARAMETER")
-class JavaScriptEngine(context: Context) {
-    suspend fun <T> evaluate(script: String): T =
-        throw UnsupportedOperationException("JavaScriptEngine no está disponible todavía en Lector")
+@Suppress("UNUSED", "UNCHECKED_CAST")
+class JavaScriptEngine(@Suppress("UNUSED_PARAMETER") context: Context) {
+
+    /**
+     * Evaluate arbitrary JavaScript code and get the result as a primitive type
+     * (e.g., String, Int).
+     *
+     * @since extensions-lib 1.4
+     * @param script JavaScript to execute.
+     * @return Result of JavaScript code as a primitive type.
+     */
+    suspend fun <T> evaluate(script: String): T = withContext(Dispatchers.IO) {
+        QuickJs.create().use {
+            it.evaluate(script) as T
+        }
+    }
 }
