@@ -36,3 +36,13 @@
 -keep class kotlin.Metadata { *; }
 -keep interface eu.kanade.** { *; }
 -keep interface okhttp3.** { *; }
+
+# Código nativo (JNI): las librerías nativas buscan clases y métodos POR NOMBRE. Si R8 los quita o los cambia, la
+# app se cae con SIGABRT al descomprimir una respuesta (zstd / brotli de OkHttp). Se conservan enteros.
+-keepclasseswithmembernames,includedescriptorclasses class * { native <methods>; }
+-keep class com.squareup.zstd.** { *; }
+-keep class org.brotli.** { *; }
+-keep class com.github.luben.zstd.** { *; }
+-keep class app.cash.zipline.** { *; }
+-dontwarn com.squareup.zstd.**
+-dontwarn org.brotli.**

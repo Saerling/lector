@@ -20,7 +20,7 @@ probar() {
     echo "===== $pkg ====="
     grep "LectorPrueba" "logcat-$ETIQUETA-$pkg.txt" | tail -3
     grep -A45 "FATAL EXCEPTION" "logcat-$ETIQUETA-$pkg.txt" | head -60
-    grep -A25 "Fatal signal" "logcat-$ETIQUETA-$pkg.txt" | head -30
+    grep -E "Fatal signal|Abort message|JNI DETECTED|java_vm_ext|art  *: |DEBUG *: (#0|  #0|backtrace|Cause|signal)| F [a-zA-Z]+ *:" "logcat-$ETIQUETA-$pkg.txt" | grep -v "MetricsFeature" | head -40
     adb shell pidof com.example.lector >/dev/null && echo "La app sigue abierta" || echo "LA APP NO ESTÁ ABIERTA"
     echo "Textos en pantalla: $(grep -o 'text="[^"]*"' "ui-$pkg.xml" 2>/dev/null | sed 's/text=//' | grep -v '""' | head -25 | tr '\n' ' ')"
   } >> fallos.txt
