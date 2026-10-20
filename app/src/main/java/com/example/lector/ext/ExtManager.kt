@@ -621,6 +621,29 @@ class ExtManager private constructor(private val app: Context) {
         prefs.edit().putStringSet("leidos", leidos).apply()
     }
 
+    /**
+     * Migración de fuente: pasa el estado «leído» de los capítulos de la fuente vieja a los de la nueva, emparejándolos
+     * por número de capítulo (como Komikku). Si no se puede emparejar (la fuente vieja no responde o no hay números),
+     * se marcan como leídos los [respaldo] capítulos más antiguos. Devuelve cuántos capítulos quedan leídos.
+     */
+    fun migrarLeidos(
+        viejaFuente: Long, viejos: List<CapituloFuente>?, nuevaFuente: Long, nuevos: List<CapituloFuente>, respaldo: Int,
+    ): Int {
+        val numerosLeidos = viejos.orEmpty().filter { it.numero >= 0 && esLeido(viejaFuente, it.url) }.map { it.numero }.toSet()
+        val aMarcar = if (numerosLeidos.isNotEmpty()) {
+            nuevos.filter { it.numero >= 0 && it.numero in numerosLeidos }
+        } else {
+            // Las fuentes listan lo más nuevo primero: los leídos son los últimos de la lista.
+            nuevos.takeLast(respaldo.coerceIn(0, nuevos.size))
+        }
+        val claves = aMarcar.map { "$nuevaFuente|${it.url}" }.toSet()
+        if (claves.isNotEmpty()) {
+            leidos = leidos + claves
+            prefs.edit().putStringSet("leidos", leidos).apply()
+        }
+        return nuevos.count { esLeido(nuevaFuente, it.url) }
+    }
+
     fun esMarcado(fuenteId: Long, url: String) = "$fuenteId|$url" in marcados
 
     fun alternarMarcado(fuenteId: Long, url: String) {

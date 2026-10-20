@@ -299,6 +299,13 @@ Origen: Komikku `SourceFilterDialog` (+ `BrowseSourceScreenModel`: filtros edita
 - Los filtros no son estado de Compose: `PanelFiltros` usa un contador (`tick`) que se pasa a cada fila para repintarla tras cada cambio.
 - Sigue sin hacer: tocar un género en la ficha para buscarlo con filtro (Komikku `searchGenre`), migración de fuente, notificación de actualizaciones (no hay WorkManager ni notificaciones en la app), extensiones privadas.
 
+## 2n. PASO 14 — Género tocable y migración de fuente (2026-10-19, **SIN compilar**)
+Origen: Komikku `BrowseSourceScreenModel.searchGenre` y la migración de fuentes (versión simplificada).
+- **Género tocable:** en la ficha, cada género es un botón. `FichaMangaScreen(alGenero)` → `LectorApp` guarda `generoBuscar`, apaga `desdeNovedades` y abre `Ruta.FuenteDetalle`; `FuenteDetalleScreen(generoBuscar, alConsumirGenero)` → `NavegarFuente(generoInicial)` pide filtros NUEVOS, `marcarGenero` (port de searchGenre: Group→TriState incluir / CheckBox, o Select por nombre) y busca con ellos; si la fuente no tiene ese filtro, busca el género como texto. OJO: `FuenteDetalleScreen` ahora tiene los parámetros nuevos ANTES de `onBack` (la lambda final sigue siendo `onBack`).
+- **Migración:** botón «Migrar a otra fuente» en la ficha de un manga que está en la biblioteca. `ui/Migrar.kt` (`MigrarScreen`): elegir fuente → buscar por título → elegir resultado → confirmar. Es la MISMA entrada de la biblioteca (mismo id): se conservan categorías, portada guardada y orden. `Almacen.migrarEnLinea` cambia fuenteId/urlManga/portadaUrl/total/leídos y olvida novedades e historial de la fuente vieja; `ExtManager.migrarLeidos` pasa lo leído emparejando por NÚMERO de capítulo (si no se puede, marca los N más antiguos según el contador). Después registra los capítulos nuevos como base de novedades y vuelve atrás con un aviso.
+- NO hace: mover descargas de la fuente vieja (quedan huérfanas en disco), copiar marcadores de capítulo, migrar varios mangas a la vez, ni la pantalla «Migrar» por fuente de Komikku. Si la fuente vieja ya no responde, `capsOrigen` es null y se usa el contador de leídos.
+- Sigue sin hacer: notificación de actualizaciones de extensiones (no hay WorkManager), extensiones privadas.
+
 ## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.

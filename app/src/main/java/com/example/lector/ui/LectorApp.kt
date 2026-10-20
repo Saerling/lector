@@ -78,6 +78,7 @@ fun Inicio(
     var fuenteId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Manga abierto desde una fuente y capítulos que se están leyendo online.
     var mangaSel by remember { mutableStateOf<MangaFuente?>(null) }
+    var generoBuscar by remember { mutableStateOf<String?>(null) } // género tocado en una ficha → se busca en su fuente
     var desdeNovedades by remember { mutableStateOf(false) } // la ficha se abrió desde Explorar → Novedades
     var capsLectura by remember { mutableStateOf<List<CapituloFuente>>(emptyList()) }
     var capIndice by remember { mutableStateOf(0) }
@@ -267,6 +268,7 @@ fun Inicio(
                         Ruta.FuenteDetalle -> FuenteDetalleScreen(
                             ext, fuenteId ?: 0L,
                             onManga = { mangaSel = it; desdeNovedades = false; reanudar = null; ruta = Ruta.Ficha },
+                            generoBuscar = generoBuscar, alConsumirGenero = { generoBuscar = null },
                         ) { ruta = null }
                         Ruta.Ficha -> {
                             val m = mangaSel
@@ -279,6 +281,8 @@ fun Inicio(
                                 },
                                 reanudarCap = reanudar,
                                 alConsumirReanudar = { reanudar = null },
+                                // Vuelve a la lista de la fuente (si la ficha venía de la biblioteca, se abre) y busca el género.
+                                alGenero = { g -> generoBuscar = g; desdeNovedades = false; ruta = Ruta.FuenteDetalle },
                             )
                         }
                         Ruta.LeerOnline -> LeerOnlineScreen(

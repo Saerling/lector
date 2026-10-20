@@ -1019,6 +1019,33 @@ class Almacen(private val contexto: Context) {
         return comic
     }
 
+    /**
+     * Migración de fuente (como Komikku): el mismo manga de la biblioteca pasa a otra fuente. Es la MISMA entrada
+     * (mismo id), así que se conservan categorías, portada guardada y posición. Devuelve false si el manga destino
+     * ya está en la biblioteca.
+     */
+    @Synchronized
+    fun migrarEnLinea(
+        c: Comic, nuevaFuenteId: Long, nuevaUrl: String, nuevaPortadaUrl: String?, capitulos: Int, leidos: Int,
+    ): Boolean {
+        if (comicEnLinea(nuevaFuenteId, nuevaUrl) != null) return false
+        val viejaUrl = c.urlManga ?: return false
+        modificar { l ->
+            l.map {
+                if (it.id == c.id) {
+                    it.copy(
+                        fuenteId = nuevaFuenteId, urlManga = nuevaUrl, portadaUrl = nuevaPortadaUrl ?: it.portadaUrl,
+                        paginas = capitulos, ultimaPagina = leidos.coerceIn(0, maxOf(capitulos, 0)),
+                    )
+                } else it
+            }
+        }
+        // Lo anotado de la fuente vieja (novedades pendientes, historial) ya no corresponde a este manga.
+        olvidarCapitulos(c.fuenteId, viejaUrl)
+        quitarHistorialLinea(c.fuenteId, viejaUrl)
+        return true
+    }
+
     fun quitarEnLinea(fuenteId: Long, urlManga: String) {
         comicEnLinea(fuenteId, urlManga)?.let { eliminar(it.id) }
     }

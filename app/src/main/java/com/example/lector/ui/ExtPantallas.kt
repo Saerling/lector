@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lector.ext.*
+import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import kotlinx.coroutines.launch
 
@@ -270,7 +271,12 @@ private fun Dato(etiqueta: String, valor: String) {
 // ───────────────────── Una fuente ─────────────────────
 
 @Composable
-fun FuenteDetalleScreen(ext: ExtManager, fuenteId: Long, onManga: (MangaFuente) -> Unit, onBack: () -> Unit) {
+fun FuenteDetalleScreen(
+    ext: ExtManager, fuenteId: Long, onManga: (MangaFuente) -> Unit,
+    // Género que se acaba de tocar en una ficha: se busca nada más abrir (y se avisa al terminar).
+    generoBuscar: String? = null, alConsumirGenero: () -> Unit = {},
+    onBack: () -> Unit,
+) {
     val ctx = LocalContext.current
     val f = ext.fuentes.firstOrNull { it.id == fuenteId }
     val motor = Motor.actual
@@ -298,16 +304,45 @@ fun FuenteDetalleScreen(ext: ExtManager, fuenteId: Long, onManga: (MangaFuente) 
             if (ajustes && configurable != null) {
                 AjustesFuenteScreen(ext, f.pkg, configurable, f.nombre) { ajustes = false }
             } else {
-                NavegarFuente(f, motor, onManga, onBack, if (configurable != null) ({ ajustes = true }) else null)
+                NavegarFuente(
+                    f, motor, onManga, onBack, if (configurable != null) ({ ajustes = true }) else null,
+                    generoInicial = generoBuscar, alConsumirGenero = alConsumirGenero,
+                )
             }
         }
     }
+}
+
+/** Port de searchGenre de Komikku: marca el filtro con el nombre del género. Falso si la fuente no tiene ese filtro. */
+private fun marcarGenero(filtros: FilterList, genero: String): Boolean {
+    for (filtro in filtros) {
+        if (filtro is Filter.Group<*>) {
+            for (hijo in filtro.state) {
+                if (hijo is Filter<*> && hijo.name.equals(genero, true)) {
+                    when (hijo) {
+                        is Filter.TriState -> hijo.state = Filter.TriState.STATE_INCLUDE
+                        is Filter.CheckBox -> hijo.state = true
+                        else -> {}
+                    }
+                    return true
+                }
+            }
+        } else if (filtro is Filter.Select<*>) {
+            val i = filtro.values.filterIsInstance<String>().indexOfFirst { it.equals(genero, true) }
+            if (i != -1) {
+                filtro.state = i
+                return true
+            }
+        }
+    }
+    return false
 }
 
 @Composable
 private fun NavegarFuente(
     f: FuenteUI, motor: MotorFuentes, onManga: (MangaFuente) -> Unit, onBack: () -> Unit,
     onAjustes: (() -> Unit)? = null,
+    generoInicial: String? = null, alConsumirGenero: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var modo by rememberSaveable { mutableStateOf(0) } // 0 populares · 1 recientes · 2 búsqueda
@@ -323,7 +358,20 @@ private fun NavegarFuente(
     var aplicados by remember { mutableStateOf<FilterList?>(null) }
     var panel by remember { mutableStateOf(false) }
     var recarga by remember { mutableIntStateOf(0) }
-    LaunchedEffect(f.id) { runCatching { motor.filtros(f) }.onSuccess { filtros = it } }
+    LaunchedEffect(f.id) { runCatching { motor.filtros(f) }.onSuccess { if (filtros == null) filtros = it } }
+    // Un género tocado en la ficha: se marca en los filtros (o, si la fuente no lo tiene, se busca como texto).
+    LaunchedEffect(generoInicial) {
+        val g = generoInicial ?: return@LaunchedEffect
+        val nuevos = runCatching { motor.filtros(f) }.getOrNull()
+        val coincide = nuevos != null && marcarGenero(nuevos, g)
+        if (nuevos != null) filtros = nuevos
+        aplicados = nuevos
+        consulta = if (coincide) "" else g
+        enviada = if (coincide) "" else g
+        modo = 2
+        recarga++
+        alConsumirGenero()
+    }
 
     suspend fun pedir(p: Int): PaginaMangas = when (modo) {
         0 -> motor.populares(f, p)

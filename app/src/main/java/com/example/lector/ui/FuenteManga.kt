@@ -74,6 +74,13 @@ import com.example.lector.Almacen
 import com.example.lector.ext.*
 import com.example.lector.Cbz
 import com.example.lector.EntradaHistorial
+import com.example.lector.AjustesPantalla
+import com.example.lector.DialogoPantallaLector
+import com.example.lector.Tinte
+import com.example.lector.colorFondo
+import com.example.lector.colorTinte
+import com.example.lector.construirFiltro
+import androidx.compose.ui.graphics.ColorFilter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -200,6 +207,8 @@ fun FichaMangaScreen(
     // Si viene del historial: capítulo y página que hay que abrir en cuanto cargue la ficha.
     reanudarCap: Pair<String, Int>? = null,
     alConsumirReanudar: () -> Unit = {},
+    // Tocar un género de la ficha: busca ese género en la fuente (como «searchGenre» de Komikku).
+    alGenero: (String) -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -221,6 +230,7 @@ fun FichaMangaScreen(
     // Capítulo cuya descarga se quiere borrar.
     var quitarDescarga by remember { mutableStateOf<CapituloFuente?>(null) }
     var menuDescarga by remember { mutableStateOf(false) }
+    var migrando by remember { mutableStateOf(false) }
 
     LaunchedEffect(fuenteId, manga.url, recarga) {
         if (f == null || motor == null) return@LaunchedEffect
@@ -406,7 +416,14 @@ fun FichaMangaScreen(
                         Row(
                             Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) { fi.detalle.generos.forEach { ChipBorde(it, acento) } }
+                        ) { fi.detalle.generos.forEach { g -> Box(Modifier.pressable { alGenero(g) }) { ChipBorde(g, acento) } } }
+                    }
+                }
+                if (enBiblioteca != null) {
+                    item {
+                        Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+                            ConAcento(acento) { ChipSel("Migrar a otra fuente", false) { migrando = true } }
+                        }
                     }
                 }
                 item {
@@ -614,6 +631,19 @@ fun FichaMangaScreen(
             BackHandler { editandoCats = false; dialogoCats = true }
             Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
                 EditarCategoriasScreen(almacen) { editandoCats = false; dialogoCats = true }
+            }
+        }
+
+        // Migrar a otra fuente: pantalla encima de la ficha.
+        val comicMigrar = enBiblioteca
+        if (migrando && comicMigrar != null) {
+            BackHandler { migrando = false }
+            Box(Modifier.fillMaxSize().background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {
+                MigrarScreen(
+                    ext, almacen, comicMigrar, f, fi?.capitulos,
+                    alHecho = { d -> migrando = false; alRecargar(); Avisos.mostrar("Migrado a ${d.nombre}"); onBack() },
+                    onBack = { migrando = false },
+                )
             }
         }
 
@@ -869,6 +899,7 @@ fun LeerOnlineScreen(
     var barras by remember { mutableStateOf(true) }
     var dialogoCaps by remember { mutableStateOf(false) }
     var dialogoAjustes by remember { mutableStateOf(false) }
+    var dialogoPantalla by remember { mutableStateOf(false) }
     var paginas by remember(cap.url) { mutableStateOf<Int?>(null) }
     var error by remember(cap.url) { mutableStateOf<String?>(null) }
     var recarga by remember(cap.url) { mutableStateOf(0) }
@@ -959,6 +990,14 @@ fun LeerOnlineScreen(
         vista.keepScreenOn = true
         onDispose { vista.keepScreenOn = antes }
     }
+    // Orientación y brillo propios mientras lees (los mismos ajustes que el lector local).
+    if (almacen != null) AjustesPantalla(almacen)
+    val fondo = if (almacen != null) colorFondo(almacen.fondoLector) else Color.Black
+    val grises = almacen?.escalaGrises == true
+    val invertir = almacen?.invertirColores == true
+    val filtro = remember(grises, invertir) { construirFiltro(grises, invertir) }
+    // Recortar bordes solo tiene sentido en los modos paginados.
+    val recortar = almacen?.recortarBordes == true && modo != 0
 
     fun irA(p: Int) {
         scope.launch {
@@ -969,7 +1008,7 @@ fun LeerOnlineScreen(
     val haySiguiente = indice > 0
     val hayAnterior = indice < capitulos.lastIndex
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(fondo)) {
         when {
             total == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                 if (error == null) CircularProgressIndicator(Modifier.size(28.dp))
@@ -983,7 +1022,7 @@ fun LeerOnlineScreen(
                 state = listState,
                 modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { barras = !barras } },
             ) {
-                items(total) { i -> PaginaOnline(f, cap, i, motor, almacen, ajustar = false) }
+                items(total) { i -> PaginaOnline(f, cap, i, motor, almacen, ajustar = false, filtro = filtro, recortar = false, fondo = fondo) }
                 item {
                     Row(
                         Modifier.fillMaxWidth().navigationBarsPadding().padding(24.dp),
@@ -1013,8 +1052,13 @@ fun LeerOnlineScreen(
                     modifier = Modifier.fillMaxSize(),
                     reverseLayout = modo == 2,
                     beyondViewportPageCount = 1,
-                ) { i -> PaginaOnline(f, cap, i, motor, almacen, ajustar = true) }
+                ) { i -> PaginaOnline(f, cap, i, motor, almacen, ajustar = true, filtro = filtro, recortar = recortar, fondo = fondo) }
             }
+        }
+
+        // Capa de color (luz cálida, sepia…) sobre las páginas; no intercepta toques.
+        if (almacen != null && almacen.tinte != Tinte.NINGUNO) {
+            Box(Modifier.fillMaxSize().background(colorTinte(almacen.tinte).copy(alpha = almacen.intensidadTinte)))
         }
 
         // Número de página cuando las barras están ocultas.
@@ -1151,9 +1195,13 @@ fun LeerOnlineScreen(
                     ChipSel("Paginado, de derecha a izquierda (manga)", modo == 2) { ext.cambiarModoLector(2) }
                 }
             },
+            dismissButton = {
+                if (almacen != null) TextButton(onClick = { dialogoAjustes = false; dialogoPantalla = true }) { Text("Pantalla y color") }
+            },
             confirmButton = { TextButton(onClick = { dialogoAjustes = false }) { Text("Aceptar") } },
         )
     }
+    if (dialogoPantalla && almacen != null) DialogoPantallaLector(almacen) { dialogoPantalla = false }
 }
 
 @Composable
@@ -1174,7 +1222,10 @@ private fun AccionLector(icono: androidx.compose.ui.graphics.vector.ImageVector,
 }
 
 @Composable
-private fun PaginaOnline(f: FuenteUI, cap: CapituloFuente, i: Int, motor: MotorFuentes, almacen: Almacen?, ajustar: Boolean) {
+private fun PaginaOnline(
+    f: FuenteUI, cap: CapituloFuente, i: Int, motor: MotorFuentes, almacen: Almacen?, ajustar: Boolean,
+    filtro: ColorFilter?, recortar: Boolean, fondo: Color,
+) {
     val clave = "${f.id}|${cap.url}|$i"
     var img by remember(clave) { mutableStateOf(CachePaginas.cache.get(clave)) }
     var fallo by remember(clave) { mutableStateOf<String?>(null) }
@@ -1196,20 +1247,28 @@ private fun PaginaOnline(f: FuenteUI, cap: CapituloFuente, i: Int, motor: MotorF
     if (tiras != null) {
         if (!ajustar) {
             Column(Modifier.fillMaxWidth()) {
-                tiras.forEach { Image(it, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+                tiras.forEach { Image(it, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth, colorFilter = filtro) }
             }
         } else if (tiras.size == 1) {
-            Image(tiras[0], null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            // Recortar bordes: quita los márgenes lisos de la página (en segundo plano; si falla, se muestra entera).
+            val mostrada by produceState(tiras[0], tiras, recortar) {
+                value = if (recortar) {
+                    withContext(Dispatchers.Default) {
+                        runCatching { Cbz.recortarBordes(tiras[0].asAndroidBitmap()).asImageBitmap() }.getOrDefault(tiras[0])
+                    }
+                } else tiras[0]
+            }
+            Image(mostrada, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit, colorFilter = filtro)
         } else {
             // Página muy alta en modo paginado: se ajusta al ancho y se desplaza dentro de la página.
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                tiras.forEach { Image(it, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+                tiras.forEach { Image(it, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth, colorFilter = filtro) }
             }
         }
     } else {
         Box(
             (if (ajustar) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(1f / CachePaginas.proporcion))
-                .background(Color(0xFF0C0C0C)).pressable { if (fallo != null) intento++ },
+                .background(fondo).pressable { if (fallo != null) intento++ },
             Alignment.Center,
         ) {
             if (fallo == null) CircularProgressIndicator(Modifier.size(24.dp))
