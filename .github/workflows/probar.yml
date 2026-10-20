@@ -1,0 +1,50 @@
+name: Probar en emulador
+
+# Abre el catálogo de unas extensiones en un emulador y publica los cierres (con su traza) en el resumen del run.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**']
+
+jobs:
+  probar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+      - name: Compilar APK (debug)
+        run: gradle assembleDebug
+      - name: Activar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulador
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash .github/scripts/probar.sh
+      - name: Resultado
+        if: always()
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"; cat fallos.txt >> "$GITHUB_STEP_SUMMARY" || true; echo '```' >> "$GITHUB_STEP_SUMMARY"
+          msg=$(sed -e 's/%/%25/g' fallos.txt | head -150 | awk '{printf "%s%%0A", $0}')
+          echo "::warning title=Prueba en emulador::${msg}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prueba-emulador
+          path: |
+            captura-*.png
+            logcat-*.txt

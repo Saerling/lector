@@ -93,12 +93,33 @@ fun Inicio(
     var consultaGlobal by rememberSaveable { mutableStateOf("") }
     var migrarId by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // Solo en la versión debug: «probar:<paquete>» confía en esa extensión y abre el catálogo de su primera fuente.
+    // Lo usa la prueba automática en el emulador (.github/workflows/probar.yml).
+    var paquetePrueba by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(paquetePrueba) {
+        val pkg = paquetePrueba ?: return@LaunchedEffect
+        ext.refrescarInstaladas()
+        var fuente: com.example.lector.ext.FuenteUI? = null
+        repeat(60) {
+            if (fuente != null) return@repeat
+            ext.instaladas.firstOrNull { it.pkg == pkg }?.let { e -> if (!e.confiable) ext.confiar(e) }
+            fuente = ext.fuentes.firstOrNull { it.pkg == pkg }
+            if (fuente == null) kotlinx.coroutines.delay(500)
+        }
+        android.util.Log.i("LectorPrueba", "fuente=${fuente?.nombre} id=${fuente?.id}")
+        fuente?.let { fuenteId = it.id; desdeNovedades = false; ruta = Ruta.FuenteDetalle }
+    }
+
     // Abrir desde una notificación.
     LaunchedEffect(destino) {
         when (destino) {
             Notificaciones.DESTINO_ACTUALIZACIONES -> { ruta = null; detalleId = null; onTab(LectorTab.Updates) }
             Notificaciones.DESTINO_DESCARGAS -> { detalleId = null; ruta = Ruta.Descargas }
             Notificaciones.DESTINO_EXTENSIONES -> { ruta = null; detalleId = null; onTab(LectorTab.Search) }
+            else -> {
+                val depurable = (contexto.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                if (destino?.startsWith("probar:") == true && depurable) paquetePrueba = destino.removePrefix("probar:")
+            }
         }
         if (destino != null) alConsumirDestino()
     }
