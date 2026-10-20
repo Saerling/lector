@@ -124,9 +124,32 @@ fun Inicio(
             Notificaciones.DESTINO_ACTUALIZACIONES -> { ruta = null; detalleId = null; onTab(LectorTab.Updates) }
             Notificaciones.DESTINO_DESCARGAS -> { detalleId = null; ruta = Ruta.Descargas }
             Notificaciones.DESTINO_EXTENSIONES -> { ruta = null; detalleId = null; onTab(LectorTab.Search) }
+            com.example.lector.TareaCopia.DESTINO -> {
+                com.example.lector.TareaCopia.informeVisto = true
+                com.example.lector.TareaCopia.verInforme = com.example.lector.TareaCopia.informe != null
+            }
             else -> {
                 val depurable = (contexto.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
                 if (destino?.startsWith("probar:") == true && depurable) paquetePrueba = destino.removePrefix("probar:")
+                // Pruebas de las copias en el emulador: restaurar un archivo y crear una copia, midiendo el tiempo.
+                if (destino?.startsWith("probar-restaurar:") == true && depurable) {
+                    val ruta = destino.removePrefix("probar-restaurar:")
+                    com.example.lector.TareaCopia.lanzar(contexto, "Restaurando copia") {
+                        val t0 = android.os.SystemClock.elapsedRealtime()
+                        val inf = com.example.lector.Tachibk.restaurar(contexto, java.io.File(ruta).readBytes(), this)
+                        android.util.Log.i("LectorPrueba", "restaurar ms=${android.os.SystemClock.elapsedRealtime() - t0} bien=${inf.bien} avisos=${inf.avisos} errores=${inf.errores}")
+                        inf
+                    }
+                }
+                if (destino == "probar-copia" && depurable) {
+                    com.example.lector.TareaCopia.lanzar(contexto, "Creando copia .tachibk") {
+                        val t0 = android.os.SystemClock.elapsedRealtime()
+                        val (bytes, inf) = com.example.lector.Tachibk.crear(contexto, this)
+                        java.io.File(contexto.getExternalFilesDir(null), "exportada.tachibk").writeBytes(bytes)
+                        android.util.Log.i("LectorPrueba", "crear ms=${android.os.SystemClock.elapsedRealtime() - t0} bytes=${bytes.size} bien=${inf.bien}")
+                        inf
+                    }
+                }
             }
         }
         if (destino != null) alConsumirDestino()
@@ -423,8 +446,15 @@ fun Inicio(
             }
         }
 
-        // Avisos (en lugar de Toast): píldora que cae desde arriba.
-        AvisosHost(Modifier.align(Alignment.TopCenter))
+        // Avance de una copia de seguridad (píldora pequeña arriba) y su informe al terminar.
+        IslaCopia(Modifier.align(Alignment.TopCenter))
+        InformeCopia()
+
+        // Avisos (en lugar de Toast): píldora que cae desde arriba. Si hay una copia en marcha, debajo de su píldora.
+        val bajarAvisos by androidx.compose.animation.core.animateDpAsState(
+            if (com.example.lector.TareaCopia.estado != null) 46.dp else 0.dp, label = "bajarAvisos",
+        )
+        AvisosHost(Modifier.align(Alignment.TopCenter).padding(top = bajarAvisos))
     }
 }
 

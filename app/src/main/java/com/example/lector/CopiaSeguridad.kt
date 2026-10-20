@@ -31,6 +31,50 @@ object CopiaSeguridad {
         return r
     }
 
+    /** Crea la copia .json y su informe (para la tarea con avance). */
+    fun crearConInforme(ctx: Context, avance: TareaCopia.Avance?): Pair<String, TareaCopia.Informe> {
+        avance?.paso(0.1f, "Reuniendo la biblioteca…")
+        val a = Almacen.obtener(ctx)
+        val comics = a.cargar()
+        val texto = crear(ctx)
+        avance?.paso(0.9f, "Guardando…")
+        val enLinea = comics.count { it.enLinea }
+        return texto to TareaCopia.Informe(
+            titulo = "Copia de seguridad",
+            bien = listOfNotNull(
+                "${comics.size - enLinea} cómics locales (progreso y categorías)".takeIf { comics.size > enLinea },
+                "$enLinea mangas de fuentes".takeIf { enLinea > 0 },
+                "${a.categorias().size} categorías".takeIf { a.categorias().isNotEmpty() },
+                "${a.historialLinea.size} entradas de historial".takeIf { a.historialLinea.isNotEmpty() },
+                "Ajustes, capítulos leídos, listados y fuentes ancladas",
+                "Tamaño: ${texto.length / 1024 + 1} KB",
+            ),
+            avisos = listOfNotNull(
+                "Los archivos .cbz/.pdf no van dentro de la copia: guarda tú esos archivos".takeIf { comics.size > enLinea },
+            ),
+        )
+    }
+
+    /** Restaura una copia .json con su informe. */
+    fun restaurarConInforme(ctx: Context, texto: String, avance: TareaCopia.Avance?): TareaCopia.Informe {
+        avance?.paso(0.1f, "Leyendo la copia…")
+        val antes = Almacen.obtener(ctx).cargar().size
+        val r = restaurar(ctx, texto)
+        avance?.paso(1f, "Listo")
+        val despues = Almacen.obtener(ctx).cargar().size
+        return TareaCopia.Informe(
+            titulo = "Restaurar copia",
+            bien = listOfNotNull(
+                "${r.actualizados} entradas restauradas",
+                "${despues - antes} mangas nuevos en la biblioteca".takeIf { despues > antes },
+                "Ajustes, categorías, historial y capítulos leídos",
+            ),
+            avisos = listOfNotNull(
+                "${r.pendientes} cómics locales pendientes: su progreso y categorías se aplicarán cuando vuelvas a añadir esos archivos".takeIf { r.pendientes > 0 },
+            ),
+        )
+    }
+
     fun nombreArchivo(): String =
         "lector-copia-" + SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.US).format(Date()) + ".json"
 

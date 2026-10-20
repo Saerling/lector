@@ -99,6 +99,7 @@ var fallos = 0
 
 fun main() {
     mainVacia()
+    generar("/tmp/claude-0/pt/grande.tachibk")
     // 1) Mihon escribe → Lector lee.
     val idNegativo = -1540562214L * 3_000_000_000L // ids de fuente pueden ser negativos y enormes
     val mihon = Backup(

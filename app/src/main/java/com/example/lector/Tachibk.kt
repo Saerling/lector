@@ -2,8 +2,9 @@ package com.example.lector
 
 import android.content.Context
 import com.example.lector.TachibkFormato.ANILIST
-import com.example.lector.ext.CapituloFuente
 import com.example.lector.ext.ExtManager
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -19,6 +20,8 @@ import java.util.Locale
  *  - Lo que solo está en el historial (no en la biblioteca) viaja como «no favorito», como hace Mihon.
  *  - Los cómics locales (.cbz de tu móvil) NO van en una .tachibk: en esas apps son archivos de otra carpeta.
  *  - Al importar también se añaden los listados de extensiones que traiga la copia.
+ *
+ * Rapidez: todo se calcula en memoria y se guarda en lote (una escritura por tipo de dato), no manga a manga.
  */
 object Tachibk {
 
@@ -31,13 +34,19 @@ object Tachibk {
 
     // ───────────────────────────── Exportar ─────────────────────────────
 
-    fun crear(ctx: Context): ByteArray {
+    /** Crea la copia .tachibk y devuelve los bytes y el informe. */
+    fun crear(ctx: Context, avance: TareaCopia.Avance? = null): Pair<ByteArray, TareaCopia.Informe> {
         val almacen = Almacen.obtener(ctx)
         val ext = ExtManager.obtener(ctx)
-        val comics = almacen.cargar().filter { it.enLinea && it.urlManga != null }
+        val todos = almacen.cargar()
+        val comics = todos.filter { it.enLinea && it.urlManga != null }
+        val locales = todos.count { !it.enLinea }
         val cats = almacen.categorias()
         val asign = almacen.asignaciones()
         val historial = almacen.historialLinea
+        val histPorManga = historial.groupBy { it.fuenteId to it.urlManga }
+        val ordenCat = cats.withIndex().associate { (i, c) -> c.id to i.toLong() }
+        var capsConEstado = 0
 
         // Solo los capítulos con algo que guardar (leído, marcado o página): la lista completa la pide la otra app.
         fun capitulos(fuente: Long, urls: Collection<String>, nombres: Map<String, String>) = urls.mapNotNull { u ->
@@ -46,17 +55,18 @@ object Tachibk {
             val pagina = ext.paginaDe(fuente, u)
             if (!leido && !marcado && pagina <= 0) null
             else TachibkFormato.Capitulo(u, nombres[u].orEmpty(), leido = leido, marcado = marcado, pagina = pagina.toLong())
-        }
+        }.also { capsConEstado += it.size }
 
-        val mangas = comics.map { c ->
+        val mangas = comics.mapIndexed { i, c ->
+            if (i % 20 == 0) avance?.paso(0.05f + 0.75f * i / comics.size.coerceAtLeast(1), "Mangas: $i de ${comics.size}")
             val url = c.urlManga!!
-            val hist = historial.filter { it.fuenteId == c.fuenteId && it.urlManga == url }
+            val hist = histPorManga[c.fuenteId to url].orEmpty()
             TachibkFormato.Manga(
                 fuente = c.fuenteId, url = url, titulo = c.titulo, autor = c.autor, descripcion = c.descripcion,
                 generos = c.generos, estado = c.estado, portada = c.portadaUrl, anadido = c.anadido,
                 capitulos = capitulos(c.fuenteId, almacen.capitulosConocidos(c.fuenteId, url) + hist.map { it.capUrl }, hist.associate { it.capUrl to it.capNombre }),
                 // Mihon referencia las categorías por su «order».
-                categorias = asign[c.id].orEmpty().mapNotNull { id -> cats.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.toLong() },
+                categorias = asign[c.id].orEmpty().mapNotNull { ordenCat[it] },
                 seguimiento = listOfNotNull(almacen.seguimientoDe(c.id)?.let { s ->
                     TachibkFormato.Seguimiento(ANILIST, s.mediaId.toLong(), s.titulo, s.numero.toFloat())
                 }),
@@ -77,84 +87,163 @@ object Tachibk {
                 historial = listOf(TachibkFormato.Historial(h.capUrl, h.leido)),
             )
         }
+        avance?.paso(0.85f, "Comprimiendo…")
         val ids = (comics.map { it.fuenteId } + historial.map { it.fuenteId }).toSet()
-        return TachibkFormato.codificar(
+        val fuentesPorId = ext.fuentes.associateBy { it.id }
+        val bytes = TachibkFormato.codificar(
             TachibkFormato.Copia(
                 mangas = mangas + soloHistorial,
                 categorias = cats.mapIndexed { i, c -> TachibkFormato.Categoria(c.nombre, i.toLong(), c.oculta) },
-                fuentes = ids.map { id -> TachibkFormato.Fuente(ext.fuentes.firstOrNull { it.id == id }?.nombre ?: id.toString(), id) },
+                fuentes = ids.map { id -> TachibkFormato.Fuente(fuentesPorId[id]?.nombre ?: id.toString(), id) },
             )
         )
+        val informe = TareaCopia.Informe(
+            titulo = "Copia para Mihon / Komikku",
+            bien = listOfNotNull(
+                "${comics.size} mangas de la biblioteca",
+                "$capsConEstado capítulos con progreso (leídos, marcados o a medias)".takeIf { capsConEstado > 0 },
+                "${cats.size} categorías".takeIf { cats.isNotEmpty() },
+                "${historial.size} entradas de historial".takeIf { historial.isNotEmpty() },
+                "Tamaño: ${bytes.size / 1024 + 1} KB",
+            ),
+            avisos = listOfNotNull(
+                "$locales cómics locales (.cbz/.pdf) no se incluyen: ese formato solo guarda mangas de fuentes".takeIf { locales > 0 },
+            ),
+        )
+        return bytes to informe
     }
 
     // ───────────────────────────── Importar ─────────────────────────────
 
-    data class Resultado(val mangas: Int, val categorias: Int, val historial: Int, val listados: Int)
-
-    fun restaurar(ctx: Context, bytes: ByteArray): Resultado {
+    suspend fun restaurar(ctx: Context, bytes: ByteArray, avance: TareaCopia.Avance? = null): TareaCopia.Informe {
         val almacen = Almacen.obtener(ctx)
         val ext = ExtManager.obtener(ctx)
+        avance?.paso(0.05f, "Leyendo la copia…")
         val copia = TachibkFormato.decodificar(bytes)
+        val errores = ArrayList<String>()
+        avance?.paso(0.15f, "${copia.mangas.size} mangas en la copia")
 
         // Categorías: «order» de la copia → id en Lector (se crean las que falten, por nombre).
         var catsNuevas = 0
         val porOrden = HashMap<Long, String>()
         copia.categorias.forEach { c ->
-            val existente = almacen.categorias().firstOrNull { it.nombre.equals(c.nombre, ignoreCase = true) }
-            val id = existente?.id ?: almacen.crearCategoria(c.nombre)?.also { catsNuevas++ }
-            if (id != null) {
-                porOrden[c.orden] = id
-                if (existente == null && c.oculta) almacen.alternarOculta(id)
-            }
+            runCatching {
+                val existente = almacen.categorias().firstOrNull { it.nombre.equals(c.nombre, ignoreCase = true) }
+                val id = existente?.id ?: almacen.crearCategoria(c.nombre)?.also { catsNuevas++ }
+                if (id != null) {
+                    porOrden[c.orden] = id
+                    if (existente == null && c.oculta) almacen.alternarOculta(id)
+                }
+            }.onFailure { errores += "Categoría «${c.nombre}»: ${it.message}" }
         }
 
-        var mangas = 0
+        // 1) Todo en memoria.
+        val leidos = HashSet<String>()
+        val marcados = HashSet<String>()
+        val paginas = HashMap<String, Int>()
+        val nuevos = ArrayList<Almacen.NuevoEnLinea>()
+        val conocidos = HashMap<String, List<String>>()
         val historialNuevo = ArrayList<EntradaHistorial>()
-        copia.mangas.forEach { m ->
-            val caps = m.capitulos
-            caps.filter { it.leido }.map { it.url }.takeIf { it.isNotEmpty() }?.let { ext.marcarLeidos(m.fuente, it) }
-            caps.filter { it.marcado }.map { it.url }.takeIf { it.isNotEmpty() }?.let { ext.marcarVarios(m.fuente, it, true) }
-            caps.filter { !it.leido && it.pagina > 0 }.forEach { ext.guardarPagina(m.fuente, it.url, it.pagina.toInt()) }
-            val titulo = m.titulo.ifBlank { m.url }
+        val favoritos = copia.mangas.filter { it.favorito }
+        copia.mangas.forEachIndexed { i, m ->
+            if (i % 25 == 0) avance?.paso(0.15f + 0.45f * i / copia.mangas.size.coerceAtLeast(1), "Mangas: $i de ${copia.mangas.size}")
+            runCatching {
+                val titulo = m.titulo.ifBlank { m.url }
+                m.capitulos.forEach { c ->
+                    val k = "${m.fuente}|${c.url}"
+                    if (c.leido) leidos += k
+                    if (c.marcado) marcados += k
+                    if (!c.leido && c.pagina > 0) paginas[k] = c.pagina.toInt()
+                }
+                if (m.favorito) {
+                    nuevos += Almacen.NuevoEnLinea(
+                        m.fuente, m.url, titulo, m.portada, m.capitulos.size, m.capitulos.count { it.leido },
+                        m.autor, m.estado, m.generos, m.descripcion, m.anadido,
+                    )
+                    if (m.capitulos.isNotEmpty()) conocidos["${m.fuente}|${m.url}"] = m.capitulos.map { it.url }
+                }
+                m.historial.maxByOrNull { it.ultimaLectura }?.takeIf { it.ultimaLectura > 0 }?.let { h ->
+                    val cap = m.capitulos.firstOrNull { it.url == h.url }
+                    historialNuevo += EntradaHistorial(
+                        m.fuente, m.url, titulo, m.portada, h.url, cap?.nombre.orEmpty(), (cap?.pagina ?: 0L).toInt(), 0, h.ultimaLectura,
+                    )
+                }
+            }.onFailure { errores += "«${m.titulo.ifBlank { m.url }}»: ${it.message ?: it.javaClass.simpleName}" }
+        }
 
-            if (m.favorito) {
-                val comic = almacen.anadirEnLinea(
-                    m.fuente, m.url, titulo, m.portada, null, caps.size, caps.count { it.leido },
-                    autor = m.autor, estado = m.estado, generos = m.generos, descripcion = m.descripcion,
-                )
-                mangas++
-                if (m.anadido > 0) almacen.actualizarComic(comic.id) { it.copy(anadido = m.anadido) }
-                // Los capítulos de la copia cuentan como «ya conocidos»: no salen como novedad al actualizar.
-                if (caps.isNotEmpty()) almacen.registrarCapitulos(
-                    m.fuente, m.url, titulo, m.portada,
-                    caps.map { CapituloFuente(it.url, it.nombre, it.fechaSubida, it.scanlator, it.numero) },
-                )
+        // 2) Una escritura por tipo de dato.
+        avance?.paso(0.65f, "Guardando la biblioteca…")
+        val (porClave, anadidos) = almacen.anadirVariosEnLinea(nuevos)
+        avance?.paso(0.72f, "Guardando capítulos leídos…")
+        ext.importarEstados(leidos, marcados, paginas)
+        almacen.registrarConocidosVarios(conocidos)
+        avance?.paso(0.8f, "Guardando categorías e historial…")
+        val categoriasDe = HashMap<String, Set<String>>()
+        var anilist = 0
+        var editados = 0
+        favoritos.forEach { m ->
+            val comic = porClave["${m.fuente}|${m.url}"] ?: return@forEach
+            runCatching {
                 val ids = m.categorias.mapNotNull { porOrden[it] }.toSet()
-                if (ids.isNotEmpty()) almacen.asignarCategorias(comic.id, almacen.asignaciones()[comic.id].orEmpty() + ids)
+                if (ids.isNotEmpty()) categoriasDe[comic.id] = ids
                 if (m.tituloPropio != null || m.autorPropio != null || m.descripcionPropia != null || m.generosPropios.isNotEmpty() || m.estadoPropio != 0) {
                     almacen.editarInfo(
-                        comic.id, m.tituloPropio ?: titulo, m.autorPropio ?: m.autor, m.descripcionPropia ?: m.descripcion,
+                        comic.id, m.tituloPropio ?: comic.titulo, m.autorPropio ?: m.autor, m.descripcionPropia ?: m.descripcion,
                         m.generosPropios.ifEmpty { m.generos }, if (m.estadoPropio != 0) m.estadoPropio else m.estado,
                     )
+                    editados++
                 }
                 m.seguimiento.firstOrNull { it.servicio == ANILIST && it.mediaId > 0 }?.let { t ->
                     if (almacen.seguimientoDe(comic.id) == null) {
-                        almacen.guardarSeguimiento(comic.id, Seguimiento(t.mediaId.toInt(), t.titulo.ifBlank { titulo }, false, t.ultimoCapitulo.toInt()))
+                        almacen.guardarSeguimiento(comic.id, Seguimiento(t.mediaId.toInt(), t.titulo.ifBlank { comic.titulo }, false, t.ultimoCapitulo.toInt()))
+                        anilist++
                     }
                 }
-            }
-            // Historial: la lectura más reciente de este manga.
-            m.historial.maxByOrNull { it.ultimaLectura }?.takeIf { it.ultimaLectura > 0 }?.let { h ->
-                val cap = caps.firstOrNull { it.url == h.url }
-                historialNuevo += EntradaHistorial(
-                    m.fuente, m.url, titulo, m.portada, h.url, cap?.nombre.orEmpty(), (cap?.pagina ?: 0L).toInt(), 0, h.ultimaLectura,
-                )
+            }.onFailure { errores += "«${comic.titulo}»: ${it.message ?: it.javaClass.simpleName}" }
+        }
+        almacen.anadirCategoriasVarios(categoriasDe)
+        almacen.anadirHistorialVarios(historialNuevo)
+
+        // 3) Listados de extensiones (se comprueban por internet: se espera un poco a cada uno).
+        var listadosOk = 0
+        copia.listados.forEachIndexed { i, url ->
+            avance?.paso(0.88f + 0.1f * i / copia.listados.size, "Añadiendo listados de extensiones…")
+            val listo = CompletableDeferred<String?>()
+            ext.anadirRepo(url) { listo.complete(it) }
+            val r = withTimeoutOrNull(20_000) { listo.await() }
+            when {
+                r == null && listo.isCompleted -> listadosOk++
+                r == "Ese listado ya está añadido" -> Unit
+                listo.isCompleted -> errores += "Listado $url: $r"
+                else -> errores += "Listado $url: no respondió a tiempo"
             }
         }
-        // Del más viejo al más nuevo: así el último leído queda arriba.
-        historialNuevo.sortedBy { it.leido }.forEach { almacen.registrarHistorialLinea(it) }
+        avance?.paso(1f, "Listo")
 
-        copia.listados.forEach { ext.anadirRepo(it) { } }
-        return Resultado(mangas, catsNuevas, historialNuevo.size, copia.listados.size)
+        // Fuentes que faltan por instalar.
+        val instaladas = ext.fuentes.map { it.id }.toSet()
+        val nombres = copia.fuentes.associate { it.id to it.nombre }
+        val faltan = favoritos.groupBy { it.fuente }.filterKeys { it !in instaladas }
+            .map { (id, l) -> "${nombres[id]?.takeIf { it.isNotBlank() } ?: "Fuente $id"} (${l.size})" }
+
+        return TareaCopia.Informe(
+            titulo = "Restaurar copia de Mihon / Komikku",
+            bien = listOfNotNull(
+                "$anadidos mangas añadidos a la biblioteca" + if (favoritos.size > anadidos) " (${favoritos.size - anadidos} ya estaban)" else "",
+                "${leidos.size} capítulos leídos".takeIf { leidos.isNotEmpty() },
+                "${marcados.size} capítulos marcados".takeIf { marcados.isNotEmpty() },
+                "${paginas.size} capítulos a medias (con su página)".takeIf { paginas.isNotEmpty() },
+                "$catsNuevas categorías nuevas".takeIf { catsNuevas > 0 },
+                "${historialNuevo.size} entradas de historial".takeIf { historialNuevo.isNotEmpty() },
+                "$anilist vínculos con AniList".takeIf { anilist > 0 },
+                "$editados mangas con información editada".takeIf { editados > 0 },
+                "$listadosOk listados de extensiones".takeIf { listadosOk > 0 },
+            ),
+            avisos = listOfNotNull(
+                ("Instala las extensiones de estas fuentes para leer sus mangas (Explorar → Extensiones): " +
+                    faltan.take(12).joinToString(", ") + if (faltan.size > 12) "… y ${faltan.size - 12} más" else "").takeIf { faltan.isNotEmpty() },
+            ),
+            errores = errores.take(50) + listOfNotNull("…y ${errores.size - 50} errores más".takeIf { errores.size > 50 }),
+        )
     }
 }

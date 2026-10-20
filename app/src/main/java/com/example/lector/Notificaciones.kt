@@ -46,7 +46,7 @@ object Notificaciones {
                 NotificationChannel(CANAL_EXTENSIONES, "Extensiones", NotificationManager.IMPORTANCE_DEFAULT)
                     .apply { description = "Extensiones con una versión nueva" },
                 NotificationChannel(CANAL_COPIAS, "Copias de seguridad", NotificationManager.IMPORTANCE_LOW)
-                    .apply { description = "Copias automáticas"; setShowBadge(false) },
+                    .apply { description = "Avance y resultado de las copias de seguridad"; setShowBadge(false) },
             ),
         )
     }

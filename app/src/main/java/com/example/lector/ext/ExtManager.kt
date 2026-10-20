@@ -624,6 +624,25 @@ class ExtManager private constructor(private val app: Context) {
 
     fun alternarNovedad(id: Long) = fijarNovedades(if (id in novedades) novedades - id else novedades + id)
 
+    /**
+     * Importa de golpe capítulos leídos, marcados y páginas (claves «fuente|url»), con una escritura de cada cosa.
+     * Lo usan las restauraciones de copias: hacerlo manga a manga reescribía todo cada vez y era muy lento.
+     */
+    fun importarEstados(leidosNuevos: Collection<String>, marcadosNuevos: Collection<String>, paginas: Map<String, Int>) {
+        if (leidosNuevos.isNotEmpty()) {
+            leidos = leidos + leidosNuevos
+            prefs.edit().putStringSet("leidos", leidos).apply()
+        }
+        if (marcadosNuevos.isNotEmpty()) {
+            marcados = marcados + marcadosNuevos
+            prefs.edit().putStringSet("marcados", marcados).apply()
+        }
+        var cambio = false
+        leidosNuevos.forEach { if (paginasCap.remove(it) != null) cambio = true }
+        paginas.forEach { (k, v) -> if (v > 0 && k !in leidos && paginasCap[k] != v) { paginasCap[k] = v; cambio = true } }
+        if (cambio) guardarPaginasCap()
+    }
+
     /** Marca varios capítulos como leídos de una vez (una sola escritura). */
     fun marcarLeidos(fuenteId: Long, urls: Collection<String>) {
         if (urls.isEmpty()) return

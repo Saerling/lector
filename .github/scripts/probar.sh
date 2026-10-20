@@ -31,5 +31,30 @@ probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiy
 probar "https://github.com/keiyoushi/extensions/releases/download/4c8cda7/tachiyomi-all.webtoons-v1.6.2.apk" eu.kanade.tachiyomi.extension.all.webtoons
 probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-all.myreadingmanga-v1.6.0.apk" eu.kanade.tachiyomi.extension.all.myreadingmanga
 probar "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tachiyomi-all.imhentai-v1.6.25.apk" eu.kanade.tachiyomi.extension.all.imhentai
+# ---- Copias de seguridad: restaurar una copia grande de Mihon (600 mangas, 48.000 capítulos) y volver a exportarla ----
+probar_copias() {
+  local dir=/sdcard/Android/data/com.example.lector/files
+  adb shell am force-stop com.example.lector
+  adb shell mkdir -p $dir
+  adb push pruebas/tachibk/grande.tachibk $dir/grande.tachibk
+  adb logcat -c
+  adb shell am start -n com.example.lector/.MainActivity --es destino "probar-restaurar:$dir/grande.tachibk"
+  sleep 4
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui-copia.xml >/dev/null 2>&1
+  sleep 40
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui-copia-fin.xml >/dev/null 2>&1
+  adb shell am start -n com.example.lector/.MainActivity --es destino "probar-copia"
+  sleep 20
+  adb logcat -d > "logcat-$ETIQUETA-copias.txt"
+  {
+    echo "===== Copias ($ETIQUETA) ====="
+    grep "LectorPrueba" "logcat-$ETIQUETA-copias.txt" | tail -4
+    grep -A30 "FATAL EXCEPTION" "logcat-$ETIQUETA-copias.txt" | head -40
+    adb shell pidof com.example.lector >/dev/null && echo "La app sigue abierta" || echo "LA APP NO ESTÁ ABIERTA"
+    echo "Durante: $(grep -o 'text="[^"]*"' ui-copia.xml 2>/dev/null | sed 's/text=//' | grep -v '""' | head -8 | tr '\n' ' ')"
+    echo "Al final: $(grep -o 'text="[^"]*"' ui-copia-fin.xml 2>/dev/null | sed 's/text=//' | grep -v '""' | head -8 | tr '\n' ' ')"
+  } >> fallos.txt
+}
+probar_copias
 cat fallos.txt
 exit 0

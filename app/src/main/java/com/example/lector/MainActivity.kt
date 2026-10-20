@@ -259,6 +259,8 @@ private fun Contenido(almacen: Almacen, destino: String?, alConsumirDestino: () 
     var importando by remember { mutableStateOf(false) }
     // Pestaña de la barra inferior y vista (biblioteca/historial) dentro de la pestaña Biblioteca.
     var tab by rememberSaveable { mutableStateOf(LectorTab.Home) }
+    // Al terminar una copia (crear o restaurar) se relee la biblioteca.
+    LaunchedEffect(TareaCopia.terminadas) { if (TareaCopia.terminadas > 0) comics = almacen.cargar() }
 
     // Con sesión de AniList: averigua el nombre de usuario y sube lo que quedó pendiente.
     // Se repite al volver a la biblioteca.

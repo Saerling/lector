@@ -1157,13 +1157,15 @@ class Almacen private constructor(private val contexto: Context) {
         }
 
         // Biblioteca en línea: se recrea cada manga que aún no esté (la portada se vuelve a bajar al verla).
+        // Índice por «fuente|url» para no recorrer la biblioteca entera por cada manga.
+        val enLineaPorClave = HashMap<String, Comic>().also { m -> locales.forEach { c -> if (c.enLinea) m["${c.fuenteId}|${c.urlManga}"] = c } }
         raiz.optJSONArray("en_linea")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val e = arr.getJSONObject(i)
                 val fuente = e.optLong("fuente", 0L)
                 val url = e.optString("url")
                 if (url.isBlank()) continue
-                val existente = locales.firstOrNull { it.enLinea && it.fuenteId == fuente && it.urlManga == url }
+                val existente = enLineaPorClave["$fuente|$url"]
                 val comic = existente ?: Comic(
                     id = UUID.randomUUID().toString(),
                     titulo = e.optString("titulo").ifBlank { "Sin título" },
@@ -1178,7 +1180,7 @@ class Almacen private constructor(private val contexto: Context) {
                     generos = e.optJSONArray("generos").aLista(),
                     descripcion = e.optString("descripcion").ifBlank { null },
                     editado = e.optBoolean("editado", false),
-                ).also { locales.add(it) }
+                ).also { locales.add(it); enLineaPorClave["$fuente|$url"] = it }
                 val nombresCats = e.optJSONArray("categorias")
                 if (nombresCats != null && nombresCats.length() > 0) {
                     val ids = HashSet<String>()
@@ -1323,6 +1325,75 @@ class Almacen private constructor(private val contexto: Context) {
         )
         modificar { l -> l + comic }
         return comic
+    }
+
+    // ---- Escrituras en lote (restaurar copias rápido: una sola escritura en vez de una por manga) ----
+
+    /** Un manga de fuente que se va a añadir de golpe con [anadirVariosEnLinea]. */
+    data class NuevoEnLinea(
+        val fuenteId: Long, val url: String, val titulo: String, val portadaUrl: String?,
+        val capitulos: Int, val leidos: Int, val autor: String?, val estado: Int, val generos: List<String>,
+        val descripcion: String?, val anadido: Long,
+    )
+
+    /**
+     * Añade muchos mangas en una sola escritura. Devuelve, para cada «fuente|url» pedido, el cómic de la biblioteca
+     * (el nuevo o el que ya estaba) y cuántos eran nuevos.
+     */
+    @Synchronized
+    fun anadirVariosEnLinea(lista: List<NuevoEnLinea>): Pair<Map<String, Comic>, Int> {
+        val actuales = cargar()
+        val porClave = HashMap<String, Comic>()
+        actuales.forEach { if (it.enLinea) porClave["${it.fuenteId}|${it.urlManga}"] = it }
+        val nuevos = ArrayList<Comic>()
+        val ahora = System.currentTimeMillis()
+        lista.forEach { n ->
+            val k = "${n.fuenteId}|${n.url}"
+            if (k in porClave) return@forEach
+            val c = Comic(
+                id = UUID.randomUUID().toString(), titulo = n.titulo, paginas = n.capitulos, ultimaPagina = n.leidos,
+                fuenteId = n.fuenteId, urlManga = n.url, portadaUrl = n.portadaUrl,
+                anadido = if (n.anadido > 0) n.anadido else ahora, autor = n.autor, estado = n.estado, generos = n.generos,
+                descripcion = n.descripcion,
+            )
+            porClave[k] = c
+            nuevos += c
+        }
+        if (nuevos.isNotEmpty()) guardar(actuales + nuevos)
+        return porClave to nuevos.size
+    }
+
+    /** Capítulos ya conocidos de muchos mangas («fuente|url» → urls), en una sola escritura. */
+    fun registrarConocidosVarios(mapa: Map<String, Collection<String>>) {
+        if (mapa.isEmpty()) return
+        val ed = prefs.edit()
+        mapa.forEach { (clave, urls) ->
+            if (urls.isEmpty()) return@forEach
+            val k = "cc|$clave"
+            ed.putStringSet(k, prefs.getStringSet(k, null).orEmpty() + urls)
+        }
+        ed.apply()
+    }
+
+    /** Añade categorías a muchos cómics de una vez (id del cómic → ids de categorías). */
+    @Synchronized
+    fun anadirCategoriasVarios(mapa: Map<String, Set<String>>) {
+        if (mapa.isEmpty()) return
+        val actual = asignaciones().toMutableMap()
+        mapa.forEach { (id, cats) -> actual[id] = actual[id].orEmpty() + cats }
+        guardarAsignaciones(actual)
+    }
+
+    /** Mete muchas entradas en el historial en línea de una vez (un manga = su lectura más reciente). */
+    @Synchronized
+    fun anadirHistorialVarios(lista: List<EntradaHistorial>) {
+        if (lista.isEmpty()) return
+        val nueva = (lista + historialLinea).sortedByDescending { it.leido }.distinctBy { it.fuenteId to it.urlManga }.take(300)
+        historialLinea = nueva
+        guardarHistorialLinea(nueva)
+        val ultimo = HashMap<String, Long>()
+        lista.forEach { e -> val k = "${e.fuenteId}|${e.urlManga}"; if ((ultimo[k] ?: 0L) < e.leido) ultimo[k] = e.leido }
+        modificar { l -> l.map { c -> if (c.enLinea) ultimo["${c.fuenteId}|${c.urlManga}"]?.takeIf { it > c.leido }?.let { c.copy(leido = it) } ?: c else c } }
     }
 
     /** Guarda los datos de la ficha (autor, estado, géneros…) salvo que el usuario los haya editado. */

@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import com.example.lector.TareaCopia
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -342,51 +343,39 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
     var resultado by remember { mutableStateOf<String?>(null) }
     var version by remember { mutableIntStateOf(0) }
 
+    // Crear y restaurar van en segundo plano con avance (píldora arriba + notificación) e informe al terminar.
+    fun ocupado() = Avisos.mostrar("Ya hay una copia en marcha: espera a que termine")
     val crear = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) scope.launch {
-            resultado = withContext(Dispatchers.IO) {
-                runCatching {
-                    val texto = CopiaSeguridad.crear(contexto)
-                    contexto.contentResolver.openOutputStream(uri)?.use { it.write(texto.toByteArray(Charsets.UTF_8)) } ?: error("Sin salida")
-                    "Copia guardada."
-                }.getOrElse { "No se pudo guardar la copia: ${it.message}" }
+        if (uri != null && !TareaCopia.lanzar(contexto, "Creando copia") {
+                val (texto, informe) = CopiaSeguridad.crearConInforme(contexto, this)
+                contexto.contentResolver.openOutputStream(uri)?.use { it.write(texto.toByteArray(Charsets.UTF_8)) } ?: error("No se pudo escribir el archivo")
+                informe
             }
-        }
+        ) ocupado()
     }
     val restaurar = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            resultado = withContext(Dispatchers.IO) {
-                runCatching {
-                    val bytes = contexto.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Sin entrada")
-                    if (com.example.lector.Tachibk.esTachibk(bytes)) {
-                        // Copia de Mihon / Komikku / TachiyomiSY / J2K (.tachibk o .proto.gz).
-                        val r = com.example.lector.Tachibk.restaurar(contexto, bytes)
-                        "Copia de Mihon/Komikku restaurada: ${r.mangas} mangas en la biblioteca, ${r.categorias} categorías nuevas, " +
-                            "${r.historial} entradas de historial" + (if (r.listados > 0) " y ${r.listados} listados de extensiones" else "") +
-                            ". Instala las extensiones de esas fuentes (Explorar → Extensiones) para poder leerlos."
-                    } else {
-                        val texto = com.example.lector.Tachibk.descomprimirSiHace(bytes).toString(Charsets.UTF_8)
-                        val r = CopiaSeguridad.restaurar(contexto, texto)
-                        "Copia restaurada: ${r.actualizados} entradas actualizadas" +
-                            if (r.pendientes > 0) " y ${r.pendientes} cómics pendientes. Su progreso y categorías se aplicarán cuando añadas esos archivos." else "."
-                    }
-                }.getOrElse { "El archivo no es una copia válida (${it.message ?: it.javaClass.simpleName})." }
+        if (uri != null && !TareaCopia.lanzar(contexto, "Restaurando copia") {
+                paso(0.02f, "Abriendo el archivo…")
+                val bytes = contexto.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("No se pudo leer el archivo")
+                if (com.example.lector.Tachibk.esTachibk(bytes)) {
+                    // Copia de Mihon / Komikku / TachiyomiSY / J2K (.tachibk o .proto.gz).
+                    com.example.lector.Tachibk.restaurar(contexto, bytes, this)
+                } else {
+                    val texto = com.example.lector.Tachibk.descomprimirSiHace(bytes).toString(Charsets.UTF_8)
+                    runCatching { CopiaSeguridad.restaurarConInforme(contexto, texto, this) }
+                        .getOrElse { throw IllegalStateException("El archivo no es una copia válida (${it.message ?: it.javaClass.simpleName})") }
+                }
             }
-            alRecargar()
-        }
+        ) ocupado()
     }
     // Copia en el formato de Mihon / Komikku (.tachibk): para pasar la biblioteca a esas apps.
     val crearTachibk = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        if (uri != null) scope.launch {
-            resultado = withContext(Dispatchers.IO) {
-                runCatching {
-                    val datos = com.example.lector.Tachibk.crear(contexto)
-                    contexto.contentResolver.openOutputStream(uri)?.use { it.write(datos) } ?: error("Sin salida")
-                    "Copia .tachibk guardada. Restáurala en Mihon, Komikku o TachiyomiSY (Ajustes → Copia de seguridad → Restaurar). " +
-                        "Los cómics locales (.cbz de tu móvil) no van en este formato."
-                }.getOrElse { "No se pudo guardar la copia: ${it.message}" }
+        if (uri != null && !TareaCopia.lanzar(contexto, "Creando copia .tachibk") {
+                val (datos, informe) = com.example.lector.Tachibk.crear(contexto, this)
+                contexto.contentResolver.openOutputStream(uri)?.use { it.write(datos) } ?: error("No se pudo escribir el archivo")
+                informe.copy(bien = informe.bien + "Restáurala en Mihon, Komikku o TachiyomiSY (Ajustes → Copia de seguridad → Restaurar)")
             }
-        }
+        ) ocupado()
     }
     val elegirCarpeta = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -433,11 +422,12 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
             Icons.Rounded.Check, "Hacer una copia ahora",
             if (almacen.ultimaCopia > 0) "Última automática: ${hace(almacen.ultimaCopia)}" else "En la carpeta de las copias automáticas",
         ) {
-            scope.launch {
-                resultado = withContext(Dispatchers.IO) {
-                    runCatching { "Copia guardada en ${CopiaSeguridad.guardarAutomatica(contexto)}." }.getOrElse { "No se pudo guardar: ${it.message}" }
+            if (!TareaCopia.lanzar(contexto, "Creando copia") {
+                    paso(0.2f, "Reuniendo la biblioteca…")
+                    val donde = CopiaSeguridad.guardarAutomatica(contexto)
+                    TareaCopia.Informe("Copia de seguridad", listOf("Copia guardada en $donde"))
                 }
-            }
+            ) ocupado()
         }
 
         Divisor()
