@@ -465,6 +465,15 @@ Cierre por `OutOfMemoryError` en un móvil con >6.000 mangas. Cambios:
   145 MB sin comprimir): restaurar 25 s, Java heap ~100 MB; reabrir y exportar 29 s (622.600 capítulos con progreso).
 - Versión 0.6 (code 6).
 
+## 2u. PASO 21 — Catálogo y biblioteca (2026-10-20, versión 0.7)
+- Error rojo «The coroutine scope left the composition» en el catálogo: la carga infinita era un `LaunchedEffect`
+  con `cargando` como clave, que se reiniciaba y cancelaba su propia carga; la cancelación se enseñaba como error.
+  Ahora es un `snapshotFlow` en un solo `LaunchedEffect(Unit)` y las `CancellationException` se relanzan (no son error).
+- Catálogo: hoja Filtro (en la biblioteca, filtros de la fuente) / Ordenar (fuente o título, asc/desc) / Mostrar
+  (cuadrícula cómoda, compacta, solo portadas, lista; columnas). Ajustes en `Almacen.explorar*` y `vistaExplorar`.
+- Explorar → Extensiones: «Confiar en todas» (con confirmación).
+- Biblioteca: recuerda la última pestaña (`Almacen.ultimaPestanaBiblioteca`, por la clave del grupo).
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,
