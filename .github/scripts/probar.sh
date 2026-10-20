@@ -5,6 +5,7 @@ APK="${1:-app/build/outputs/apk/debug/app-debug.apk}"
 ETIQUETA="${2:-debug}"
 adb uninstall com.example.lector || true
 adb install -r "$APK"
+adb shell pm grant com.example.lector android.permission.POST_NOTIFICATIONS || true
 echo "########## APK $ETIQUETA ##########" >> fallos.txt
 probar() {
   local url="$1" pkg="$2"
