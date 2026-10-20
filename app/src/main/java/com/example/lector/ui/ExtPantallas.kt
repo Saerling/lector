@@ -353,6 +353,8 @@ private fun NavegarFuente(
     val enBiblioteca = remember(almacen.version) { almacen.clavesEnLinea() }
     val rejilla = rememberLazyGridState()
     var guardar by remember { mutableStateOf(false) }
+    // WebView del sitio (como en Komikku): para pasar Cloudflare / captchas o iniciar sesión, y luego recargar.
+    var webAbierta by rememberSaveable { mutableStateOf(false) }
     var modo by rememberSaveable { mutableStateOf(0) } // 0 populares · 1 recientes · 2 búsqueda
     var consulta by rememberSaveable { mutableStateOf("") }
     var enviada by rememberSaveable { mutableStateOf("") }
@@ -396,6 +398,14 @@ private fun NavegarFuente(
         cargando = false
     }
 
+    if (webAbierta && f.baseUrl.isNotBlank()) {
+        WebViewScreen(f.baseUrl, f.nombre, motor.cabeceras(f)) {
+            // Al volver se repite la carga: ya con las cookies que dejó el captcha.
+            webAbierta = false; error = null; recarga++
+        }
+        return
+    }
+
     Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(LectorColors.PillFill), Alignment.Center) {
@@ -410,10 +420,11 @@ private fun NavegarFuente(
                 }
             }
         }
-        Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ChipSel("Populares", modo == 0) { modo = 0 }
             ChipSel("Recientes", modo == 1) { modo = 1 }
             if (filtros != null) ChipSel(if (aplicados != null) "Filtros ✓" else "Filtros", aplicados != null) { panel = true }
+            if (f.baseUrl.isNotBlank()) ChipSel("WebView", false) { webAbierta = true }
         }
         // Búsquedas guardadas (TachiyomiSY/Komikku): tocar = repetirla · mantener pulsado = borrarla.
         val guardadas = ext.busquedas(f.id)
@@ -437,7 +448,18 @@ private fun NavegarFuente(
             Spacer(Modifier.width(10.dp))
             PillButton("Ir", Icons.Rounded.Search, { if (consulta.isNotBlank()) { enviada = consulta.trim(); modo = 2 } })
         }
-        error?.let { LText(it, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = Color(0xFFE57373)) }
+        error?.let {
+            Column(Modifier.padding(horizontal = 24.dp)) {
+                LText(it, LectorType.Label, color = Color(0xFFE57373))
+                if (f.baseUrl.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PillButton("Abrir en WebView", Icons.Rounded.ArrowForward, { webAbierta = true })
+                        PillButton("Reintentar", Icons.Rounded.Refresh, { error = null; recarga++ })
+                    }
+                }
+            }
+        }
         if (guardar) {
             var nombre by remember { mutableStateOf(enviada) }
             AlertDialog(

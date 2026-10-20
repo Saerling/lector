@@ -421,6 +421,18 @@ código PROPIO (no se copió código suyo):
   del run los títulos que se ven, si la app sigue abierta y las trazas de cierre.
 - Versión 0.3 (code 3).
 
+## 2r. PASO 18 — WebView en el catálogo + copias de Mihon/Komikku (2026-10-20)
+- **WebView en el catálogo** (`ExtPantallas.kt` → `NavegarFuente`): chip «WebView» y, si falla la carga, botones
+  «Abrir en WebView» / «Reintentar». Al volver se recarga. `WebViewScreen` ahora recibe las cabeceras de la fuente y
+  usa su MISMO User-Agent (Cloudflare ata `cf_clearance` al navegador) y guarda las cookies al cerrar.
+- **Copias .tachibk** (Mihon, Komikku, TachiyomiSY, J2K…): `Proto.kt` (protobuf mínimo propio, sin plugin de
+  serialización), `TachibkFormato.kt` (formato puro, sin Android) y `Tachibk.kt` (biblioteca ↔ formato).
+  Ajustes → Datos: «Restaurar copia» detecta solo si es .json de Lector o .tachibk; «Exportar para Mihon / Komikku».
+  Pasa: mangas de fuentes, capítulos leídos/marcados/página, categorías (por «order»), historial, AniList, datos
+  editados (Komikku 602/800-805) y, al importar, los listados de extensiones (campo 106). No pasan los .cbz locales.
+  **Probado** en el ordenador con la librería de Mihon y sus modelos, en los dos sentidos: `pruebas/tachibk/`.
+- Versión 0.4 (code 4).
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

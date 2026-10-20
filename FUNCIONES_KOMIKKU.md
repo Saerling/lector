@@ -15,7 +15,7 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Categorías | ✅ | Con ocultas, editar, asignar al añadir. |
 | Temas claro / oscuro | ✅ | Sistema, oscuro puro, oscuro, claro + acento. |
 | Actualizar biblioteca programado | ✅ | WorkManager con intervalo, Wi‑Fi / cargando, notificaciones, errores. |
-| Copias de seguridad | ✅ | Completas (v2), manuales y automáticas. Sin nube. |
+| Copias de seguridad | ✅ | Propias (.json, manuales y automáticas) y **compatibles con Mihon/Komikku/SY (.tachibk)** en los dos sentidos. Sin nube. |
 | Continuar leyendo en la biblioteca | ✅ | Botón sobre la portada. |
 | Historial / incógnito | ✅ | |
 

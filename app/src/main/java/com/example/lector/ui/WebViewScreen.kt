@@ -29,11 +29,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 
 /**
  * WebView dentro de la app (como el de Komikku): sirve para ver el sitio de la fuente y resolver
- * Cloudflare o iniciar sesión. Las cookies se comparten con las peticiones de la fuente.
+ * Cloudflare / captchas o iniciar sesión. Las cookies se comparten con las peticiones de la fuente.
+ *
+ * Importante: usa el MISMO User-Agent que las peticiones de la extensión ([cabeceras]). Cloudflare ata su cookie
+ * de paso (cf_clearance) al navegador que resolvió el reto: con otro User-Agent la cookie no valdría.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun WebViewScreen(url: String, tituloInicial: String, alVolver: () -> Unit) {
+fun WebViewScreen(url: String, tituloInicial: String, cabeceras: Map<String, String> = emptyMap(), alVolver: () -> Unit) {
     val ctx = LocalContext.current
     var web by remember { mutableStateOf<WebView?>(null) }
     var progreso by remember { mutableStateOf(0f) }
@@ -41,7 +44,13 @@ fun WebViewScreen(url: String, tituloInicial: String, alVolver: () -> Unit) {
     var actual by remember { mutableStateOf(url) }
 
     BackHandler { if (web?.canGoBack() == true) web?.goBack() else alVolver() }
-    DisposableEffect(Unit) { onDispose { web?.apply { stopLoading(); destroy() } } }
+    // Al cerrar se guardan las cookies en disco, para que las use en seguida la siguiente petición de la fuente.
+    DisposableEffect(Unit) { onDispose { CookieManager.getInstance().flush(); web?.apply { stopLoading(); destroy() } } }
+    val agente = remember(cabeceras) {
+        cabeceras.entries.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }?.value
+            ?: eu.kanade.tachiyomi.network.NetworkHelper.DEFAULT_USER_AGENT
+    }
+    val extra = remember(cabeceras) { cabeceras.filterKeys { !it.equals("User-Agent", ignoreCase = true) } }
 
     Column(Modifier.fillMaxSize().background(LectorColors.Bg)) {
         Row(
@@ -76,6 +85,7 @@ fun WebViewScreen(url: String, tituloInicial: String, alVolver: () -> Unit) {
                     settings.domStorageEnabled = true
                     settings.loadWithOverviewMode = true
                     settings.useWideViewPort = true
+                    settings.userAgentString = agente
                     CookieManager.getInstance().setAcceptCookie(true)
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                     webViewClient = object : WebViewClient() {
@@ -85,7 +95,7 @@ fun WebViewScreen(url: String, tituloInicial: String, alVolver: () -> Unit) {
                         override fun onProgressChanged(v: WebView, p: Int) { progreso = p / 100f }
                         override fun onReceivedTitle(v: WebView, t: String?) { if (!t.isNullOrBlank()) titulo = t }
                     }
-                    loadUrl(url)
+                    loadUrl(url, extra)
                     web = this
                 }
             },

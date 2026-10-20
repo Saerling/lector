@@ -357,13 +357,35 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
         if (uri != null) scope.launch {
             resultado = withContext(Dispatchers.IO) {
                 runCatching {
-                    val texto = contexto.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: error("Sin entrada")
-                    val r = CopiaSeguridad.restaurar(contexto, texto)
-                    "Copia restaurada: ${r.actualizados} entradas actualizadas" +
-                        if (r.pendientes > 0) " y ${r.pendientes} cómics pendientes. Su progreso y categorías se aplicarán cuando añadas esos archivos." else "."
-                }.getOrElse { "El archivo no es una copia válida." }
+                    val bytes = contexto.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Sin entrada")
+                    if (com.example.lector.Tachibk.esTachibk(bytes)) {
+                        // Copia de Mihon / Komikku / TachiyomiSY / J2K (.tachibk o .proto.gz).
+                        val r = com.example.lector.Tachibk.restaurar(contexto, bytes)
+                        "Copia de Mihon/Komikku restaurada: ${r.mangas} mangas en la biblioteca, ${r.categorias} categorías nuevas, " +
+                            "${r.historial} entradas de historial" + (if (r.listados > 0) " y ${r.listados} listados de extensiones" else "") +
+                            ". Instala las extensiones de esas fuentes (Explorar → Extensiones) para poder leerlos."
+                    } else {
+                        val texto = com.example.lector.Tachibk.descomprimirSiHace(bytes).toString(Charsets.UTF_8)
+                        val r = CopiaSeguridad.restaurar(contexto, texto)
+                        "Copia restaurada: ${r.actualizados} entradas actualizadas" +
+                            if (r.pendientes > 0) " y ${r.pendientes} cómics pendientes. Su progreso y categorías se aplicarán cuando añadas esos archivos." else "."
+                    }
+                }.getOrElse { "El archivo no es una copia válida (${it.message ?: it.javaClass.simpleName})." }
             }
             alRecargar()
+        }
+    }
+    // Copia en el formato de Mihon / Komikku (.tachibk): para pasar la biblioteca a esas apps.
+    val crearTachibk = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) scope.launch {
+            resultado = withContext(Dispatchers.IO) {
+                runCatching {
+                    val datos = com.example.lector.Tachibk.crear(contexto)
+                    contexto.contentResolver.openOutputStream(uri)?.use { it.write(datos) } ?: error("Sin salida")
+                    "Copia .tachibk guardada. Restáurala en Mihon, Komikku o TachiyomiSY (Ajustes → Copia de seguridad → Restaurar). " +
+                        "Los cómics locales (.cbz de tu móvil) no van en este formato."
+                }.getOrElse { "No se pudo guardar la copia: ${it.message}" }
+            }
         }
     }
     val elegirCarpeta = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -387,7 +409,10 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
         )
         Spacer(Modifier.height(8.dp))
         FilaAjuste(Icons.Rounded.Share, "Crear copia", "Guardar en un archivo .json") { crear.launch(CopiaSeguridad.nombreArchivo()) }
-        FilaAjuste(Icons.Rounded.Refresh, "Restaurar copia", "Elegir un archivo de copia") { restaurar.launch(arrayOf("*/*")) }
+        FilaAjuste(Icons.Rounded.Refresh, "Restaurar copia", "De Lector (.json) o de Mihon, Komikku, TachiyomiSY… (.tachibk)") { restaurar.launch(arrayOf("*/*")) }
+        FilaAjuste(Icons.Rounded.Share, "Exportar para Mihon / Komikku", "Archivo .tachibk con tus mangas de fuentes, capítulos leídos, categorías e historial") {
+            crearTachibk.launch(com.example.lector.Tachibk.nombreArchivo())
+        }
 
         Divisor()
         TituloSeccion("Copias automáticas")

@@ -648,7 +648,7 @@ fun FichaMangaScreen(
         // WebView del sitio, encima de la ficha.
         webUrl?.let { u ->
             Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
-                WebViewScreen(u, tituloFicha) { webUrl = null; recarga++ }
+                WebViewScreen(u, tituloFicha, motor.cabeceras(f)) { webUrl = null; recarga++ }
             }
         }
 
