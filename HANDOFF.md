@@ -291,6 +291,14 @@ Origen: Komikku `SourcePreferencesScreen`/`SourcePreferencesFragment` (usa un Pr
 - Posible fallo de compilación: `PreferenceManager(Context)` está marcado @RestrictTo en androidx.preference (solo es aviso de lint, no error de compilación).
 - Sigue sin hacer: filtros de búsqueda de cada fuente, migración de fuente, notificación de actualizaciones, extensiones privadas.
 
+## 2m. PASO 13 — Filtros de búsqueda de cada fuente (2026-10-19, **SIN compilar**)
+Origen: Komikku `SourceFilterDialog` (+ `BrowseSourceScreenModel`: filtros editados en sitio, reset = `getFilterList()` nuevo, búsqueda con la misma lista).
+- `ext/Motor.kt`: `MotorFuentes.filtros(fuente): FilterList?` y `buscar(fuente, consulta, pagina, filtros)` (con implementación por defecto; el `buscar` de 3 argumentos sigue igual). `MotorExt` los implementa con `getFilterList()` / `getSearchManga(pagina, consulta, filtros)`.
+- `ui/FiltrosFuente.kt` (nuevo): `PanelFiltros` a pantalla completa (Restablecer / Cancelar / Filtrar). Soporta Header, Separator, CheckBox, TriState (ignorar→incluir→excluir), Text, Select (menú), Sort (con ↑/↓), Group (plegable) y AutoComplete (como texto separado por comas). NO porta las búsquedas guardadas.
+- `ui/ExtPantallas.kt` (`NavegarFuente`): chip «Filtros» (con ✓ si hay filtros aplicados) junto a Populares/Recientes; «Filtrar» lanza la búsqueda con la consulta escrita (puede estar vacía) y los filtros. Si la fuente no tiene filtros, el chip no aparece.
+- Los filtros no son estado de Compose: `PanelFiltros` usa un contador (`tick`) que se pasa a cada fila para repintarla tras cada cambio.
+- Sigue sin hacer: tocar un género en la ficha para buscarlo con filtro (Komikku `searchGenre`), migración de fuente, notificación de actualizaciones (no hay WorkManager ni notificaciones en la app), extensiones privadas.
+
 ## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.

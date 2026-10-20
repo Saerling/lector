@@ -85,8 +85,14 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
     }
 
     override suspend fun buscar(fuente: FuenteUI, consulta: String, pagina: Int): PaginaMangas =
+        buscar(fuente, consulta, pagina, null)
+
+    override suspend fun filtros(fuente: FuenteUI): FilterList? =
+        withContext(Dispatchers.IO) { fuenteReal(fuente).getFilterList().takeIf { it.isNotEmpty() } }
+
+    override suspend fun buscar(fuente: FuenteUI, consulta: String, pagina: Int, filtros: FilterList?): PaginaMangas =
         withContext(Dispatchers.IO) {
-            fuenteReal(fuente).getSearchManga(pagina, consulta, FilterList()).aPagina()
+            fuenteReal(fuente).getSearchManga(pagina, consulta, filtros ?: FilterList()).aPagina()
         }
 
     // ---- Ficha, capítulos y páginas ----

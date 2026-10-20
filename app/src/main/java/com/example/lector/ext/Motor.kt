@@ -1,5 +1,7 @@
 package com.example.lector.ext
 
+import eu.kanade.tachiyomi.source.model.FilterList
+
 /**
  * COSTURA con el motor de fuentes (paso siguiente).
  *
@@ -37,6 +39,16 @@ interface MotorFuentes {
     suspend fun populares(fuente: FuenteUI, pagina: Int): PaginaMangas
     suspend fun recientes(fuente: FuenteUI, pagina: Int): PaginaMangas
     suspend fun buscar(fuente: FuenteUI, consulta: String, pagina: Int): PaginaMangas
+
+    /**
+     * Filtros de búsqueda de la fuente (género, estado, orden…), o null si no tiene. Cada llamada devuelve una lista
+     * NUEVA con los valores por defecto; quien la pide la edita y se la pasa a [buscar].
+     */
+    suspend fun filtros(fuente: FuenteUI): FilterList? = null
+
+    /** Búsqueda con filtros (los mismos objetos que devolvió [filtros], ya editados). */
+    suspend fun buscar(fuente: FuenteUI, consulta: String, pagina: Int, filtros: FilterList?): PaginaMangas =
+        buscar(fuente, consulta, pagina)
 
     /** Datos del manga + lista de capítulos. */
     suspend fun ficha(fuente: FuenteUI, manga: MangaFuente): FichaManga

@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lector.ext.*
+import eu.kanade.tachiyomi.source.model.FilterList
 import kotlinx.coroutines.launch
 
 private fun abrirUrl(ctx: Context, url: String) {
@@ -317,15 +318,21 @@ private fun NavegarFuente(
     var hay by remember { mutableStateOf(true) }
     var cargando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Filtros de la fuente (género, estado, orden…): los que se editan en el panel y los que usa la búsqueda actual.
+    var filtros by remember { mutableStateOf<FilterList?>(null) }
+    var aplicados by remember { mutableStateOf<FilterList?>(null) }
+    var panel by remember { mutableStateOf(false) }
+    var recarga by remember { mutableIntStateOf(0) }
+    LaunchedEffect(f.id) { runCatching { motor.filtros(f) }.onSuccess { filtros = it } }
 
     suspend fun pedir(p: Int): PaginaMangas = when (modo) {
         0 -> motor.populares(f, p)
         1 -> motor.recientes(f, p)
-        else -> motor.buscar(f, enviada, p)
+        else -> motor.buscar(f, enviada, p, aplicados)
     }
 
-    // Al cambiar de modo o de búsqueda se vuelve a empezar por la página 1.
-    LaunchedEffect(modo, enviada) {
+    // Al cambiar de modo, de búsqueda o de filtros se vuelve a empezar por la página 1.
+    LaunchedEffect(modo, enviada, recarga) {
         lista.clear(); pagina = 1; hay = true; error = null; cargando = true
         runCatching { pedir(1) }
             .onSuccess { lista.addAll(it.mangas); hay = it.haySiguiente }
@@ -350,6 +357,7 @@ private fun NavegarFuente(
         Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ChipSel("Populares", modo == 0) { modo = 0 }
             ChipSel("Recientes", modo == 1) { modo = 1 }
+            if (filtros != null) ChipSel(if (aplicados != null) "Filtros ✓" else "Filtros", aplicados != null) { panel = true }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { CampoBusqueda(consulta, { consulta = it }, "Buscar en ${f.nombre}") }
@@ -357,6 +365,14 @@ private fun NavegarFuente(
             PillButton("Ir", Icons.Rounded.Search, { if (consulta.isNotBlank()) { enviada = consulta.trim(); modo = 2 } })
         }
         error?.let { LText(it, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = Color(0xFFE57373)) }
+        if (panel) filtros?.let { lista0 ->
+            PanelFiltros(
+                lista0,
+                onReset = { scope.launch { runCatching { motor.filtros(f) }.getOrNull()?.let { filtros = it } } },
+                onFiltrar = { aplicados = lista0; enviada = consulta.trim(); modo = 2; recarga++ },
+                onCerrar = { panel = false },
+            )
+        }
         LazyVerticalGrid(
             GridCells.Fixed(3),
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 40.dp),
