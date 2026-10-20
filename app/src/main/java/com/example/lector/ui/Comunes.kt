@@ -74,9 +74,9 @@ fun CabeceraSeleccion(cantidad: Int, onCerrar: () -> Unit, onTodo: () -> Unit, o
         Spacer(Modifier.width(12.dp))
         Odometro("$cantidad", LectorType.Display.copy(fontSize = 26.sp))
         LText(if (cantidad == 1) " seleccionado" else " seleccionados", LectorType.Section, Modifier.weight(1f), maxLines = 1)
-        ChipSel("Todo", false, onTodo)
+        ChipSel("Todo", false, onClick = onTodo)
         Spacer(Modifier.width(8.dp))
-        ChipSel("Invertir", false, onInvertir)
+        ChipSel("Invertir", false, onClick = onInvertir)
     }
 }
 

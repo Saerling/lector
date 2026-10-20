@@ -102,7 +102,7 @@ fun HomeScreen(
         ) {
             Box(
                 Modifier.fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(0.92f), Color.Transparent)))
+                    .background(Brush.verticalGradient(listOf(LectorColors.Bg, LectorColors.Bg.copy(0.92f), Color.Transparent)))
                     .statusBarsPadding().padding(start = 76.dp, end = 24.dp, top = 12.dp, bottom = 12.dp)
             ) { LText("Inicio", LectorType.Display) }
         }

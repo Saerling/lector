@@ -95,7 +95,7 @@ fun DetalleScreen(
             Box(Modifier.fillMaxWidth().height(400.dp)) {
                 ComicCover(comic, almacen, Modifier.fillMaxSize().graphicsLayer { translationY = scroll.value * 0.5f }.blur(32.dp).alpha(0.6f), SuaveShape(0.dp))
                 Box(Modifier.fillMaxSize().background(acento.copy(alpha = 0.18f)))
-                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color.Black)))
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to LectorColors.Bg)))
 
                 Row(
                     Modifier.align(Alignment.BottomStart).padding(24.dp)

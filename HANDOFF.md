@@ -1,8 +1,8 @@
-# HANDOFF — Lector (app Android estilo Komikku) · Pasos 3 a 7: Explorar, Extensiones, Motor, Ficha/Lector online, Biblioteca online
+# HANDOFF — Lector (app Android estilo Komikku) · Pasos 3 a 15
 
 > Este archivo es el "pasaporte" del proyecto. Se lo puedes pasar a cualquier IA junto con el zip.
 > Al final hay un bloque **"Para la IA que continúe"** con las reglas para devolverlo (a Claude u otra).
-> Idioma de trabajo: **español**. Fecha de este traspaso: 2026-10-18.
+> Idioma de trabajo: **español**. Fecha de este traspaso: 2026-10-20 (PASO 15, ver 2o).
 
 ---
 
@@ -306,7 +306,88 @@ Origen: Komikku `BrowseSourceScreenModel.searchGenre` y la migración de fuentes
 - NO hace: mover descargas de la fuente vieja (quedan huérfanas en disco), copiar marcadores de capítulo, migrar varios mangas a la vez, ni la pantalla «Migrar» por fuente de Komikku. Si la fuente vieja ya no responde, `capsOrigen` es null y se usa el contador de leídos.
 - Sigue sin hacer: notificación de actualizaciones de extensiones (no hay WorkManager), extensiones privadas.
 
-## 3. PRÓXIMOS PASOS (en este orden; el punto 1 y parte del 2 ya están hechos arriba, ver 2b)
+## 2o. PASO 15 — «Todo lo de Komikku» + mejoras y optimización (2026-10-20, **COMPILA en GitHub Actions; NO probado en un móvil**)
+Rama de GitHub: `claude/komikku` (no se tocó `main`). El workflow compila el APK debug (y el release optimizado).
+
+### Verificación
+- Revisión de tipos local con Kotlin 2.0.21 + plugin de Compose: 0 errores.
+- **GitHub Actions: `assembleDebug` OK** (artefacto `lector-debug-apk`). Ver el estado del release en la pestaña Actions.
+- Nada de esto se ha abierto en un teléfono todavía: **hay que probarlo**.
+
+### Archivos NUEVOS
+- `Preferencias.kt`: delegados `prefBool/prefInt/prefLong/prefFloat/prefString/prefEnum` (estado de Compose sobre
+  SharedPreferences) y `enum Tri` (ignorar / incluir / excluir) para los filtros de tres estados.
+- `Descargas.kt`: cola de descargas **persistente** en un trabajo de WorkManager en primer plano (notificación con progreso),
+  simultáneas configurables, pausar / reanudar / cancelar / reintentar / mover al principio, solo con Wi‑Fi.
+- `Trabajos.kt`: `RevisorBiblioteca` + `TrabajoActualizar` (busca capítulos nuevos en segundo plano, periódico o manual,
+  con restricciones Wi‑Fi / cargando / saltar terminados, descarga automática de lo nuevo, errores guardados),
+  `TrabajoExtensiones` (aviso de extensiones con versión nueva), `TrabajoCopia` (copia automática) y `Programador`.
+- `Notificaciones.kt`: canales, ids y el extra `"destino"` que abre Actualizaciones / Descargas / Extensiones.
+- `CopiaSeguridad.kt`: copia versión 2 (biblioteca, categorías, progreso, historial, ajustes, leídos, marcas, listados,
+  fuentes ancladas, búsquedas guardadas). Se siguen restaurando las de versión 1.
+- `Portadas.kt` (`rememberPortada`), `Teclas.kt` (teclas de volumen), `Ayudas.kt` (compartir / guardar imágenes…).
+- `ui/Visor.kt`, `ui/VisorPaginas.kt`, `ui/VisorAjustes.kt`: **visor único** para cómics locales, descargas y online:
+  paginado ← / →, vertical, webtoon y continuo; zonas de toque (L, Kindle, bordes, izq./der.) con inversión; teclas de
+  volumen; autodesplazamiento; zoom con pellizco y doble toque; recorte de bordes; división de páginas dobles; relleno
+  lateral; transiciones entre capítulos; precarga configurable; filtros de color y brillo; modo propio por serie;
+  mantener pulsada una página = compartir / guardar / usar como portada.
+- `ui/Biblioteca.kt`: pestañas por categoría o **agrupada por fuente / estado**, hoja Filtro / Ordenar / Mostrar
+  (filtros de tres estados, orden por sin leer, total, último capítulo, última revisión, aleatorio…), insignias
+  (sin leer, descargados, idioma, Local), botón continuar, **búsqueda con operadores** (`"frase"`, `-excluir`,
+  `fuente:`, `autor:`, `genero:`), selección múltiple (categorías, leído / no leído, descargar, migrar, borrar),
+  deslizar hacia abajo = buscar capítulos nuevos.
+- `ui/Actualizaciones.kt` (rehecha): por día y agrupada por manga, selección múltiple, errores de revisión.
+- `ui/Historial.kt` (paquete `ui`, sustituye al viejo): por día, buscador, quitar uno o todo, aviso de incógnito.
+- `ui/ColaDescargas.kt`, `ui/BusquedaGlobal.kt` (buscar en todas las fuentes, solo ancladas, mantener pulsado = añadir),
+  `ui/Comunes.kt` (cabecera de selección, `BarraAcciones`, filas de filtro / orden / radio).
+- `app/proguard-rules.pro`, `res/drawable/ic_notificacion.xml`, `res/xml/archivos.xml` (FileProvider),
+  `eu/kanade/tachiyomi/network/DohProviders.kt` (copiado de Komikku).
+
+### Archivos MODIFICADOS (lo importante)
+- `Data.kt`: `Almacen.obtener(ctx)` es **singleton** (lo usan también los trabajos de fondo); contador `version` para
+  recomponer; `Comic` con autor / estado / géneros / descripción / edición propia / portada propia; índice de descargas;
+  muchos ajustes nuevos (tema, visor, biblioteca, descargas, actualizaciones, seguridad, DoH, copias…); historial que
+  respeta el modo incógnito.
+- `ui/FuenteManga.kt` → `FichaMangaScreen` rehecha: filtros / orden / modo de mostrar de capítulos, selección múltiple
+  (leído, no leído, anteriores leídos, marcar, descargar, borrar descarga), menú de descargas en lote, chips de
+  Seguimiento / **Editar información** / Migrar / Compartir / **Buscar en otras fuentes**, **visor de portada**
+  (compartir, guardar, cambiar), **recomendaciones de AniList**, datos actualizados al abrir. El lector online usa `Visor`.
+- `ui/ExtPantallas.kt` (`NavegarFuente`): desplazamiento infinito, vista cuadrícula / lista, insignia «En biblioteca»,
+  mantener pulsado = añadir / quitar, esconder lo que ya está en la biblioteca, **búsquedas guardadas** (solo el texto).
+- `ui/Explorar.kt`: pestaña **Migrar** real (series agrupadas por fuente), entrada a la búsqueda global; `ImagenRemota`
+  admite `escala` y `maxLado`; `Imagenes.bytes / tamanoDisco / vaciar`.
+- `ui/LectorApp.kt`: rutas nuevas (`AjVisor, AjDescargas, AjExplorar, AjSeguridad, AjAvanzado, AcercaDe, Descargas,
+  BusquedaGlobal, MigrarSerie`) y navegación desde notificaciones. Firmas nuevas de Biblioteca / Historial / Actualizaciones.
+- `MainActivity.kt`: tema **Sistema / Oscuro puro / Oscuro / Claro** (`TemaActual` + `LectorColors` dinámicos, barras del
+  sistema a juego), **bloqueo de la app** con el PIN / huella del sistema (`KeyguardManager`, tras N minutos fuera),
+  **pantalla segura** (`FLAG_SECURE`), permiso de notificaciones (Android 13+), canales y trabajos programados.
+- `ui/AjustesPantallas.kt`, `ui/Mas.kt`: Ajustes de Visor, Descargas, Explorar, Seguridad, Avanzado (DoH, cookies,
+  cachés), Acerca de; estadísticas ampliadas; pestaña Más con incógnito y cola de descargas.
+- `NetworkHelper.kt`: **DNS sobre HTTPS** (Cloudflare, Google, AdGuard, Quad9; se aplica al reiniciar).
+- `ui/Estilo.kt`: modificadores de pulsación con `Modifier.Node` (menos recomposiciones).
+- Borrados: `BibliotecaScreen.kt`, `Historial.kt` (raíz), `workflow-build.yml` (copia del workflow).
+
+### Dependencias / manifest (CAMBIOS)
+- `app/build.gradle.kts`: + `androidx.work:work-runtime-ktx:2.9.1`; `buildTypes.release` con R8 (`isMinifyEnabled`,
+  `isShrinkResources`, **sin ofuscar**, firmado con la clave debug); versión 0.2 (code 2).
+- Manifest: `POST_NOTIFICATIONS`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `WAKE_LOCK`,
+  `ACCESS_NETWORK_STATE`; `FileProvider` (`${applicationId}.archivos`); `SystemForegroundService` de WorkManager con
+  `foregroundServiceType="dataSync"`.
+- Workflow: compila en cualquier rama; si falla, los errores salen en el resumen del run.
+
+### Qué NO está (diferencias que quedan con Komikku)
+- Trackers distintos de AniList (MyAnimeList, Kitsu, MangaUpdates…), sincronización en la nube, combinar entradas
+  (merge), feed multi‑fuente, portada panorámica, extensiones privadas, búsquedas guardadas CON filtros.
+- La migración sigue sin mover las descargas de la fuente vieja.
+
+## 3. PRÓXIMOS PASOS
+**Actuales (tras el PASO 15):**
+1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,
+   actualizaciones periódicas + notificaciones, copia / restauración, tema claro, bloqueo, búsqueda global, migrar.
+2. Corregir lo que falle en el móvil. Luego fusionar `claude/komikku` en `main`.
+3. Lo que falta de la lista «Qué NO está» del PASO 15.
+
+**Históricos (de los primeros pasos, ya hechos):**
 1. **Compilar** y corregir errores del paso 3. Probar en móvil: añadir listado → instalar una extensión → Confiar →
    ver sus fuentes en la pestaña Fuentes. Confirmar que `index.pb` de Keiyoushi se lee.
 2. **Motor de fuentes (lo grande).** Camino recomendado: **vendorizar (copiar) de Komikku/Mihon** (licencia Apache-2.0)
@@ -328,7 +409,11 @@ Origen: Komikku `BrowseSourceScreenModel.searchGenre` y la migración de fuentes
 ---
 
 ## 4. Cómo se compila / prueba
-Proyecto Gradle (no incluido). Copiar `app/src/main/**` sobre el proyecto existente (los zips se pisan en este orden:
+**Ahora:** el repo es un proyecto Gradle completo. Cada push a GitHub ejecuta `.github/workflows/build.yml`
+(Gradle 8.9, JDK 17) y deja el APK en *Actions → el run → Artifacts* (`lector-debug-apk`, `lector-release-apk`).
+En local: `gradle assembleDebug` (no hay wrapper; el workflow instala Gradle 8.9).
+
+**Antes (histórico):** Proyecto Gradle (no incluido). Copiar `app/src/main/**` sobre el proyecto existente (los zips se pisan en este orden:
 `codigo-completo` → `paso2` → `paso3`). El paquete completo de este traspaso (`lector-paquete-para-otra-IA.zip`)
 ya trae todo fusionado en `app/src/main/`.
 

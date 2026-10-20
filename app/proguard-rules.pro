@@ -27,3 +27,6 @@
 -dontwarn com.google.re2j.**
 -dontwarn javax.annotation.**
 -dontwarn org.jetbrains.annotations.**
+-dontwarn org.jspecify.**
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn edu.umd.cs.findbugs.annotations.**

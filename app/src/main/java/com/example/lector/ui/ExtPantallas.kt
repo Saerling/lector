@@ -1,5 +1,7 @@
 package com.example.lector.ui
 
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -345,6 +347,12 @@ private fun NavegarFuente(
     generoInicial: String? = null, alConsumirGenero: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
+    val almacen = remember { com.example.lector.Almacen.obtener(ctx) }
+    val ext = remember { ExtManager.obtener(ctx) }
+    val enBiblioteca = remember(almacen.version) { almacen.clavesEnLinea() }
+    val rejilla = rememberLazyGridState()
+    var guardar by remember { mutableStateOf(false) }
     var modo by rememberSaveable { mutableStateOf(0) } // 0 populares · 1 recientes · 2 búsqueda
     var consulta by rememberSaveable { mutableStateOf("") }
     var enviada by rememberSaveable { mutableStateOf("") }
@@ -407,12 +415,44 @@ private fun NavegarFuente(
             ChipSel("Recientes", modo == 1) { modo = 1 }
             if (filtros != null) ChipSel(if (aplicados != null) "Filtros ✓" else "Filtros", aplicados != null) { panel = true }
         }
+        // Búsquedas guardadas (TachiyomiSY/Komikku): tocar = repetirla · mantener pulsado = borrarla.
+        val guardadas = ext.busquedas(f.id)
+        if (guardadas.isNotEmpty() || (modo == 2 && enviada.isNotBlank())) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                guardadas.forEach { b ->
+                    ChipSel("★ ${b.nombre}", enviada == b.consulta && modo == 2, onLongClick = {
+                        ext.borrarBusqueda(f.id, b.nombre); Avisos.mostrar("Búsqueda «${b.nombre}» borrada")
+                    }) { consulta = b.consulta; enviada = b.consulta; aplicados = null; modo = 2; recarga++ }
+                }
+                if (modo == 2 && enviada.isNotBlank() && guardadas.none { it.consulta == enviada }) {
+                    ChipSel("+ Guardar búsqueda", false) { guardar = true }
+                }
+            }
+        }
         Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { CampoBusqueda(consulta, { consulta = it }, "Buscar en ${f.nombre}") }
             Spacer(Modifier.width(10.dp))
             PillButton("Ir", Icons.Rounded.Search, { if (consulta.isNotBlank()) { enviada = consulta.trim(); modo = 2 } })
         }
         error?.let { LText(it, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = Color(0xFFE57373)) }
+        if (guardar) {
+            var nombre by remember { mutableStateOf(enviada) }
+            AlertDialog(
+                onDismissRequest = { guardar = false },
+                title = { Text("Guardar búsqueda") },
+                text = { OutlinedTextField(nombre, { nombre = it }, label = { Text("Nombre") }, singleLine = true) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (nombre.isNotBlank()) ext.guardarBusqueda(f.id, ExtManager.BusquedaGuardada(nombre.trim(), enviada, null))
+                        guardar = false
+                    }) { Text("Guardar") }
+                },
+                dismissButton = { TextButton(onClick = { guardar = false }) { Text("Cancelar") } },
+            )
+        }
         if (panel) filtros?.let { lista0 ->
             PanelFiltros(
                 lista0,
@@ -421,18 +461,48 @@ private fun NavegarFuente(
                 onCerrar = { panel = false },
             )
         }
+        val enLista = almacen.vistaExplorar == com.example.lector.VistaExplorar.LISTA
+        val visibles = if (almacen.ocultarEnBiblioteca) lista.filter { "${f.id}|${it.url}" !in enBiblioteca } else lista
+        suspend fun cargarMas() {
+            if (cargando || !hay || lista.isEmpty()) return
+            cargando = true
+            runCatching { pedir(pagina + 1) }
+                .onSuccess { lista.addAll(it.mangas.filter { n -> lista.none { v -> v.url == n.url } }); hay = it.haySiguiente; pagina += 1 }
+                .onFailure { error = it.message ?: "No se pudo cargar" }
+            cargando = false
+        }
+        // Desplazamiento infinito: al acercarse al final se pide la siguiente página.
+        val cercaDelFinal by remember {
+            derivedStateOf {
+                val info = rejilla.layoutInfo
+                info.totalItemsCount > 0 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 7
+            }
+        }
+        LaunchedEffect(cercaDelFinal, cargando, hay) { if (cercaDelFinal && !cargando && hay && error == null) cargarMas() }
         LazyVerticalGrid(
-            GridCells.Fixed(3),
+            if (enLista) GridCells.Fixed(1) else GridCells.Adaptive(108.dp),
+            state = rejilla,
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 40.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (enLista) 10.dp else 16.dp),
         ) {
-            itemsIndexed(lista) { i, m ->
-                Column(Modifier.entrada(i % 12).press3D().pressable { onManga(m) }) {
-                    ImagenRemota(
-                        m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(14.dp)),
-                        motor.cabeceras(f)
-                    )
+            itemsIndexed(visibles, key = { _, m -> m.url }) { i, m ->
+                val esta = "${f.id}|${m.url}" in enBiblioteca
+                // Mantener pulsado = añadir o quitar de la biblioteca (como en Komikku).
+                val mod = Modifier.entrada(i % 12).press3D().pressable(onLongClick = { alternarEnBiblioteca(ctx, almacen, f, m) }) { onManga(m) }
+                if (enLista) Row(mod, verticalAlignment = Alignment.CenterVertically) {
+                    ImagenRemota(m.portadaUrl, Modifier.width(52.dp).aspectRatio(2f / 3f).clip(SuaveShape(10.dp)), motor.cabeceras(f))
+                    Spacer(Modifier.width(14.dp))
+                    LText(m.titulo, LectorType.Body, Modifier.weight(1f), maxLines = 2)
+                    if (esta) EnBiblioteca()
+                } else Column(mod) {
+                    Box {
+                        ImagenRemota(
+                            m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(14.dp)).alpha(if (esta) 0.55f else 1f),
+                            motor.cabeceras(f)
+                        )
+                        if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
+                    }
                     Spacer(Modifier.height(6.dp))
                     LText(m.titulo, LectorType.Label, maxLines = 2)
                 }
@@ -441,15 +511,11 @@ private fun NavegarFuente(
                 Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), Alignment.Center) {
                     when {
                         cargando -> CircularProgressIndicator(Modifier.size(24.dp))
-                        hay && lista.isNotEmpty() -> PillButton("Cargar más", Icons.Rounded.Add, {
-                            scope.launch {
-                                cargando = true
-                                runCatching { pedir(pagina + 1) }
-                                    .onSuccess { lista.addAll(it.mangas); hay = it.haySiguiente; pagina += 1 }
-                                    .onFailure { error = it.message ?: "No se pudo cargar" }
-                                cargando = false
-                            }
+                        hay && lista.isNotEmpty() -> PillButton(if (error != null) "Reintentar" else "Cargar más", Icons.Rounded.Add, {
+                            error = null
+                            scope.launch { cargarMas() }
                         })
+                        !cargando && lista.isEmpty() && error == null -> LText("Sin resultados", LectorType.Label, color = LectorColors.Muted)
                     }
                 }
             }

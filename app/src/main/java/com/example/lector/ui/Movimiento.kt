@@ -83,7 +83,7 @@ fun temaDe(img: ImageBitmap): TemaPortada? = runCatching {
 @Composable
 fun BarraSuperior(
     scroll: () -> Float, titulo: String, onBack: () -> Unit, modifier: Modifier = Modifier,
-    fondo: Color = Color.Black, trailing: (@Composable RowScope.() -> Unit)? = null,
+    fondo: Color = LectorColors.Bg, trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     Box(modifier.fillMaxWidth()) {
         Box(
@@ -96,7 +96,7 @@ fun BarraSuperior(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(Color(0x66000000)),
+                Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(LectorColors.SobreImagen),
                 Alignment.Center
             ) { Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text) }
             Spacer(Modifier.width(14.dp))

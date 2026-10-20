@@ -859,8 +859,8 @@ private fun TarjetaVidrio(modifier: Modifier, onClick: (() -> Unit)? = null, con
     val forma = SuaveShape(32.dp)
     Column(
         modifier.press3D(5f, 0.98f).then(if (onClick != null) Modifier.pressable(onClick) else Modifier)
-            .clip(forma).background(Color.White.copy(alpha = 0.06f))
-            .border(1.5.dp, Color.White.copy(alpha = 0.16f), forma),
+            .clip(forma).background(LectorColors.Text.copy(alpha = 0.06f))
+            .border(1.5.dp, LectorColors.Text.copy(alpha = 0.16f), forma),
         content = content,
     )
 }

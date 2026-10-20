@@ -43,13 +43,13 @@ fun WebViewScreen(url: String, tituloInicial: String, alVolver: () -> Unit) {
     BackHandler { if (web?.canGoBack() == true) web?.goBack() else alVolver() }
     DisposableEffect(Unit) { onDispose { web?.apply { stopLoading(); destroy() } } }
 
-    Column(Modifier.fillMaxSize().background(Color.Black)) {
+    Column(Modifier.fillMaxSize().background(LectorColors.Bg)) {
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                Modifier.size(44.dp).pressable { alVolver() }.clip(CircleShape).background(Color(0x33FFFFFF)),
+                Modifier.size(44.dp).pressable { alVolver() }.clip(CircleShape).background(LectorColors.PillFill),
                 Alignment.Center,
             ) { Icon(Icons.Rounded.ArrowBack, "Cerrar", tint = LectorColors.Text) }
             Spacer(Modifier.width(14.dp))
@@ -59,7 +59,7 @@ fun WebViewScreen(url: String, tituloInicial: String, alVolver: () -> Unit) {
                     runCatching {
                         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(actual)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
-                }.clip(CircleShape).background(Color(0x33FFFFFF)),
+                }.clip(CircleShape).background(LectorColors.PillFill),
                 Alignment.Center,
             ) { Icon(Icons.Rounded.Share, "Abrir en el navegador", tint = LectorColors.Text) }
         }

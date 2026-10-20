@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Versión reducida del NetworkHelper de Komikku/Mihon (misma API pública que usan las extensiones).
- * Pendiente respecto al original: DNS sobre HTTPS y logging. El CloudflareInterceptor (WebView) sí está.
+ * Incluye DNS sobre HTTPS (Ajustes → Avanzado) y el CloudflareInterceptor (WebView).
  */
 open class NetworkHelper(
     private val context: Context,
@@ -20,7 +20,7 @@ open class NetworkHelper(
     open val cookieJar = AndroidCookieJar()
 
     open val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
+        val builder = OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -29,7 +29,14 @@ open class NetworkHelper(
             .addInterceptor(UncaughtExceptionInterceptor())
             .addInterceptor(UserAgentInterceptor(::defaultUserAgentProvider))
             .addInterceptor(CloudflareInterceptor(context, cookieJar, ::defaultUserAgentProvider))
-            .build()
+        // DNS sobre HTTPS: lo eligió el usuario en Ajustes (se aplica al reiniciar la app).
+        when (context.getSharedPreferences("lector", Context.MODE_PRIVATE).getInt("doh", 0)) {
+            PREF_DOH_CLOUDFLARE -> builder.dohCloudflare()
+            PREF_DOH_GOOGLE -> builder.dohGoogle()
+            PREF_DOH_ADGUARD -> builder.dohAdGuard()
+            PREF_DOH_QUAD9 -> builder.dohQuad9()
+        }
+        builder.build()
     }
 
     @Deprecated("The regular client handles Cloudflare by default", ReplaceWith("client"))

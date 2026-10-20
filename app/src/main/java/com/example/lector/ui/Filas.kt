@@ -98,10 +98,10 @@ fun Divisor() {
 
 /** Píldora de selección (columnas, etc.). */
 @Composable
-fun ChipSel(texto: String, seleccionado: Boolean, onClick: () -> Unit) {
+fun ChipSel(texto: String, seleccionado: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val acento = MaterialTheme.colorScheme.primary
     Box(
-        Modifier.pressable(onClick).clip(CircleShape)
+        Modifier.pressable(onLongClick, onClick).clip(CircleShape)
             .background(if (seleccionado) acento.copy(alpha = 0.22f) else Color.Transparent)
             .border(1.dp, if (seleccionado) acento else LectorColors.Linea, CircleShape)
             .padding(horizontal = 18.dp, vertical = 9.dp)
