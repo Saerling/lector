@@ -73,63 +73,91 @@ object TachibkFormato {
 
     fun codificar(c: Copia): ByteArray {
         val w = Proto.Escritor()
-        c.mangas.forEach { m ->
-            w.mensaje(1) {
-                long(1, m.fuente)
-                texto(2, m.url)
-                texto(3, m.titulo)
-                texto(4, m.artista)
-                texto(5, m.autor)
-                texto(6, m.descripcion)
-                m.generos.forEach { texto(7, it) }
-                int(8, m.estado)
-                texto(9, m.portada)
-                long(13, m.anadido)
-                m.capitulos.forEach { ch ->
-                    mensaje(16) {
-                        texto(1, ch.url)
-                        texto(2, ch.nombre)
-                        texto(3, ch.scanlator)
-                        bool(4, ch.leido)
-                        bool(5, ch.marcado)
-                        long(6, ch.pagina)
-                        long(8, ch.fechaSubida)
-                        float(9, ch.numero)
-                    }
-                }
-                m.categorias.forEach { long(17, it) }
-                m.seguimiento.forEach { t ->
-                    mensaje(18) {
-                        int(1, t.servicio)
-                        long(2, t.mediaId)
-                        int(3, t.mediaId.toInt())
-                        texto(4, if (t.servicio == ANILIST) "https://anilist.co/manga/${t.mediaId}" else "")
-                        texto(5, t.titulo)
-                        float(6, t.ultimoCapitulo)
-                        long(100, t.mediaId)
-                    }
-                }
-                bool(100, m.favorito)
-                m.historial.forEach { h -> mensaje(104) { texto(1, h.url); long(2, h.ultimaLectura) } }
-                if (m.estadoPropio != 0) int(602, m.estadoPropio)
-                texto(800, m.tituloPropio)
-                texto(802, m.autorPropio)
-                texto(804, m.descripcionPropia)
-                m.generosPropios.forEach { texto(805, it) }
-            }
-        }
-        c.categorias.forEach { cat ->
-            w.mensaje(2) {
-                texto(1, cat.nombre)
-                long(2, cat.orden)
-                long(3, cat.orden + 1)
-                bool(900, cat.oculta)
-            }
-        }
+        c.mangas.forEach { m -> w.mensaje(1) { cuerpoManga(m) } }
+        c.categorias.forEach { cat -> w.mensaje(2) { cuerpoCategoria(cat) } }
         c.fuentes.forEach { f -> w.mensaje(101) { texto(1, f.nombre); long(2, f.id) } }
         val salida = ByteArrayOutputStream()
         GZIPOutputStream(salida).use { it.write(w.aBytes()) }
         return salida.toByteArray()
+    }
+
+    /** Los campos de un BackupManga. */
+    private fun Proto.Escritor.cuerpoManga(m: Manga) {
+        long(1, m.fuente)
+        texto(2, m.url)
+        texto(3, m.titulo)
+        texto(4, m.artista)
+        texto(5, m.autor)
+        texto(6, m.descripcion)
+        m.generos.forEach { texto(7, it) }
+        int(8, m.estado)
+        texto(9, m.portada)
+        long(13, m.anadido)
+        m.capitulos.forEach { ch ->
+            mensaje(16) {
+                texto(1, ch.url)
+                texto(2, ch.nombre)
+                texto(3, ch.scanlator)
+                bool(4, ch.leido)
+                bool(5, ch.marcado)
+                long(6, ch.pagina)
+                long(8, ch.fechaSubida)
+                float(9, ch.numero)
+            }
+        }
+        m.categorias.forEach { long(17, it) }
+        m.seguimiento.forEach { t ->
+            mensaje(18) {
+                int(1, t.servicio)
+                long(2, t.mediaId)
+                int(3, t.mediaId.toInt())
+                texto(4, if (t.servicio == ANILIST) "https://anilist.co/manga/${t.mediaId}" else "")
+                texto(5, t.titulo)
+                float(6, t.ultimoCapitulo)
+                long(100, t.mediaId)
+            }
+        }
+        bool(100, m.favorito)
+        m.historial.forEach { h -> mensaje(104) { texto(1, h.url); long(2, h.ultimaLectura) } }
+        if (m.estadoPropio != 0) int(602, m.estadoPropio)
+        texto(800, m.tituloPropio)
+        texto(802, m.autorPropio)
+        texto(804, m.descripcionPropia)
+        m.generosPropios.forEach { texto(805, it) }
+    }
+
+    private fun Proto.Escritor.cuerpoCategoria(cat: Categoria) {
+        texto(1, cat.nombre)
+        long(2, cat.orden)
+        long(3, cat.orden + 1)
+        bool(900, cat.oculta)
+    }
+
+    /**
+     * Escribe una copia .tachibk directamente en [salida], manga a manga, sin montarla entera en memoria
+     * (una biblioteca de miles de mangas con cientos de miles de capítulos no cabría).
+     */
+    class EscritorFlujo(salida: java.io.OutputStream) : java.io.Closeable {
+        private val gz = GZIPOutputStream(java.io.BufferedOutputStream(salida, 64 * 1024), 64 * 1024)
+
+        private fun varint(v: Long) {
+            var x = v
+            while (true) {
+                if (x and 0x7FL.inv() == 0L) { gz.write(x.toInt()); return }
+                gz.write(((x and 0x7F) or 0x80).toInt())
+                x = x ushr 7
+            }
+        }
+
+        private fun campo(n: Int, datos: ByteArray) {
+            varint(((n shl 3) or 2).toLong()); varint(datos.size.toLong()); gz.write(datos)
+        }
+
+        fun manga(m: Manga) = campo(1, Proto.Escritor().apply { cuerpoManga(m) }.aBytes())
+        fun categoria(c: Categoria) = campo(2, Proto.Escritor().apply { cuerpoCategoria(c) }.aBytes())
+        fun fuente(f: Fuente) = campo(101, Proto.Escritor().apply { texto(1, f.nombre); long(2, f.id) }.aBytes())
+
+        override fun close() { gz.finish(); gz.flush(); gz.close() }
     }
 
     // ───────── Leer ─────────
@@ -198,6 +226,8 @@ object TachibkFormato {
         val fuente: Long, val url: String, val titulo: String, val autor: String?, val descripcion: String?,
         val generos: List<String>, val estado: Int, val portada: String?, val anadido: Long, val favorito: Boolean,
         val totalCapitulos: Int, val conEstado: List<Capitulo>, val categorias: List<Long>,
+        /** Las direcciones de TODOS sus capítulos (para guardarlos como «conocidos» y poder exportarlos después). */
+        val urls: List<String>,
         val seguimiento: List<Seguimiento>, val ultimaLectura: Historial?,
         val tituloPropio: String?, val autorPropio: String?, val descripcionPropia: String?,
         val generosPropios: List<String>, val estadoPropio: Int,
@@ -240,7 +270,7 @@ object TachibkFormato {
         val c = Proto.Cursor(datos)
         var fuente = 0L; var url: String? = null; var titulo = ""; var autor: String? = null; var desc: String? = null
         val generos = ArrayList<String>(); var estado = 0; var portada: String? = null; var anadido = 0L; var favorito = true
-        var total = 0; val conEstado = ArrayList<Capitulo>(); val cats = ArrayList<Long>(); val segs = ArrayList<Seguimiento>()
+        var total = 0; val conEstado = ArrayList<Capitulo>(); val urls = ArrayList<String>(); val cats = ArrayList<Long>(); val segs = ArrayList<Seguimiento>()
         var ultima: Historial? = null
         var tP: String? = null; var aP: String? = null; var dP: String? = null; val gP = ArrayList<String>(); var eP = 0
         while (c.siguiente()) {
@@ -254,7 +284,7 @@ object TachibkFormato {
                 8 -> estado = c.valor.toInt()
                 9 -> portada = c.texto()
                 13 -> anadido = c.valor
-                16 -> { total++; leerCapitulo(c.sub())?.let { conEstado += it } }
+                16 -> { total++; leerCapitulo(c.sub(), urls)?.let { conEstado += it } }
                 17 -> if (c.tipo == 0) cats += c.valor else { val p = c.sub(); while (p.siguienteVarintEmpaquetado()) cats += p.valor }
                 18 -> {
                     val t = c.sub(); var serv = 0; var m100 = 0L; var m3 = 0L; var tt = ""; var ult = 0f
@@ -275,11 +305,11 @@ object TachibkFormato {
             }
         }
         val u = url ?: return null
-        return MangaLigero(fuente, u, titulo, autor, desc, generos, estado, portada, anadido, favorito, total, conEstado, cats, segs, ultima, tP, aP, dP, gP, eP)
+        return MangaLigero(fuente, u, titulo, autor, desc, generos, estado, portada, anadido, favorito, total, conEstado, cats, urls, segs, ultima, tP, aP, dP, gP, eP)
     }
 
     /** Un capítulo: solo se crean sus textos si tiene algo que restaurar. */
-    private fun leerCapitulo(c: Proto.Cursor): Capitulo? {
+    private fun leerCapitulo(c: Proto.Cursor, urls: MutableList<String>): Capitulo? {
         var uIni = -1; var uLar = 0; var nIni = -1; var nLar = 0
         var leido = false; var marcado = false; var pagina = 0L; var numero = -1f
         while (c.siguiente()) when (c.numero) {
@@ -290,9 +320,12 @@ object TachibkFormato {
             6 -> pagina = c.valor
             9 -> numero = c.float()
         }
-        if (uIni < 0 || (!leido && !marcado && pagina <= 0)) return null
+        if (uIni < 0) return null
+        val url = String(c.b, uIni, uLar, Charsets.UTF_8)
+        urls += url
+        if (!leido && !marcado && pagina <= 0) return null
         return Capitulo(
-            url = String(c.b, uIni, uLar, Charsets.UTF_8),
+            url = url,
             nombre = if (nIni >= 0) String(c.b, nIni, nLar, Charsets.UTF_8) else "",
             leido = leido, marcado = marcado, pagina = pagina, numero = numero,
         )

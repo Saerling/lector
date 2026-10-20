@@ -1397,6 +1397,13 @@ class Almacen private constructor(private val contexto: Context) {
         }
     }
 
+    /** Guarda ya (en este hilo) los capítulos conocidos de un manga, sumándolos a los que hubiera. */
+    fun guardarConocidosYa(fuenteId: Long, urlManga: String, urls: Collection<String>) {
+        if (urls.isEmpty()) return
+        val ya = conocidos.leer(fuenteId, urlManga)
+        conocidos.guardarYa(fuenteId, urlManga, if (ya == null) urls else ya + urls)
+    }
+
     /**
      * Las versiones anteriores guardaban los capítulos conocidos de cada manga en las preferencias («cc|fuente|url»):
      * con una biblioteca grande eran decenas de MB cargados en memoria siempre. Se pasan a archivos y se borran de ahí.

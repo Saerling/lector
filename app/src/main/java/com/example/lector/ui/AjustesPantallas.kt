@@ -371,8 +371,8 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
     // Copia en el formato de Mihon / Komikku (.tachibk): para pasar la biblioteca a esas apps.
     val crearTachibk = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null && !TareaCopia.lanzar(contexto, "Creando copia .tachibk") {
-                val (datos, informe) = com.example.lector.Tachibk.crear(contexto, this)
-                contexto.contentResolver.openOutputStream(uri)?.use { it.write(datos) } ?: error("No se pudo escribir el archivo")
+                val informe = contexto.contentResolver.openOutputStream(uri)?.use { com.example.lector.Tachibk.crear(contexto, it, this) }
+                    ?: error("No se pudo escribir el archivo")
                 informe.copy(bien = informe.bien + "Restáurala en Mihon, Komikku o TachiyomiSY (Ajustes → Copia de seguridad → Restaurar)")
             }
         ) ocupado()

@@ -759,7 +759,12 @@ class ExtManager private constructor(private val app: Context) {
     fun exportar(): JSONObject {
         val o = JSONObject()
         // Los leídos van como huellas (números): mucho más pequeños que los textos «fuente|url».
-        o.put("leidos_h", JSONArray().also { a -> leidosH.aArreglo().forEach { a.put(it) } })
+        o.put("leidos_b64", run {
+            val arr = leidosH.aArreglo()
+            val bb = java.nio.ByteBuffer.allocate(arr.size * 8)
+            arr.forEach { bb.putLong(it) }
+            android.util.Base64.encodeToString(bb.array(), android.util.Base64.NO_WRAP)
+        })
         o.put("marcados", JSONArray(marcados.toList()))
         o.put("paginas_cap", JSONObject().also { j -> paginasCap.forEach { (k, v) -> j.put(k, v) } })
         o.put("repos", JSONArray(prefs.getString("repos", "[]")))
@@ -777,6 +782,10 @@ class ExtManager private constructor(private val app: Context) {
         fun conjunto(a: JSONArray?): Set<String> = if (a == null) emptySet() else (0 until a.length()).map { a.getString(it) }.toSet()
         o.optJSONArray("leidos")?.let { a -> for (i in 0 until a.length()) com.example.lector.ConjuntoLargo.claveDeTexto(a.getString(i))?.let { leidosH.add(it) } }
         o.optJSONArray("leidos_h")?.let { a -> for (i in 0 until a.length()) leidosH.add(a.getLong(i)) }
+        o.optString("leidos_b64").takeIf { it.isNotEmpty() }?.let { t ->
+            val bb = java.nio.ByteBuffer.wrap(android.util.Base64.decode(t, android.util.Base64.NO_WRAP))
+            while (bb.remaining() >= 8) leidosH.add(bb.long)
+        }
         versionLeidos++
         marcados = marcados + conjunto(o.optJSONArray("marcados"))
         o.optJSONObject("paginas_cap")?.let { j -> j.keys().forEach { k -> if (!leidoTexto(k)) paginasCap[k] = j.optInt(k) } }

@@ -48,3 +48,11 @@ fun generarEnorme(ruta: String, mangas: Int, caps: Int) {
     File(ruta).writeBytes(gz(crudo))
     println("enorme: ${mangas * caps} capítulos, sin comprimir ${crudo.size / 1024 / 1024} MB, comprimido ${File(ruta).length() / 1024} KB")
 }
+
+fun pruebaFlujo(m: com.example.lector.TachibkFormato.Manga) {
+    val o = java.io.ByteArrayOutputStream()
+    TachibkFormato.EscritorFlujo(o).use { w -> w.manga(m); w.manga(m); w.categoria(TachibkFormato.Categoria("X", 3)) }
+    val b = java.util.zip.GZIPInputStream(o.toByteArray().inputStream()).readBytes()
+    val v = ProtoBuf.decodeFromByteArray(Backup.serializer(), b)
+    check(v.backupManga.size == 2 && v.backupManga[1].chapters.size == m.capitulos.size && v.backupCategories.single().order == 3L, "flujo: Mihon lee lo escrito por partes")
+}

@@ -34,8 +34,11 @@ object Tachibk {
 
     // ───────────────────────────── Exportar ─────────────────────────────
 
-    /** Crea la copia .tachibk y devuelve los bytes y el informe. */
-    fun crear(ctx: Context, avance: TareaCopia.Avance? = null): Pair<ByteArray, TareaCopia.Informe> {
+    /**
+     * Crea la copia .tachibk escribiéndola directamente en [salida], manga a manga (con miles de mangas y cientos de
+     * miles de capítulos no cabría entera en memoria). Devuelve el informe.
+     */
+    fun crear(ctx: Context, salida: java.io.OutputStream, avance: TareaCopia.Avance? = null): TareaCopia.Informe {
         val almacen = Almacen.obtener(ctx)
         val ext = ExtManager.obtener(ctx)
         val todos = almacen.cargar()
@@ -47,6 +50,7 @@ object Tachibk {
         val histPorManga = historial.groupBy { it.fuenteId to it.urlManga }
         val ordenCat = cats.withIndex().associate { (i, c) -> c.id to i.toLong() }
         var capsConEstado = 0
+        var sinLista = 0
 
         // Solo los capítulos con algo que guardar (leído, marcado o página): la lista completa la pide la otra app.
         fun capitulos(fuente: Long, urls: Collection<String>, nombres: Map<String, String>) = urls.mapNotNull { u ->
@@ -57,60 +61,71 @@ object Tachibk {
             else TachibkFormato.Capitulo(u, nombres[u].orEmpty(), leido = leido, marcado = marcado, pagina = pagina.toLong())
         }.also { capsConEstado += it.size }
 
-        val mangas = comics.mapIndexed { i, c ->
-            if (i % 20 == 0) avance?.paso(0.05f + 0.75f * i / comics.size.coerceAtLeast(1), "Mangas: $i de ${comics.size}")
-            val url = c.urlManga!!
-            val hist = histPorManga[c.fuenteId to url].orEmpty()
-            TachibkFormato.Manga(
-                fuente = c.fuenteId, url = url, titulo = c.titulo, autor = c.autor, descripcion = c.descripcion,
-                generos = c.generos, estado = c.estado, portada = c.portadaUrl, anadido = c.anadido,
-                capitulos = capitulos(c.fuenteId, almacen.capitulosConocidos(c.fuenteId, url) + hist.map { it.capUrl }, hist.associate { it.capUrl to it.capNombre }),
-                // Mihon referencia las categorías por su «order».
-                categorias = asign[c.id].orEmpty().mapNotNull { ordenCat[it] },
-                seguimiento = listOfNotNull(almacen.seguimientoDe(c.id)?.let { s ->
-                    TachibkFormato.Seguimiento(ANILIST, s.mediaId.toLong(), s.titulo, s.numero.toFloat())
-                }),
-                favorito = true,
-                historial = hist.map { TachibkFormato.Historial(it.capUrl, it.leido) },
-                tituloPropio = c.titulo.takeIf { c.editado },
-                autorPropio = c.autor.takeIf { c.editado },
-                descripcionPropia = c.descripcion.takeIf { c.editado },
-                generosPropios = if (c.editado) c.generos else emptyList(),
-            )
+        var bytes = 0L
+        val contador = object : java.io.FilterOutputStream(salida) {
+            override fun write(b: Int) { bytes++; out.write(b) }
+            override fun write(b: ByteArray, off: Int, len: Int) { bytes += len; out.write(b, off, len) }
         }
-        val enBiblioteca = comics.map { it.fuenteId to it.urlManga }.toSet()
-        val soloHistorial = historial.filter { (it.fuenteId to it.urlManga) !in enBiblioteca }.map { h ->
-            TachibkFormato.Manga(
-                fuente = h.fuenteId, url = h.urlManga, titulo = h.titulo, portada = h.portadaUrl,
-                capitulos = capitulos(h.fuenteId, listOf(h.capUrl), mapOf(h.capUrl to h.capNombre)),
-                favorito = false,
-                historial = listOf(TachibkFormato.Historial(h.capUrl, h.leido)),
-            )
+        TachibkFormato.EscritorFlujo(contador).use { w ->
+            comics.forEachIndexed { i, c ->
+                if (i % 50 == 0) avance?.paso(0.02f + 0.9f * i / comics.size.coerceAtLeast(1), "Mangas: $i de ${comics.size}")
+                val url = c.urlManga!!
+                val hist = histPorManga[c.fuenteId to url].orEmpty()
+                val conocidos = almacen.capitulosConocidos(c.fuenteId, url)
+                if (conocidos.isEmpty() && c.ultimaPagina > 0) sinLista++
+                w.manga(
+                    TachibkFormato.Manga(
+                        fuente = c.fuenteId, url = url, titulo = c.titulo, autor = c.autor, descripcion = c.descripcion,
+                        generos = c.generos, estado = c.estado, portada = c.portadaUrl, anadido = c.anadido,
+                        capitulos = capitulos(c.fuenteId, conocidos + hist.map { it.capUrl }, hist.associate { it.capUrl to it.capNombre }),
+                        // Mihon referencia las categorías por su «order».
+                        categorias = asign[c.id].orEmpty().mapNotNull { ordenCat[it] },
+                        seguimiento = listOfNotNull(almacen.seguimientoDe(c.id)?.let { s ->
+                            TachibkFormato.Seguimiento(ANILIST, s.mediaId.toLong(), s.titulo, s.numero.toFloat())
+                        }),
+                        favorito = true,
+                        historial = hist.map { TachibkFormato.Historial(it.capUrl, it.leido) },
+                        tituloPropio = c.titulo.takeIf { c.editado },
+                        autorPropio = c.autor.takeIf { c.editado },
+                        descripcionPropia = c.descripcion.takeIf { c.editado },
+                        generosPropios = if (c.editado) c.generos else emptyList(),
+                    )
+                )
+            }
+            // Lo que solo está en el historial va como «no favorito», como en Mihon.
+            val enBiblioteca = comics.mapTo(HashSet()) { it.fuenteId to it.urlManga }
+            historial.filter { (it.fuenteId to it.urlManga) !in enBiblioteca }.forEach { h ->
+                w.manga(
+                    TachibkFormato.Manga(
+                        fuente = h.fuenteId, url = h.urlManga, titulo = h.titulo, portada = h.portadaUrl,
+                        capitulos = capitulos(h.fuenteId, listOf(h.capUrl), mapOf(h.capUrl to h.capNombre)),
+                        favorito = false,
+                        historial = listOf(TachibkFormato.Historial(h.capUrl, h.leido)),
+                    )
+                )
+            }
+            cats.forEachIndexed { i, c -> w.categoria(TachibkFormato.Categoria(c.nombre, i.toLong(), c.oculta)) }
+            val fuentesPorId = ext.fuentes.associateBy { it.id }
+            (comics.map { it.fuenteId } + historial.map { it.fuenteId }).toSet().forEach { id ->
+                w.fuente(TachibkFormato.Fuente(fuentesPorId[id]?.nombre ?: id.toString(), id))
+            }
+            avance?.paso(0.97f, "Terminando…")
         }
-        avance?.paso(0.85f, "Comprimiendo…")
-        val ids = (comics.map { it.fuenteId } + historial.map { it.fuenteId }).toSet()
-        val fuentesPorId = ext.fuentes.associateBy { it.id }
-        val bytes = TachibkFormato.codificar(
-            TachibkFormato.Copia(
-                mangas = mangas + soloHistorial,
-                categorias = cats.mapIndexed { i, c -> TachibkFormato.Categoria(c.nombre, i.toLong(), c.oculta) },
-                fuentes = ids.map { id -> TachibkFormato.Fuente(fuentesPorId[id]?.nombre ?: id.toString(), id) },
-            )
-        )
-        val informe = TareaCopia.Informe(
+        return TareaCopia.Informe(
             titulo = "Copia para Mihon / Komikku",
             bien = listOfNotNull(
                 "${comics.size} mangas de la biblioteca",
                 "$capsConEstado capítulos con progreso (leídos, marcados o a medias)".takeIf { capsConEstado > 0 },
                 "${cats.size} categorías".takeIf { cats.isNotEmpty() },
                 "${historial.size} entradas de historial".takeIf { historial.isNotEmpty() },
-                "Tamaño: ${bytes.size / 1024 + 1} KB",
+                "Tamaño: ${bytes / 1024 + 1} KB",
             ),
             avisos = listOfNotNull(
                 "$locales cómics locales (.cbz/.pdf) no se incluyen: ese formato solo guarda mangas de fuentes".takeIf { locales > 0 },
+                ("$sinLista mangas con progreso aún no tienen su lista de capítulos guardada (ábrelos o actualiza la biblioteca " +
+                    "y vuelve a exportar): su progreso de capítulos no va en la copia").takeIf { sinLista > 0 },
             ),
         )
-        return bytes to informe
     }
 
     // ───────────────────────────── Importar ─────────────────────────────
@@ -167,6 +182,9 @@ object Tachibk {
                     if (!c.leido && c.pagina > 0) paginas["${m.fuente}|${c.url}"] = c.pagina.toInt()
                 }
                 if (m.favorito) {
+                    // Sus capítulos quedan como «conocidos» (en disco, no en memoria): así la primera actualización no
+                    // los toma por nuevos y la copia para Mihon puede volver a exportar su progreso.
+                    if (m.urls.isNotEmpty()) almacen.guardarConocidosYa(m.fuente, m.url, m.urls)
                     favoritos++
                     porFuente[m.fuente] = (porFuente[m.fuente] ?: 0) + 1
                     nuevos += Almacen.NuevoEnLinea(

@@ -144,9 +144,9 @@ fun Inicio(
                 if (destino == "probar-copia" && depurable) {
                     com.example.lector.TareaCopia.lanzar(contexto, "Creando copia .tachibk") {
                         val t0 = android.os.SystemClock.elapsedRealtime()
-                        val (bytes, inf) = com.example.lector.Tachibk.crear(contexto, this)
-                        java.io.File(contexto.getExternalFilesDir(null), "exportada.tachibk").writeBytes(bytes)
-                        android.util.Log.i("LectorPrueba", "crear ms=${android.os.SystemClock.elapsedRealtime() - t0} bytes=${bytes.size} bien=${inf.bien}")
+                        val archivo = java.io.File(contexto.filesDir, "exportada.tachibk")
+                        val inf = archivo.outputStream().use { com.example.lector.Tachibk.crear(contexto, it, this) }
+                        android.util.Log.i("LectorPrueba", "crear ms=${android.os.SystemClock.elapsedRealtime() - t0} bytes=${archivo.length()} bien=${inf.bien} avisos=${inf.avisos}")
                         inf
                     }
                 }
