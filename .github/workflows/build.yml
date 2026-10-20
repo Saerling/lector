@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [main, master]
+    branches: ['**']
   workflow_dispatch:
 
 jobs:
@@ -20,10 +20,45 @@ jobs:
         with:
           gradle-version: 8.9
 
-      - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: Compilar APK (debug)
+        run: |
+          set -o pipefail
+          gradle assembleDebug --stacktrace 2>&1 | tee build-debug.log
+
+      # Si falla, los errores de compilación salen como avisos del run (se ven en la pestaña "Summary").
+      - name: Resumen de errores
+        if: failure()
+        run: |
+          grep -E "^e: |error:|ERROR:|What went wrong|> " build-debug.log | grep -v "^> Task" | head -80 > errores.txt || true
+          echo "## Errores de compilación" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat errores.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          msg=$(sed -e 's/%/%25/g' errores.txt | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Errores de compilación::${msg}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: lector-apk
+          name: lector-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      # APK optimizado (R8, sin ofuscar). Si esto falla, el APK debug sigue disponible.
+      - name: Compilar APK optimizado (release)
+        id: release
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          gradle assembleRelease --stacktrace 2>&1 | tee build-release.log
+
+      - name: Resumen de errores (release)
+        if: steps.release.outcome == 'failure'
+        run: |
+          grep -E "^e: |error:|ERROR:|What went wrong|Missing class|> " build-release.log | grep -v "^> Task" | head -80 > errores-r.txt || true
+          msg=$(sed -e 's/%/%25/g' errores-r.txt | awk '{printf "%s%%0A", $0}')
+          echo "::warning title=Errores en release::${msg}"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.release.outcome == 'success'
+        with:
+          name: lector-release-apk
+          path: app/build/outputs/apk/release/*.apk

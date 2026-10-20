@@ -38,6 +38,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.lector.Almacen
 import com.example.lector.Comic
+import com.example.lector.rememberPortada
+import com.example.lector.ext.ExtManager
+import com.example.lector.ext.Motor
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun LText(
@@ -48,16 +53,30 @@ fun LText(
 /** Portada real (la que ya guarda tu Almacen); si no hay, muestra la inicial del título. */
 @Composable
 fun ComicCover(comic: Comic, almacen: Almacen, modifier: Modifier = Modifier, shape: Shape = SuaveShape(20.dp)) {
-    val portada = remember(comic.id) {
-        BitmapFactory.decodeFile(almacen.portadaDe(comic.id).path)?.asImageBitmap()
-    }
+    val portada = rememberPortada(almacen, comic.id)
     Box(modifier.clip(shape).background(LectorColors.CardHigh), contentAlignment = Alignment.Center) {
-        if (portada != null) {
-            Image(bitmap = portada, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        } else {
-            LText(comic.titulo.take(1).uppercase(), LectorType.Display, color = LectorColors.Muted)
+        when {
+            portada != null ->
+                Image(bitmap = portada, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            // Manga en línea sin portada guardada (añadido con pulsación larga, copia restaurada…): la de la fuente.
+            comic.enLinea && !comic.portadaUrl.isNullOrBlank() ->
+                ImagenRemota(comic.portadaUrl, Modifier.fillMaxSize(), rememberCabeceras(comic.fuenteId))
+            else -> LText(comic.titulo.take(1).uppercase(), LectorType.Display, color = LectorColors.Muted)
         }
     }
+}
+
+/** Cabeceras HTTP de una fuente (Referer…) para cargar sus imágenes; se piden en segundo plano. */
+@Composable
+fun rememberCabeceras(fuenteId: Long): Map<String, String> {
+    val ctx = LocalContext.current
+    val ext = remember { ExtManager.obtener(ctx) }
+    val f = ext.fuentes.firstOrNull { it.id == fuenteId }
+    val inicial = remember(fuenteId, f) { f?.let { Motor.actual?.cabeceras(it) }.orEmpty() }
+    val cab by produceState(inicial, fuenteId, f) {
+        if (f != null) value = Motor.actual?.cabecerasCargando(f).orEmpty()
+    }
+    return cab
 }
 
 @Composable
@@ -142,11 +161,9 @@ fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier:
                     if (sel) 1.15f else 1f,
                     spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "navEscala"
                 )
-                val fuente = remember { MutableInteractionSource() }
                 Box(
                     Modifier.weight(1f).fillMaxHeight()
-                        .rebote(fuente, 0.86f)
-                        .clickable(interactionSource = fuente, indication = null) { onSelect(tab) },
+                        .pressableCon(0.86f) { onSelect(tab) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(

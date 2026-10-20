@@ -1,41 +1,39 @@
 package com.example.lector.ui
 
+import android.text.format.Formatter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lector.Almacen
-import com.example.lector.Categoria
 import com.example.lector.Comic
+import com.example.lector.Descargas
+import com.example.lector.ext.ExtManager
 
 /** Páginas que se abren encima de las pestañas (con animación de deslizamiento). */
 enum class Ruta {
     Categorias, Estadisticas, Datos, Ajustes, Apariencia, AjBiblioteca, AjSeguimiento,
-    // Explorar / extensiones (paso 3)
+    AjVisor, AjDescargas, AjExplorar, AjSeguridad, AjAvanzado, AcercaDe,
+    Descargas, BusquedaGlobal, MigrarSerie,
+    // Explorar / extensiones
     ListadosExt, ExtDetalle, FuenteDetalle,
-    // Ficha de un manga de una fuente + lector online (paso 5)
+    // Ficha de un manga de una fuente + lector online
     Ficha, LeerOnline
 }
 
 fun Ruta.padre(): Ruta? = when (this) {
-    Ruta.Apariencia, Ruta.AjBiblioteca, Ruta.AjSeguimiento -> Ruta.Ajustes
+    Ruta.Apariencia, Ruta.AjBiblioteca, Ruta.AjSeguimiento, Ruta.AjVisor, Ruta.AjDescargas, Ruta.AjExplorar,
+    Ruta.AjSeguridad, Ruta.AjAvanzado, Ruta.AcercaDe -> Ruta.Ajustes
     Ruta.Ficha -> Ruta.FuenteDetalle
     Ruta.LeerOnline -> Ruta.Ficha
     else -> null
@@ -43,97 +41,108 @@ fun Ruta.padre(): Ruta? = when (this) {
 
 /** Pestaña "Más": todo lo que no cabe en la barra, igual que en Komikku. */
 @Composable
-fun MasScreen(onRuta: (Ruta) -> Unit, onAdd: () -> Unit, onAddFolder: () -> Unit) {
+fun MasScreen(almacen: Almacen, onRuta: (Ruta) -> Unit, onAdd: () -> Unit, onAddFolder: () -> Unit) {
+    val ctx = LocalContext.current
+    LaunchedEffect(Unit) { Descargas.cargar(ctx) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(bottom = 110.dp)
     ) {
-        Box(Modifier.fillMaxWidth().padding(vertical = 28.dp), Alignment.Center) {
-            Box(
-                Modifier.size(88.dp).clip(SuaveShape(28.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
-                Alignment.Center
-            ) { LText("L", LectorType.Display.copy(fontSize = 44.sp), color = MaterialTheme.colorScheme.primary) }
-        }
+        Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), Alignment.Center) { LogoApp(Modifier.size(96.dp)) }
+        FilaSwitch("Modo incógnito", "No se anota el historial de lectura", almacen.incognito) { almacen.incognito = it }
         Divisor()
-        FilaAjuste(Icons.Rounded.Add, "Añadir cómic", "Archivo .cbz de tu móvil", onAdd)
+        FilaAjuste(Icons.Rounded.Add, "Añadir cómic", "Archivo .cbz o .zip de tu móvil", onAdd)
         FilaAjuste(Icons.Rounded.Add, "Añadir carpeta", "Una carpeta de imágenes (o con capítulos)", onAddFolder)
         Divisor()
+        val pendientes = Descargas.cola.size
+        FilaAjuste(
+            Iconos.Descargar, "Cola de descargas",
+            when {
+                pendientes == 0 -> "Sin descargas pendientes"
+                Descargas.pausado -> "En pausa · $pendientes pendientes"
+                else -> "$pendientes pendientes"
+            },
+        ) { onRuta(Ruta.Descargas) }
         FilaAjuste(Icons.Rounded.Menu, "Categorías", null) { onRuta(Ruta.Categorias) }
         FilaAjuste(Icons.Rounded.Info, "Estadísticas", null) { onRuta(Ruta.Estadisticas) }
         FilaAjuste(Icons.Rounded.Share, "Datos y almacenamiento", null) { onRuta(Ruta.Datos) }
         Divisor()
         FilaAjuste(Icons.Rounded.Settings, "Ajustes", null) { onRuta(Ruta.Ajustes) }
+        FilaAjuste(Icons.Rounded.Face, "Acerca de", null) { onRuta(Ruta.AcercaDe) }
     }
 }
 
+private fun duracion(ms: Long): String {
+    val min = ms / 60_000
+    return when {
+        min < 1 -> "menos de 1 min"
+        min < 60 -> "$min min"
+        else -> "${min / 60} h ${min % 60} min"
+    }
+}
+
+/** Estadísticas (como la pantalla de Komikku): biblioteca, capítulos, tiempo de lectura, seguimiento y fuentes. */
 @Composable
-fun EstadisticasScreen(comics: List<Comic>, onBack: () -> Unit) {
-    val leidas = comics.filter { it.leido > 0 && !it.enLinea }.sumOf { it.ultimaPagina + 1 }
+fun EstadisticasScreen(comics: List<Comic>, almacen: Almacen, ext: ExtManager, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val enLinea = comics.count { it.enLinea }
+    val terminados = comics.count { it.terminado() }
+    val enCurso = comics.count { it.enCurso() }
+    val sinEmpezar = comics.count { it.ultimaPagina == 0 && it.leido == 0L }
+    val capsTotales = comics.filter { it.enLinea }.sumOf { it.paginas }
+    val sinLeer = comics.filter { it.enLinea }.sumOf { it.sinLeer }
+    val paginasLocales = comics.filter { it.leido > 0 && !it.enLinea }.sumOf { it.ultimaPagina + 1 }
+    val seguidos = remember(almacen.version) { almacen.idsConSeguimiento().count { id -> comics.any { it.id == id } } }
+    val descargas = remember(almacen.version) { almacen.totalDescargas() to almacen.bytesDescargas() }
+    val porFuente = remember(comics, ext.fuentes) {
+        comics.filter { it.enLinea }.groupingBy { it.fuenteId }.eachCount().entries.sortedByDescending { it.value }.take(6)
+            .map { (id, n) -> (ext.fuentes.firstOrNull { it.id == id }?.nombre ?: "Fuente $id") to n }
+    }
+
     PaginaAjustes("Estadísticas", onBack) {
-        Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("${comics.size}", "Cómics", Modifier.weight(1f))
-            StatCard("${comics.count { it.terminado() }}", "Terminados", Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("${comics.count { it.enCurso() }}", "En curso", Modifier.weight(1f))
-            StatCard("${comics.count { it.leido == 0L }}", "Sin leer", Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(12.dp))
-        StatCard("$leidas", "Páginas leídas", Modifier.padding(horizontal = 24.dp).fillMaxWidth())
-    }
-}
+        TituloSeccion("Biblioteca")
+        Fila2(StatCardMod("${comics.size}", "En la biblioteca"), StatCardMod("$enLinea", "De fuentes en línea"))
+        Fila2(StatCardMod("${comics.size - enLinea}", "Cómics locales"), StatCardMod("${almacen.categorias().size}", "Categorías"))
+        Fila2(StatCardMod("$terminados", "Terminados"), StatCardMod("$enCurso", "En curso"))
+        Fila2(StatCardMod("$sinEmpezar", "Sin empezar"), StatCardMod("$seguidos", "Con seguimiento"))
 
-@Composable
-fun CategoriasScreen(almacen: Almacen, onBack: () -> Unit) {
-    var cats by remember { mutableStateOf(almacen.categorias()) }
-    var nueva by remember { mutableStateOf(false) }
-    var renombrar by remember { mutableStateOf<Categoria?>(null) }
-    var borrar by remember { mutableStateOf<Categoria?>(null) }
-    fun refrescar() { cats = almacen.categorias() }
+        TituloSeccion("Capítulos")
+        Fila2(StatCardMod("${ext.leidos.size}", "Leídos"), StatCardMod("$sinLeer", "Sin leer"))
+        Fila2(StatCardMod("$capsTotales", "En total"), StatCardMod("${descargas.first}", "Descargados"))
+        LText(
+            "Las descargas ocupan ${Formatter.formatShortFileSize(ctx, descargas.second)}",
+            LectorType.Label, Modifier.padding(horizontal = 24.dp, vertical = 4.dp), color = LectorColors.Muted,
+        )
 
-    PaginaAjustes("Categorías", onBack) {
-        if (cats.isEmpty()) {
-            LText("Todavía no tienes categorías.", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
-        }
-        cats.forEach { c ->
-            Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    LText(c.nombre, LectorType.Section.copy(fontSize = 17.sp), maxLines = 1)
-                    LText(if (c.oculta) "Oculta en Inicio y Buscar" else "Visible", LectorType.Label, color = LectorColors.Muted)
+        TituloSeccion("Lectura")
+        Fila2(StatCardMod(duracion(almacen.tiempoLectura), "Tiempo leyendo"), StatCardMod("$paginasLocales", "Páginas (cómics locales)"))
+
+        if (porFuente.isNotEmpty()) {
+            TituloSeccion("Fuentes más usadas")
+            val max = porFuente.first().second.coerceAtLeast(1)
+            porFuente.forEach { (nombre, n) ->
+                Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp)) {
+                    Row {
+                        LText(nombre, LectorType.Body, Modifier.weight(1f), maxLines = 1)
+                        LText("$n", LectorType.Body, color = LectorColors.Muted)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Box(Modifier.fillMaxWidth().height(6.dp).clip(SuaveShape(3.dp)).background(LectorColors.PillFill)) {
+                        Box(Modifier.fillMaxWidth(n.toFloat() / max).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+                    }
                 }
-                Switch(checked = c.oculta, onCheckedChange = { almacen.alternarOculta(c.id); refrescar() })
-                IconButton(onClick = { renombrar = c }) { Icon(Icons.Rounded.Edit, "Renombrar", tint = LectorColors.Muted) }
-                IconButton(onClick = { borrar = c }) { Icon(Icons.Rounded.Delete, "Borrar", tint = LectorColors.Muted) }
             }
         }
-        Spacer(Modifier.height(16.dp))
-        Box(Modifier.padding(horizontal = 24.dp)) { PillButton("Nueva categoría", Icons.Rounded.Add, { nueva = true }) }
-    }
-
-    if (nueva) DialogoTexto("Nueva categoría", "", { almacen.crearCategoria(it); refrescar(); nueva = false }, { nueva = false })
-    renombrar?.let { c ->
-        DialogoTexto("Renombrar", c.nombre, { almacen.renombrarCategoria(c.id, it); refrescar(); renombrar = null }, { renombrar = null })
-    }
-    borrar?.let { c ->
-        AlertDialog(
-            onDismissRequest = { borrar = null },
-            title = { Text("¿Borrar «${c.nombre}»?") },
-            text = { Text("Los cómics no se borran, solo pierden esta etiqueta.") },
-            confirmButton = { TextButton(onClick = { almacen.eliminarCategoria(c.id); refrescar(); borrar = null }) { Text("Borrar") } },
-            dismissButton = { TextButton(onClick = { borrar = null }) { Text("Cancelar") } },
-        )
     }
 }
 
+private class DatoStat(val valor: String, val etiqueta: String)
+
+private fun StatCardMod(valor: String, etiqueta: String) = DatoStat(valor, etiqueta)
+
 @Composable
-private fun DialogoTexto(titulo: String, inicial: String, alAceptar: (String) -> Unit, alCancelar: () -> Unit) {
-    var texto by remember { mutableStateOf(inicial) }
-    AlertDialog(
-        onDismissRequest = alCancelar,
-        title = { Text(titulo) },
-        text = { OutlinedTextField(value = texto, onValueChange = { texto = it }, singleLine = true, label = { Text("Nombre") }) },
-        confirmButton = { TextButton(onClick = { alAceptar(texto) }) { Text("Aceptar") } },
-        dismissButton = { TextButton(onClick = alCancelar) { Text("Cancelar") } },
-    )
+private fun Fila2(a: DatoStat, b: DatoStat) {
+    Row(Modifier.padding(horizontal = 24.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        StatCard(a.valor, a.etiqueta, Modifier.weight(1f))
+        StatCard(b.valor, b.etiqueta, Modifier.weight(1f))
+    }
 }

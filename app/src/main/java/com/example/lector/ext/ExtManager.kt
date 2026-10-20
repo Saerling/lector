@@ -51,6 +51,14 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     private val prefs = app.getSharedPreferences("lector_ext", Context.MODE_PRIVATE)
+
+    /** Se completa cuando ya se leyeron las extensiones instaladas y sus fuentes (lo esperan los trabajos de fondo). */
+    private val listo = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    /** Espera (como mucho [ms]) a que las extensiones estén cargadas. */
+    suspend fun esperarListo(ms: Long = 20_000L) {
+        kotlinx.coroutines.withTimeoutOrNull(ms) { listo.await() }
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val archivoCache = File(app.filesDir, "ext_disponibles.json")
 
@@ -252,10 +260,14 @@ class ExtManager private constructor(private val app: Context) {
         // Leer el JSON de ~1500 extensiones y recorrer todos los paquetes del teléfono tardaba cientos de ms
         // EN EL HILO PRINCIPAL al abrir la app. Ahora va en segundo plano; las pantallas se rellenan solas.
         scope.launch {
-            cargarCache()
-            leerInstaladas()
-            withContext(Dispatchers.Main) { actualizarLista() }
-            cargarFuentesReales()
+            try {
+                cargarCache()
+                leerInstaladas()
+                withContext(Dispatchers.Main) { actualizarLista() }
+                cargarFuentesReales()
+            } finally {
+                listo.complete(Unit)
+            }
         }
     }
 
@@ -366,7 +378,30 @@ class ExtManager private constructor(private val app: Context) {
     fun actualizarLista() {
         if (cargando) return
         cargando = true
-        scope.launch {
+        scope.launch { recargarLista() }
+    }
+
+    /** Igual que [actualizarLista] pero espera a que termine (trabajo de fondo que avisa de actualizaciones). */
+    suspend fun actualizarListaAhora() {
+        if (cargando) {
+            kotlinx.coroutines.withTimeoutOrNull(60_000L) { while (cargando) kotlinx.coroutines.delay(250) }
+            return
+        }
+        cargando = true
+        recargarLista()
+    }
+
+    private suspend fun recargarLista() {
+        try {
+            recargarListaSinProteger()
+        } finally {
+            // Pase lo que pase (error, cancelación), la lista deja de figurar "cargando".
+            if (cargando) withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) { cargando = false }
+        }
+    }
+
+    private suspend fun recargarListaSinProteger() {
+        withContext(Dispatchers.IO) {
             val nuevas = ArrayList<ExtDisponible>()
             val errs = ArrayList<String>()
             val metas = HashMap<String, RepoExt>()
@@ -411,6 +446,9 @@ class ExtManager private constructor(private val app: Context) {
             cargarFuentesReales()
         }
     }
+
+    /** Extensiones instaladas que tienen una versión nueva en algún listado. */
+    fun conActualizacion(): List<ExtInstalada> = instaladas.filter { it.actualizacion != null }
 
     private fun guardarCache(lista: List<ExtDisponible>) = runCatching {
         val a = JSONArray()
@@ -585,6 +623,116 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     fun alternarNovedad(id: Long) = fijarNovedades(if (id in novedades) novedades - id else novedades + id)
+
+    /** Marca varios capítulos como leídos de una vez (una sola escritura). */
+    fun marcarLeidos(fuenteId: Long, urls: Collection<String>) {
+        if (urls.isEmpty()) return
+        val claves = urls.map { "$fuenteId|$it" }
+        var cambioPaginas = false
+        claves.forEach { if (paginasCap.remove(it) != null) cambioPaginas = true }
+        if (cambioPaginas) guardarPaginasCap()
+        leidos = leidos + claves
+        prefs.edit().putStringSet("leidos", leidos).apply()
+    }
+
+    fun desmarcarLeidos(fuenteId: Long, urls: Collection<String>) {
+        if (urls.isEmpty()) return
+        leidos = leidos - urls.map { "$fuenteId|$it" }.toSet()
+        prefs.edit().putStringSet("leidos", leidos).apply()
+    }
+
+    fun marcarVarios(fuenteId: Long, urls: Collection<String>, marcar: Boolean) {
+        val claves = urls.map { "$fuenteId|$it" }.toSet()
+        marcados = if (marcar) marcados + claves else marcados - claves
+        prefs.edit().putStringSet("marcados", marcados).apply()
+    }
+
+    // ---- Lista de capítulos de la ficha: filtros y orden (como Komikku) ----
+    var capNoLeidos by com.example.lector.prefEnum(prefs, "cap_no_leidos", com.example.lector.Tri.IGNORAR)
+    var capDescargados by com.example.lector.prefEnum(prefs, "cap_descargados", com.example.lector.Tri.IGNORAR)
+    var capMarcados by com.example.lector.prefEnum(prefs, "cap_marcados", com.example.lector.Tri.IGNORAR)
+    var capOrden by com.example.lector.prefInt(prefs, "cap_orden", 0) // 0 fuente · 1 número · 2 fecha de subida
+    var capDescendente by com.example.lector.prefBool(prefs, "cap_desc", true)
+    var capVerNumero by com.example.lector.prefBool(prefs, "cap_ver_numero", false) // "Capítulo N" en vez del nombre
+
+    // ---- Búsquedas guardadas de cada fuente (TachiyomiSY/Komikku) ----
+    data class BusquedaGuardada(val nombre: String, val consulta: String, val filtros: String?)
+
+    var busquedasVersion by mutableStateOf(0); private set
+
+    fun busquedas(fuenteId: Long): List<BusquedaGuardada> {
+        @Suppress("UNUSED_VARIABLE") val v = busquedasVersion
+        return runCatching {
+            val a = JSONArray(prefs.getString("busq_$fuenteId", "[]"))
+            (0 until a.length()).map { i ->
+                val o = a.getJSONObject(i)
+                BusquedaGuardada(o.getString("n"), o.optString("q"), o.optString("f").ifBlank { null })
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    fun guardarBusqueda(fuenteId: Long, b: BusquedaGuardada) {
+        val lista = busquedas(fuenteId).filterNot { it.nombre == b.nombre } + b
+        val a = JSONArray()
+        lista.forEach { a.put(JSONObject().put("n", it.nombre).put("q", it.consulta).put("f", it.filtros ?: "")) }
+        prefs.edit().putString("busq_$fuenteId", a.toString()).apply()
+        busquedasVersion++
+    }
+
+    fun borrarBusqueda(fuenteId: Long, nombre: String) {
+        val lista = busquedas(fuenteId).filterNot { it.nombre == nombre }
+        val a = JSONArray()
+        lista.forEach { a.put(JSONObject().put("n", it.nombre).put("q", it.consulta).put("f", it.filtros ?: "")) }
+        prefs.edit().putString("busq_$fuenteId", a.toString()).apply()
+        busquedasVersion++
+    }
+
+    // ---- Copia de seguridad: lo que guarda este gestor (capítulos leídos, marcas, listados…) ----
+    fun exportar(): JSONObject {
+        val o = JSONObject()
+        o.put("leidos", JSONArray(leidos.toList()))
+        o.put("marcados", JSONArray(marcados.toList()))
+        o.put("paginas_cap", JSONObject().also { j -> paginasCap.forEach { (k, v) -> j.put(k, v) } })
+        o.put("repos", JSONArray(prefs.getString("repos", "[]")))
+        o.put("fijadas", JSONArray(fijadas.toList()))
+        o.put("novedades", JSONArray(novedades))
+        o.put("confiadas", JSONArray(confiadas.toList()))
+        o.put("nsfw", mostrarNsfw)
+        val busq = JSONObject()
+        prefs.all.keys.filter { it.startsWith("busq_") }.forEach { k -> busq.put(k, JSONArray(prefs.getString(k, "[]"))) }
+        o.put("busquedas", busq)
+        return o
+    }
+
+    fun importar(o: JSONObject) {
+        fun conjunto(a: JSONArray?): Set<String> = if (a == null) emptySet() else (0 until a.length()).map { a.getString(it) }.toSet()
+        leidos = leidos + conjunto(o.optJSONArray("leidos"))
+        marcados = marcados + conjunto(o.optJSONArray("marcados"))
+        o.optJSONObject("paginas_cap")?.let { j -> j.keys().forEach { k -> if ("$k" !in leidos) paginasCap[k] = j.optInt(k) } }
+        fijadas = fijadas + conjunto(o.optJSONArray("fijadas"))
+        confiadas += conjunto(o.optJSONArray("confiadas"))
+        o.optJSONArray("novedades")?.let { a -> fijarNovedades(novedades + (0 until a.length()).map { a.getLong(it) }) }
+        o.optJSONArray("repos")?.let { a ->
+            val actuales = repos.map { it.url }.toSet()
+            val nuevos = (0 until a.length()).mapNotNull { i ->
+                val r = a.getJSONObject(i)
+                if (r.optString("url") in actuales) null
+                else RepoExt(
+                    url = r.getString("url"), nombre = r.optString("nombre"), activo = r.optBoolean("activo", true),
+                    web = r.optString("web").ifBlank { null }, etiqueta = r.optString("etiqueta"),
+                    claveFirma = r.optString("clave"), esLegacy = r.optBoolean("legacy", false),
+                    urlLista = r.optString("lista").ifBlank { null }, discord = r.optString("discord").ifBlank { null },
+                )
+            }
+            if (nuevos.isNotEmpty()) { repos = repos + nuevos; guardarRepos(repos) }
+        }
+        o.optJSONObject("busquedas")?.let { b -> val e = prefs.edit(); b.keys().forEach { k -> e.putString(k, b.getJSONArray(k).toString()) }; e.apply(); busquedasVersion++ }
+        prefs.edit().putStringSet("leidos", leidos).putStringSet("marcados", marcados)
+            .putStringSet("fijadas", fijadas).putStringSet("confiadas", confiadas.toSet()).apply()
+        guardarPaginasCap()
+        confiadasVersion++
+        actualizarLista()
+    }
 
     fun marcarLeido(fuenteId: Long, url: String) {
         val k = "$fuenteId|$url"

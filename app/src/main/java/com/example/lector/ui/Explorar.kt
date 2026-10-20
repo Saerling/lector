@@ -86,6 +86,9 @@ fun ExplorarScreen(
     onFuente: (FuenteUI) -> Unit,
     onExt: (ExtInstalada) -> Unit,
     onManga: (FuenteUI, MangaFuente) -> Unit,
+    almacen: com.example.lector.Almacen? = null,
+    onMigrar: (com.example.lector.Comic) -> Unit = {},
+    onBuscarGlobal: () -> Unit = {},
 ) {
     var sub by rememberSaveable { mutableStateOf(0) }
     var reordenar by rememberSaveable { mutableStateOf(false) }
@@ -116,6 +119,7 @@ fun ExplorarScreen(
                     Icon(Icons.Rounded.Search, "Buscar", tint = LectorColors.Text)
                 }
             }
+            if (sub == 0) IconButton(onClick = onBuscarGlobal) { Icon(Icons.Rounded.Search, "Búsqueda global", tint = LectorColors.Text) }
             if (sub == 0 || sub == 2) {
                 val forma = SuaveShape(8.dp)
                 val color = if (ext.mostrarNsfw) acento else LectorColors.Muted
@@ -127,6 +131,7 @@ fun ExplorarScreen(
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "Más", tint = LectorColors.Text) }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Búsqueda global") }, onClick = { menu = false; onBuscarGlobal() })
                         DropdownMenuItem(text = { Text("Listados de extensiones") }, onClick = { menu = false; onRuta(Ruta.ListadosExt) })
                         DropdownMenuItem(text = { Text("Idiomas") }, onClick = { menu = false; dialogoIdiomas = true })
                         DropdownMenuItem(text = { Text("Actualizar lista") }, onClick = { menu = false; ext.actualizarLista() })
@@ -166,7 +171,7 @@ fun ExplorarScreen(
                     ext, consulta, buscando, { consulta = it }, onExt,
                     onConfiar = { porConfiar = it }, onRepos = { onRuta(Ruta.ListadosExt) }
                 )
-                else -> MigrarTab()
+                else -> MigrarTab(ext, almacen, onMigrar)
             }
         }
     }
@@ -550,8 +555,36 @@ private fun EstadoProgreso(pr: Progreso, alReintentar: () -> Unit) {
 // ───────────────────────── Migrar ─────────────────────────
 
 @Composable
-private fun MigrarTab() {
-    Vacio("Aquí podrás mover tus series de una fuente a otra. Todavía no tienes series vinculadas a una fuente.")
+private fun MigrarTab(ext: ExtManager, almacen: com.example.lector.Almacen?, onMigrar: (com.example.lector.Comic) -> Unit) {
+    // Como en Komikku: tus series agrupadas por fuente; elige una para pasarla a otra fuente.
+    val series = remember(almacen?.version) { almacen?.cargar().orEmpty().filter { it.enLinea } }
+    if (series.isEmpty()) {
+        Vacio("Aquí puedes mover tus series de una fuente a otra. Añade a la biblioteca algún manga de una fuente.")
+        return
+    }
+    val grupos = remember(series, ext.fuentes) {
+        series.groupBy { c -> ext.fuentes.firstOrNull { it.id == c.fuenteId }?.nombre ?: "Fuente no instalada" }
+            .toSortedMap(compareBy { it.lowercase() })
+    }
+    androidx.compose.foundation.lazy.LazyColumn(contentPadding = PaddingValues(bottom = 190.dp)) {
+        grupos.forEach { (nombre, lista) ->
+            item(key = "g_$nombre") {
+                LText("$nombre (${lista.size})", LectorType.Section.copy(fontSize = 16.sp), Modifier.padding(start = 24.dp, end = 24.dp, top = 18.dp, bottom = 6.dp), color = LectorColors.Muted)
+            }
+            items(lista.size, key = { lista[it].id }) { i ->
+                val c = lista[i]
+                Row(
+                    Modifier.fillMaxWidth().pressable { onMigrar(c) }.padding(horizontal = 24.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ComicCover(c, almacen!!, Modifier.width(44.dp).aspectRatio(2f / 3f), SuaveShape(8.dp))
+                    Spacer(Modifier.width(14.dp))
+                    LText(c.titulo, LectorType.Body, Modifier.weight(1f), maxLines = 2)
+                    Icon(Icons.Rounded.ArrowForward, "Migrar", tint = LectorColors.Muted)
+                }
+            }
+        }
+    }
 }
 
 // ───────────────────────── Piezas comunes ─────────────────────────
@@ -676,6 +709,29 @@ object Imagenes {
         }
     }
 
+    /** Bytes originales de una imagen (de la caché en disco o de la red), para compartirla o guardarla. */
+    suspend fun bytes(url: String, cabeceras: Map<String, String> = emptyMap()): ByteArray? = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        archivoDe(url)?.takeIf { it.exists() && it.length() > 0 }?.let { f -> return@withContext runCatching { f.readBytes() }.getOrNull() }
+        runCatching {
+            val c = URL(url).openConnection() as HttpURLConnection
+            try {
+                c.connectTimeout = 15_000; c.readTimeout = 30_000
+                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) Lector/1.0")
+                cabeceras.forEach { (k, v) -> c.setRequestProperty(k, v) }
+                if (c.responseCode !in 200..299) null else c.inputStream.use { it.readBytes() }
+            } finally { c.disconnect() }
+        }.getOrNull()
+    }
+
+    /** Bytes que ocupa la caché de imágenes en disco. */
+    fun tamanoDisco(): Long = disco?.listFiles()?.sumOf { it.length() } ?: 0L
+
+    /** Vacía la caché de imágenes (memoria y disco). */
+    fun vaciar() {
+        memoria.evictAll()
+        disco?.listFiles()?.forEach { it.delete() }
+    }
+
     /** Devuelve la imagen si ya está en memoria (sin esperar), para pintarla en el primer fotograma. */
     fun enMemoria(url: String): ImageBitmap? = memoria.get(url)
 
@@ -755,6 +811,8 @@ object Imagenes {
 fun ImagenRemota(
     url: String?, modifier: Modifier = Modifier, cabeceras: Map<String, String> = emptyMap(),
     onCargada: ((ImageBitmap) -> Unit)? = null,
+    escala: ContentScale = ContentScale.Crop,
+    maxLado: Int = 512,
 ) {
     val ctx = LocalContext.current
     remember { Imagenes.iniciar(ctx) }
@@ -762,7 +820,7 @@ fun ImagenRemota(
     var img by remember(url) { mutableStateOf(url?.takeIf { it.isNotBlank() }?.let { Imagenes.enMemoria(it) }) }
     LaunchedEffect(url, cabeceras) {
         if (!url.isNullOrBlank()) {
-            val cargada = img ?: Imagenes.cargar(url, cabeceras)
+            val cargada = img ?: Imagenes.cargar(url, cabeceras, maxLado)
             img = cargada
             if (cargada != null) onCargada?.invoke(cargada)
         }
@@ -772,7 +830,7 @@ fun ImagenRemota(
     Box(modifier.background(LectorColors.CardHigh)) {
         val i = img
         if (i != null) Image(
-            bitmap = i, contentDescription = null, contentScale = ContentScale.Crop,
+            bitmap = i, contentDescription = null, contentScale = escala,
             modifier = Modifier.fillMaxSize().graphicsLayer { alpha = opacidad },
         )
     }

@@ -1,6 +1,16 @@
 package com.example.lector
 
+import android.Manifest
+import android.app.KeyguardManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.view.WindowManager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.runtime.SideEffect
+import com.example.lector.ui.TemaActual
 import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
@@ -45,27 +55,88 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     private lateinit var almacen: Almacen
 
+    // Destino pedido por una notificación (lo consume la pantalla principal).
+    private var destino by mutableStateOf<String?>(null)
+
+    // Bloqueo de la app (Ajustes → Seguridad): se pide el PIN / huella del sistema al volver.
+    private var bloqueada by mutableStateOf(false)
+    private var salioEn = 0L
+
+    private val desbloqueo = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        if (r.resultCode == RESULT_OK) bloqueada = false
+    }
+    private val permisoNotificaciones = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-        )
-        almacen = Almacen(applicationContext)
+        almacen = Almacen.obtener(applicationContext)
+        aplicarBarras(oscuro = almacen.modoTema != ModoTema.CLARO)
         com.example.lector.ui.Imagenes.iniciar(applicationContext)
+        Notificaciones.crearCanales(applicationContext)
+        Programador.programar(applicationContext)
+        if (savedInstanceState == null) {
+            bloqueada = almacen.bloqueo && dispositivoSeguro()
+            pedirPermisoNotificaciones()
+        }
         procesarEnlace(intent)
         setContent {
-            App(almacen)
+            App(
+                almacen,
+                destino = destino, alConsumirDestino = { destino = null },
+                bloqueada = bloqueada, alDesbloquear = ::pedirDesbloqueo,
+                alCambiarTema = { aplicarBarras(it) },
+            )
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         procesarEnlace(intent)
     }
 
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) salioEn = System.currentTimeMillis()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Si pasó el tiempo elegido fuera de la app, vuelve a bloquear.
+        if (salioEn > 0 && almacen.bloqueo && dispositivoSeguro() &&
+            System.currentTimeMillis() - salioEn >= almacen.bloqueoMinutos * 60_000L
+        ) bloqueada = true
+        // Pantalla segura: oculta el contenido en "recientes" y bloquea las capturas.
+        if (almacen.pantallaSegura) window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
+
+    private fun aplicarBarras(oscuro: Boolean) {
+        val estilo = if (oscuro) SystemBarStyle.dark(Color.TRANSPARENT)
+            else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        enableEdgeToEdge(statusBarStyle = estilo, navigationBarStyle = estilo)
+    }
+
+    private fun dispositivoSeguro(): Boolean =
+        (getSystemService(KEYGUARD_SERVICE) as? KeyguardManager)?.isDeviceSecure == true
+
+    @Suppress("DEPRECATION")
+    private fun pedirDesbloqueo() {
+        val km = getSystemService(KEYGUARD_SERVICE) as? KeyguardManager
+        val i = km?.createConfirmDeviceCredentialIntent("Lector", "Desbloquea para entrar")
+        if (i == null) bloqueada = false else runCatching { desbloqueo.launch(i) }.onFailure { bloqueada = false }
+    }
+
+    private fun pedirPermisoNotificaciones() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) permisoNotificaciones.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     // Tras iniciar sesión, AniList nos devuelve aquí: lector://anilist#access_token=...
+    // Las notificaciones traen el extra "destino" (actualizaciones, descargas, extensiones).
     private fun procesarEnlace(intent: Intent?) {
+        intent?.getStringExtra("destino")?.let { destino = it; intent.removeExtra("destino") }
         val datos = intent?.data ?: return
         if (datos.scheme != "lector" || datos.host != "anilist") return
         val token = datos.fragment
@@ -103,19 +174,56 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun App(almacen: Almacen) {
+fun App(
+    almacen: Almacen,
+    destino: String? = null,
+    alConsumirDestino: () -> Unit = {},
+    bloqueada: Boolean = false,
+    alDesbloquear: () -> Unit = {},
+    alCambiarTema: (oscuro: Boolean) -> Unit = {},
+) {
     // La animación de arranque solo se ve al abrir la app (no al girar la pantalla).
     var arranque by rememberSaveable { mutableStateOf(true) }
-    LectorTheme(acento = colorDePaleta(almacen.paleta)) {
-        Box(Modifier.fillMaxSize()) {
-            Contenido(almacen)
+    val sistemaOscuro = isSystemInDarkTheme()
+    val oscuro = when (almacen.modoTema) {
+        ModoTema.SISTEMA -> sistemaOscuro
+        ModoTema.CLARO -> false
+        else -> true
+    }
+    val puro = almacen.modoTema != ModoTema.OSCURO
+    // Los colores de la app (LectorColors) se leen de aquí.
+    SideEffect { TemaActual.oscuro = oscuro; TemaActual.puro = puro }
+    LaunchedEffect(oscuro) { alCambiarTema(oscuro) }
+    LectorTheme(acento = colorDePaleta(almacen.paleta, oscuro), oscuro = oscuro, puro = puro) {
+        Box(Modifier.fillMaxSize().background(com.example.lector.ui.LectorColors.Bg)) {
+            Contenido(almacen, destino, alConsumirDestino)
             if (arranque) ArranqueOverlay { arranque = false }
+            if (bloqueada) PantallaBloqueo(alDesbloquear)
         }
     }
 }
 
 @Composable
-private fun Contenido(almacen: Almacen) {
+private fun PantallaBloqueo(alDesbloquear: () -> Unit) {
+    LaunchedEffect(Unit) { alDesbloquear() }
+    BackHandler { }
+    Box(
+        Modifier.fillMaxSize().background(com.example.lector.ui.LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } },
+        Alignment.Center,
+    ) {
+        androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.Rounded.Lock, null,
+                tint = com.example.lector.ui.LectorColors.Text, modifier = Modifier.size(48.dp),
+            )
+            Spacer(Modifier.size(16.dp))
+            com.example.lector.ui.PillButton("Desbloquear", androidx.compose.material.icons.Icons.Rounded.Lock, alDesbloquear)
+        }
+    }
+}
+
+@Composable
+private fun Contenido(almacen: Almacen, destino: String?, alConsumirDestino: () -> Unit) {
     val contexto = LocalContext.current
     val scope = rememberCoroutineScope()
     var comics by remember { mutableStateOf(almacen.cargar()) }
@@ -123,7 +231,6 @@ private fun Contenido(almacen: Almacen) {
     var importando by remember { mutableStateOf(false) }
     // Pestaña de la barra inferior y vista (biblioteca/historial) dentro de la pestaña Biblioteca.
     var tab by rememberSaveable { mutableStateOf(LectorTab.Home) }
-    var pestanaBiblioteca by rememberSaveable { mutableStateOf(0) }
 
     // Con sesión de AniList: averigua el nombre de usuario y sube lo que quedó pendiente.
     // Se repite al volver a la biblioteca.
@@ -211,8 +318,8 @@ private fun Contenido(almacen: Almacen) {
                 comics = almacen.cargar()
             },
             alRecargar = { comics = almacen.cargar() },
-            pestanaBiblioteca = pestanaBiblioteca,
-            alCambiarPestanaBiblioteca = { pestanaBiblioteca = it },
+            destino = destino,
+            alConsumirDestino = alConsumirDestino,
             activo = actual == null,
         )
         if (actual != null) {

@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -48,9 +49,10 @@ object Paletas {
 
 // Devuelve el color de acento de una paleta por su nombre.
 @Composable
-fun colorDePaleta(nombre: String): Color {
+fun colorDePaleta(nombre: String, oscuro: Boolean = true): Color {
     if (nombre == Paletas.SISTEMA && Build.VERSION.SDK_INT >= 31) {
-        return dynamicDarkColorScheme(LocalContext.current).primary
+        val ctx = LocalContext.current
+        return if (oscuro) dynamicDarkColorScheme(ctx).primary else androidx.compose.material3.dynamicLightColorScheme(ctx).primary
     }
     return (Paletas.fijas.firstOrNull { it.nombre == nombre } ?: Paletas.porDefecto).color
 }
@@ -104,7 +106,7 @@ object ColorPortada {
 }
 
 // Negro puro (AMOLED) y grises neutros. El acento se pone aparte.
-private val EsquemaBase = darkColorScheme(
+private val EsquemaPuro = darkColorScheme(
     primary = Paletas.porDefecto.color,
     onPrimary = Color.White,
     background = Color.Black,
@@ -115,6 +117,39 @@ private val EsquemaBase = darkColorScheme(
     onSurfaceVariant = Color(0xFFCAC4D0),
     surfaceContainer = Color(0xFF1A1A1A),
     surfaceContainerHigh = Color(0xFF212121),
+    surfaceContainerHighest = Color(0xFF2A2A2A),
+    surfaceContainerLow = Color(0xFF121212),
+)
+
+// Oscuro "normal": grises en vez de negro puro.
+private val EsquemaOscuro = darkColorScheme(
+    primary = Paletas.porDefecto.color,
+    onPrimary = Color.White,
+    background = Color(0xFF111114),
+    onBackground = Color(0xFFE6E1E5),
+    surface = Color(0xFF111114),
+    onSurface = Color(0xFFE6E1E5),
+    surfaceVariant = Color(0xFF26262C),
+    onSurfaceVariant = Color(0xFFCAC4D0),
+    surfaceContainer = Color(0xFF1C1C21),
+    surfaceContainerHigh = Color(0xFF26262C),
+    surfaceContainerHighest = Color(0xFF303037),
+    surfaceContainerLow = Color(0xFF17171B),
+)
+
+private val EsquemaClaro = lightColorScheme(
+    primary = Paletas.porDefecto.color,
+    onPrimary = Color.White,
+    background = Color(0xFFF6F6F8),
+    onBackground = Color(0xFF111114),
+    surface = Color(0xFFF6F6F8),
+    onSurface = Color(0xFF111114),
+    surfaceVariant = Color(0xFFE6E6EB),
+    onSurfaceVariant = Color(0xFF4A4A52),
+    surfaceContainer = Color(0xFFEFEFF3),
+    surfaceContainerHigh = Color(0xFFE9E9EE),
+    surfaceContainerHighest = Color(0xFFE2E2E8),
+    surfaceContainerLow = Color(0xFFFFFFFF),
 )
 
 private fun Typography.conFuente(f: FontFamily) = copy(
@@ -138,10 +173,13 @@ private fun Typography.conFuente(f: FontFamily) = copy(
 @Composable
 fun LectorTheme(
     acento: Color = Paletas.porDefecto.color,
+    oscuro: Boolean = true,
+    puro: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    val base = if (!oscuro) EsquemaClaro else if (puro) EsquemaPuro else EsquemaOscuro
     MaterialTheme(
-        colorScheme = EsquemaBase.copy(primary = acento, onPrimary = textoSobre(acento)),
+        colorScheme = base.copy(primary = acento, onPrimary = textoSobre(acento)),
         typography = Typography().conFuente(Inter),
         content = content,
     )

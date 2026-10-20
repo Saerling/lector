@@ -93,7 +93,7 @@ fun TituloSeccion(texto: String) {
 
 @Composable
 fun Divisor() {
-    Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(Color(0x22FFFFFF)))
+    Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(LectorColors.Linea))
 }
 
 /** Píldora de selección (columnas, etc.). */
@@ -103,7 +103,7 @@ fun ChipSel(texto: String, seleccionado: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.pressable(onClick).clip(CircleShape)
             .background(if (seleccionado) acento.copy(alpha = 0.22f) else Color.Transparent)
-            .border(1.dp, if (seleccionado) acento else Color(0x33FFFFFF), CircleShape)
+            .border(1.dp, if (seleccionado) acento else LectorColors.Linea, CircleShape)
             .padding(horizontal = 18.dp, vertical = 9.dp)
     ) { LText(texto, LectorType.Body, color = if (seleccionado) acento else LectorColors.Text) }
 }
@@ -120,7 +120,7 @@ fun ChipBorde(texto: String, color: Color) {
 @Composable
 fun StatCard(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier.clip(SuaveShape(24.dp)).background(LectorColors.Card).padding(20.dp)) {
-        LText(value, LectorType.Display.copy(fontSize = 40.sp))
+        LText(value, LectorType.Display.copy(fontSize = if (value.length > 6) 22.sp else 36.sp), maxLines = 1)
         Spacer(Modifier.height(4.dp))
         LText(label, LectorType.Mono, color = LectorColors.Muted)
     }

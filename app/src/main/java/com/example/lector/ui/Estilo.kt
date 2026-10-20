@@ -47,7 +47,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
+import androidx.compose.ui.node.DelegatingNode
+import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.invalidateDraw
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.SuspendingPointerInputModifierNode
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
@@ -129,148 +142,164 @@ private fun Path.rectanguloSuave(w: Float, h: Float, r: Float, n: Double) {
 }
 
 // ───────────────────────── Pulsación ─────────────────────────
+//
+// Las tres pulsaciones (rebote, inclinación 3D y resalte de fila) son un único Modifier.Node: antes eran
+// funciones @Composable / composed {} con remember + LaunchedEffect POR TARJETA, lo que en cuadrículas de cientos de
+// portadas suponía mucho trabajo en cada recomposición. Ahora no crean estado de composición.
 
-/**
- * Se aplasta bajo el dedo y vuelve con un pequeño rebote. Un toque rápido avisa de pulsar y soltar casi a la vez,
- * así que al soltar se hace primero el aplastado si todavía no se había visto.
- */
-@Composable
-fun Modifier.rebote(fuente: InteractionSource, escalaPulsada: Float = 0.94f): Modifier {
-    val escala = remember { Animatable(1f) }
-    LaunchedEffect(fuente, escalaPulsada) {
-        var pulsados = 0
-        fuente.interactions.collect { accion ->
-            when (accion) {
-                is PressInteraction.Press -> {
-                    pulsados++
-                    launch { escala.animateTo(escalaPulsada, spring(dampingRatio = 1f, stiffness = 1600f)) }
+private enum class TipoPulsacion { REBOTE, INCLINAR, RESALTE }
+
+private data class PulsacionElement(
+    val tipo: TipoPulsacion,
+    val escala: Float,
+    val inclinacion: Float,
+    val radio: Dp,
+    val margen: Dp,
+) : ModifierNodeElement<PulsacionNode>() {
+    override fun create() = PulsacionNode(tipo, escala, inclinacion, radio, margen)
+    override fun update(node: PulsacionNode) {
+        node.tipo = tipo; node.escala = escala; node.inclinacion = inclinacion; node.radio = radio; node.margen = margen
+        node.invalidateDraw()
+    }
+}
+
+private class PulsacionNode(
+    var tipo: TipoPulsacion,
+    var escala: Float,
+    var inclinacion: Float,
+    var radio: Dp,
+    var margen: Dp,
+) : DelegatingNode(), LayoutModifierNode, DrawModifierNode {
+    private val t = Animatable(0f)
+    private var normal = Offset.Zero
+    private var ancho = 0
+
+    init {
+        delegate(SuspendingPointerInputModifierNode { detectar() })
+    }
+
+    // Observa el dedo sin consumir nada (así se combina con clickable y con el scroll de las listas).
+    private suspend fun PointerInputScope.detectar() {
+        awaitPointerEventScope {
+            while (true) {
+                val abajo = awaitPointerEvent(PointerEventPass.Initial).changes
+                    .firstOrNull { it.pressed && !it.previousPressed } ?: continue
+                val caja = size
+                if (caja.width > 0 && caja.height > 0) {
+                    val p = abajo.position
+                    normal = Offset(
+                        ((p.x / caja.width) * 2f - 1f).coerceIn(-1f, 1f),
+                        ((p.y / caja.height) * 2f - 1f).coerceIn(-1f, 1f),
+                    )
+                    ancho = caja.width
                 }
-                is PressInteraction.Release, is PressInteraction.Cancel -> {
-                    pulsados = (pulsados - 1).coerceAtLeast(0)
-                    if (pulsados == 0) {
-                        launch {
-                            if (escala.value > escalaPulsada + 0.03f) escala.animateTo(escalaPulsada, tween(70))
-                            escala.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 520f))
-                        }
+                val holgura = viewConfiguration.touchSlop * 1.5f
+                pulsar(true)
+                while (true) {
+                    val ev = awaitPointerEvent(PointerEventPass.Initial)
+                    val c = ev.changes.firstOrNull { it.id == abajo.id } ?: break
+                    // Si el dedo se arrastra (scroll), se suelta la pulsación.
+                    if (!c.pressed || (c.position - abajo.position).getDistance() > holgura) break
+                }
+                pulsar(false)
+                while (true) {
+                    val ev = awaitPointerEvent(PointerEventPass.Initial)
+                    if (ev.changes.none { it.pressed }) break
+                }
+            }
+        }
+    }
+
+    private fun pulsar(abajo: Boolean) {
+        coroutineScope.launch {
+            when (tipo) {
+                TipoPulsacion.REBOTE ->
+                    if (abajo) t.animateTo(1f, spring(dampingRatio = 1f, stiffness = 1600f))
+                    else {
+                        // Un toque rápido suelta antes de verse el aplastado: se enseña primero.
+                        if (t.value < 0.6f) t.animateTo(1f, tween(70))
+                        t.animateTo(0f, spring(dampingRatio = 0.4f, stiffness = 520f))
+                    }
+                TipoPulsacion.INCLINAR -> t.animateTo(if (abajo) 1f else 0f, spring(dampingRatio = 1f, stiffness = 420f))
+                TipoPulsacion.RESALTE ->
+                    if (abajo) t.animateTo(1f, tween(90))
+                    else {
+                        if (t.value < 1f) t.animateTo(1f, tween(70))
+                        t.animateTo(0f, tween(340))
+                    }
+            }
+        }
+    }
+
+    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+        val p = measurable.measure(constraints)
+        return layout(p.width, p.height) {
+            if (tipo == TipoPulsacion.RESALTE) p.place(0, 0)
+            else p.placeWithLayer(0, 0) {
+                val v = t.value
+                if (v != 0f) {
+                    val s = 1f - (1f - escala) * v
+                    scaleX = s
+                    scaleY = s
+                    if (tipo == TipoPulsacion.INCLINAR) {
+                        rotationX = -normal.y * inclinacion * v
+                        rotationY = normal.x * inclinacion * v
+                        cameraDistance = (ancho.takeIf { it > 0 }?.toFloat() ?: 1000f) * 3f
+                        transformOrigin = TransformOrigin.Center
                     }
                 }
-                else -> {}
             }
         }
     }
-    return graphicsLayer { scaleX = escala.value; scaleY = escala.value }
-}
 
-/** Botón / tarjeta tocable con rebote (sin ondas cuadradas). */
-@Composable
-fun Modifier.pressable(onClick: () -> Unit): Modifier = pressableCon(0.95f, onClick)
-
-@Composable
-fun Modifier.pressableCon(escalaPulsada: Float, onClick: () -> Unit): Modifier {
-    val fuente = remember { MutableInteractionSource() }
-    return this
-        .rebote(fuente, escalaPulsada)
-        .clickable(interactionSource = fuente, indication = null, onClick = onClick)
-}
-
-/**
- * Fila tocable: al pulsar aparece detrás una caja redondeada suave (en lugar de la onda cuadrada) que se desvanece
- * al soltar. Se dibuja por debajo del contenido y queda [margenX] hacia dentro, así no se corta en los bordes.
- */
-@Composable
-fun Modifier.resaltable(radio: Dp = 22.dp, margenX: Dp = 12.dp, onClick: () -> Unit): Modifier {
-    val fuente = remember { MutableInteractionSource() }
-    val fuerza = remember { Animatable(0f) }
-    LaunchedEffect(fuente) {
-        val pulsaciones = ArrayList<PressInteraction.Press>()
-        fuente.interactions.collect { accion ->
-            when (accion) {
-                is PressInteraction.Press -> pulsaciones.add(accion)
-                is PressInteraction.Release -> pulsaciones.remove(accion.press)
-                is PressInteraction.Cancel -> pulsaciones.remove(accion.press)
-                else -> return@collect
-            }
-            if (pulsaciones.isNotEmpty()) {
-                launch { fuerza.animateTo(1f, tween(90)) }
-            } else {
-                launch {
-                    // un toque rápido suelta antes de que la caja se haya visto: se enseña un instante
-                    if (fuerza.value < 1f) fuerza.animateTo(1f, tween(70))
-                    fuerza.animateTo(0f, tween(340))
-                }
-            }
-        }
-    }
-    return this
-        .drawBehind {
-            val f = fuerza.value
+    override fun ContentDrawScope.draw() {
+        if (tipo == TipoPulsacion.RESALTE) {
+            val f = t.value.coerceIn(0f, 1f)
             if (f > 0f) {
-                val mx = margenX.toPx()
+                val mx = margen.toPx()
                 drawRoundRect(
-                    Color.White.copy(alpha = 0.12f * f),
+                    LectorColors.Text.copy(alpha = 0.12f * f),
                     topLeft = Offset(mx, 0f),
                     size = Size(size.width - mx * 2f, size.height),
                     cornerRadius = CornerRadius(radio.toPx()),
                 )
             }
         }
-        .clickable(interactionSource = fuente, indication = null, onClick = onClick)
+        drawContent()
+    }
+}
+
+/** Botón / tarjeta tocable con rebote (sin ondas cuadradas). Con [onLongClick], también mantener pulsado. */
+fun Modifier.pressable(onClick: () -> Unit): Modifier = pressableCon(0.95f, null, onClick)
+
+fun Modifier.pressable(onLongClick: (() -> Unit)?, onClick: () -> Unit): Modifier = pressableCon(0.95f, onLongClick, onClick)
+
+fun Modifier.pressableCon(escalaPulsada: Float, onClick: () -> Unit): Modifier = pressableCon(escalaPulsada, null, onClick)
+
+@OptIn(ExperimentalFoundationApi::class)
+fun Modifier.pressableCon(escalaPulsada: Float, onLongClick: (() -> Unit)?, onClick: () -> Unit): Modifier {
+    val base = this.then(PulsacionElement(TipoPulsacion.REBOTE, escalaPulsada, 0f, 0.dp, 0.dp))
+    return if (onLongClick == null) base.clickable(interactionSource = null, indication = null, onClick = onClick)
+    else base.combinedClickable(interactionSource = null, indication = null, onLongClick = onLongClick, onClick = onClick)
+}
+
+/**
+ * Fila tocable: al pulsar aparece detrás una caja redondeada suave (en lugar de la onda cuadrada) que se desvanece
+ * al soltar. Se dibuja por debajo del contenido y queda [margenX] hacia dentro, así no se corta en los bordes.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+fun Modifier.resaltable(radio: Dp = 22.dp, margenX: Dp = 12.dp, onLongClick: (() -> Unit)? = null, onClick: () -> Unit): Modifier {
+    val base = this.then(PulsacionElement(TipoPulsacion.RESALTE, 1f, 0f, radio, margenX))
+    return if (onLongClick == null) base.clickable(interactionSource = null, indication = null, onClick = onClick)
+    else base.combinedClickable(interactionSource = null, indication = null, onLongClick = onLongClick, onClick = onClick)
 }
 
 /**
  * Inclina el elemento hacia donde se pulsa (como una tarjeta física) y lo encoge un poco. No consume el toque,
  * así que se puede combinar con clickable. Si el dedo se arrastra (scroll), la inclinación se suelta.
  */
-fun Modifier.press3D(inclinacionMax: Float = 7f, escalaPulsada: Float = 0.97f): Modifier = composed {
-    val ambito = rememberCoroutineScope()
-    val pulso = remember { Animatable(0f) }
-    var normal by remember { mutableStateOf(Offset.Zero) }
-    var medidas by remember { mutableStateOf(IntSize.Zero) }
-    val muelle = remember { spring<Float>(dampingRatio = 1f, stiffness = 420f) }
-
-    this
-        .pointerInput(Unit) {
-            awaitPointerEventScope {
-                while (true) {
-                    val abajo = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.pressed } ?: continue
-                    val caja = this.size
-                    if (caja.width > 0 && caja.height > 0) {
-                        val p = abajo.position
-                        normal = Offset(
-                            ((p.x / caja.width) * 2f - 1f).coerceIn(-1f, 1f),
-                            ((p.y / caja.height) * 2f - 1f).coerceIn(-1f, 1f),
-                        )
-                        medidas = caja
-                    }
-                    val holgura = viewConfiguration.touchSlop * 1.5f
-                    ambito.launch { pulso.animateTo(1f, muelle) }
-                    while (true) {
-                        val ev = awaitPointerEvent(PointerEventPass.Initial)
-                        val c = ev.changes.firstOrNull()
-                        if (c == null || !c.pressed || (c.position - abajo.position).getDistance() > holgura) break
-                    }
-                    ambito.launch { pulso.animateTo(0f, muelle) }
-                    // espera a que se suelte del todo antes de volver a escuchar
-                    while (true) {
-                        val ev = awaitPointerEvent(PointerEventPass.Initial)
-                        if (ev.changes.none { it.pressed }) break
-                    }
-                }
-            }
-        }
-        .graphicsLayer {
-            val t = pulso.value
-            if (t > 0f) {
-                val s = 1f - (1f - escalaPulsada) * t
-                scaleX = s
-                scaleY = s
-                rotationX = -normal.y * inclinacionMax * t
-                rotationY = normal.x * inclinacionMax * t
-                cameraDistance = (medidas.width.takeIf { it > 0 }?.toFloat() ?: 1000f) * 3f
-                transformOrigin = TransformOrigin.Center
-            }
-        }
-}
+fun Modifier.press3D(inclinacionMax: Float = 7f, escalaPulsada: Float = 0.97f): Modifier =
+    this.then(PulsacionElement(TipoPulsacion.INCLINAR, escalaPulsada, inclinacionMax, 0.dp, 0.dp))
 
 // ───────────────────────── Esqueletos de carga ─────────────────────────
 
@@ -391,7 +420,7 @@ fun AvisosHost(modifier: Modifier = Modifier) {
             } else {
                 val forma = SuaveShape(26.dp)
                 Box(
-                    Modifier.widthIn(max = 380.dp).clip(forma).background(Color(0xF01E1E20))
+                    Modifier.widthIn(max = 380.dp).clip(forma).background(if (TemaActual.oscuro) Color(0xF01E1E20) else Color(0xF2FFFFFF))
                         .border(1.dp, LectorColors.GlassBorderBrush, forma)
                         .pointerInput(a.id) {
                             detectVerticalDragGestures { _, dy -> if (dy < -6f) Avisos.ocultar(a.id) }

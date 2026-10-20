@@ -27,19 +27,18 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.lector.Almacen
-import com.example.lector.BibliotecaScreen
 import com.example.lector.Comic
 import com.example.lector.ext.CapituloFuente
 import com.example.lector.ext.MangaFuente
 import com.example.lector.ext.Motor
-import com.example.lector.HistorialScreen
+import com.example.lector.Notificaciones
 import com.example.lector.ext.ExtManager
 
 /**
  * Pantalla principal con el diseño nuevo.
  *  - Pestañas: Inicio, Buscar, Biblioteca, Historial, Más.
  *  - Encima de las pestañas se abren (con animación) la página de un cómic y las páginas de Más/Ajustes.
- * Tu BibliotecaScreen e HistorialScreen siguen intactos.
+ * `destino` llega de una notificación (actualizaciones, descargas, extensiones) y se consume al abrirlo.
  */
 @Composable
 fun Inicio(
@@ -52,8 +51,8 @@ fun Inicio(
     alAbrir: (Comic) -> Unit,
     alEliminar: (Comic) -> Unit,
     alRecargar: () -> Unit,
-    pestanaBiblioteca: Int,
-    alCambiarPestanaBiblioteca: (Int) -> Unit,
+    destino: String? = null,
+    alConsumirDestino: () -> Unit = {},
     // false mientras se lee un cómic local encima: Inicio sigue vivo pero no debe atender el botón atrás.
     activo: Boolean = true,
 ) {
@@ -85,6 +84,20 @@ fun Inicio(
     var paginaLectura by remember { mutableStateOf(0) }
     // Capítulo y página que hay que abrir al cargar la ficha (cuando se entra desde el historial).
     var reanudar by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    // Pantalla a la que vuelve la ficha cuando no se abrió desde la lista de una fuente (p. ej. búsqueda global).
+    var vueltaFicha by remember { mutableStateOf<Ruta?>(null) }
+    var consultaGlobal by rememberSaveable { mutableStateOf("") }
+    var migrarId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Abrir desde una notificación.
+    LaunchedEffect(destino) {
+        when (destino) {
+            Notificaciones.DESTINO_ACTUALIZACIONES -> { ruta = null; detalleId = null; onTab(LectorTab.Updates) }
+            Notificaciones.DESTINO_DESCARGAS -> { detalleId = null; ruta = Ruta.Descargas }
+            Notificaciones.DESTINO_EXTENSIONES -> { ruta = null; detalleId = null; onTab(LectorTab.Search) }
+        }
+        if (destino != null) alConsumirDestino()
+    }
     val hayCapa = ruta != null || detalleId != null
 
     // Al cerrar cualquier página que estaba encima, relee la biblioteca (progreso, "último leído", etc.).
@@ -98,7 +111,7 @@ fun Inicio(
     }
 
     BackHandler(enabled = activo && ruta != null && detalleId == null) {
-        ruta = if (ruta == Ruta.Ficha && desdeNovedades) null else ruta?.padre()
+        ruta = if (ruta == Ruta.Ficha && desdeNovedades) vueltaFicha else ruta?.padre()
     }
     BackHandler(enabled = activo && detalleId != null) { detalleId = null }
 
@@ -107,6 +120,7 @@ fun Inicio(
         fuenteId = fId
         mangaSel = MangaFuente(url, titulo, portada)
         desdeNovedades = true // al volver se regresa a la pestaña desde la que se abrió
+        vueltaFicha = null
         reanudar = cap
         ruta = Ruta.Ficha
     }
@@ -150,20 +164,23 @@ fun Inicio(
                     onRuta = { ruta = it },
                     onFuente = { fuenteId = it.id; desdeNovedades = false; ruta = Ruta.FuenteDetalle },
                     onExt = { extPkg = it.pkg; ruta = Ruta.ExtDetalle },
-                    onManga = { f, m -> fuenteId = f.id; mangaSel = m; desdeNovedades = true; reanudar = null; ruta = Ruta.Ficha },
+                    onManga = { f, m -> fuenteId = f.id; mangaSel = m; desdeNovedades = true; vueltaFicha = null; reanudar = null; ruta = Ruta.Ficha },
+                    almacen = almacen,
+                    onMigrar = { migrarId = it.id; ruta = Ruta.MigrarSerie },
+                    onBuscarGlobal = { consultaGlobal = ""; ruta = Ruta.BusquedaGlobal },
                 )
                 LectorTab.Library -> Box(Modifier.padding(bottom = 76.dp)) {
                     BibliotecaScreen(
                         comics = comics,
                         almacen = almacen,
+                        ext = ext,
+                        alAbrir = abrirDetalle,
+                        alLeer = leerComic,
                         alAnadir = alAnadir,
                         alAnadirCarpeta = alAnadirCarpeta,
-                        alAbrir = abrirDetalle,
+                        alEditarCategorias = { ruta = Ruta.Categorias },
+                        alMigrar = { migrarId = it.id; ruta = Ruta.MigrarSerie },
                         alEliminar = alEliminar,
-                        alRecargar = alRecargar,
-                        pestana = pestanaBiblioteca,
-                        alCambiarPestana = alCambiarPestanaBiblioteca,
-                        conNavegacion = false,
                     )
                 }
                 LectorTab.Updates -> Box(Modifier.statusBarsPadding().padding(bottom = 76.dp)) {
@@ -176,30 +193,19 @@ fun Inicio(
                                 a.capUrl to ext.paginaDe(a.fuenteId, a.capUrl),
                             )
                         },
-                        cabecerasDe = { id ->
-                            // Ya corre en un hilo de fondo: aquí sí se puede cargar la extensión.
-                            ext.fuentes.firstOrNull { it.id == id }
-                                ?.let { f -> Motor.actual?.let { m -> kotlinx.coroutines.runBlocking { m.cabecerasCargando(f) } } }
-                                .orEmpty()
-                        },
                     )
                 }
                 LectorTab.History -> Box(Modifier.statusBarsPadding().padding(bottom = 76.dp)) {
                     HistorialScreen(
                         comics = visibles, almacen = almacen,
-                        alAbrir = leerComic, alCambiar = alRecargar,
+                        alAbrir = leerComic,
                         alAbrirOnline = { e ->
                             abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, e.capUrl to e.pagina)
-                        },
-                        cabecerasDe = { id ->
-                            // Ya corre en un hilo de fondo: aquí sí se puede cargar la extensión.
-                            ext.fuentes.firstOrNull { it.id == id }
-                                ?.let { f -> Motor.actual?.let { m -> kotlinx.coroutines.runBlocking { m.cabecerasCargando(f) } } }
-                                .orEmpty()
                         },
                     )
                 }
                 LectorTab.More -> MasScreen(
+                    almacen = almacen,
                     onRuta = { ruta = it },
                     onAdd = alAnadir,
                     onAddFolder = alAnadirCarpeta,
@@ -237,12 +243,41 @@ fun Inicio(
                 }
                 else -> when (Ruta.valueOf(clave)) {
                     Ruta.Categorias -> EditarCategoriasScreen(almacen) { ruta = null }
-                    Ruta.Estadisticas -> EstadisticasScreen(visibles) { ruta = null }
+                    Ruta.Estadisticas -> EstadisticasScreen(visibles, almacen, ext) { ruta = null }
                     Ruta.Datos -> DatosScreen(almacen, alRecargar) { ruta = null }
                     Ruta.Ajustes -> AjustesScreen(almacen, { ruta = null }) { ruta = it }
                     Ruta.Apariencia -> AparienciaScreen(almacen) { ruta = Ruta.Ajustes }
                     Ruta.AjBiblioteca -> AjBibliotecaScreen(almacen, { ruta = Ruta.Ajustes }) { ruta = it }
                     Ruta.AjSeguimiento -> AjSeguimientoScreen(almacen) { ruta = Ruta.Ajustes }
+                    Ruta.AjVisor -> AjustesVisorScreen(almacen) { ruta = Ruta.Ajustes }
+                    Ruta.AjDescargas -> AjDescargasScreen(almacen, { ruta = Ruta.Ajustes }) { ruta = it }
+                    Ruta.AjExplorar -> AjExplorarScreen(almacen, ext, { ruta = Ruta.Ajustes }) { ruta = it }
+                    Ruta.AjSeguridad -> AjSeguridadScreen(almacen) { ruta = Ruta.Ajustes }
+                    Ruta.AjAvanzado -> AjAvanzadoScreen(almacen) { ruta = Ruta.Ajustes }
+                    Ruta.AcercaDe -> AcercaDeScreen { ruta = Ruta.Ajustes }
+                    Ruta.Descargas -> ColaDescargasScreen(almacen) { ruta = null }
+                    Ruta.BusquedaGlobal -> BusquedaGlobalScreen(
+                        ext, almacen, consultaGlobal,
+                        onManga = { f, m ->
+                            fuenteId = f.id; mangaSel = m; desdeNovedades = true; reanudar = null
+                            vueltaFicha = Ruta.BusquedaGlobal; ruta = Ruta.Ficha
+                        },
+                    ) { ruta = null }
+                    Ruta.MigrarSerie -> {
+                        val c = comics.firstOrNull { it.id == migrarId }
+                        val origen = c?.let { x -> ext.fuentes.firstOrNull { it.id == x.fuenteId } }
+                        if (c == null || origen == null) {
+                            LaunchedEffect(Unit) {
+                                Avisos.mostrar("La fuente de esta serie no está instalada: búscala con la búsqueda global")
+                                ruta = null
+                            }
+                            Box(Modifier.fillMaxSize().background(LectorColors.Bg))
+                        } else MigrarScreen(
+                            ext, almacen, c, origen, null,
+                            alHecho = { d -> ruta = null; alRecargar(); Avisos.mostrar("Migrado a ${d.nombre}") },
+                            onBack = { ruta = null },
+                        )
+                    }
                     Ruta.ListadosExt -> ListadosExtScreen(ext) { ruta = null }
                     Ruta.ExtDetalle -> ExtDetalleScreen(ext, extPkg.orEmpty()) { ruta = null }
                     Ruta.FuenteDetalle, Ruta.Ficha, Ruta.LeerOnline -> Box(Modifier.fillMaxSize())
@@ -275,7 +310,7 @@ fun Inicio(
                             if (m == null) Box(Modifier.fillMaxSize().background(LectorColors.Bg))
                             else FichaMangaScreen(
                                 ext, fuenteId ?: 0L, m, almacen, alRecargar,
-                                onBack = { ruta = if (desdeNovedades) null else Ruta.FuenteDetalle },
+                                onBack = { ruta = if (desdeNovedades) vueltaFicha else Ruta.FuenteDetalle },
                                 onLeer = { caps, i, pagina ->
                                     capsLectura = caps; capIndice = i; paginaLectura = pagina; ruta = Ruta.LeerOnline
                                 },
@@ -283,6 +318,7 @@ fun Inicio(
                                 alConsumirReanudar = { reanudar = null },
                                 // Vuelve a la lista de la fuente (si la ficha venía de la biblioteca, se abre) y busca el género.
                                 alGenero = { g -> generoBuscar = g; desdeNovedades = false; ruta = Ruta.FuenteDetalle },
+                                alBuscarGlobal = { q -> consultaGlobal = q; ruta = Ruta.BusquedaGlobal },
                             )
                         }
                         Ruta.LeerOnline -> LeerOnlineScreen(

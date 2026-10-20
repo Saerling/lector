@@ -12,8 +12,18 @@ android {
         applicationId = "com.example.lector"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 2
+        versionName = "0.2"
+    }
+
+    buildTypes {
+        release {
+            // Como Komikku: se reduce el código pero sin ofuscar, para que las extensiones encuentren las clases por nombre.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 
     compileOptions {
@@ -48,6 +58,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.13.1")
+    // Trabajos en segundo plano: buscar capítulos nuevos, descargas, revisar extensiones y copias automáticas.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // --- Motor de fuentes (paso 4): source-api de Komikku/Mihon ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

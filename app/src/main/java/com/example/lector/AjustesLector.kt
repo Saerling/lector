@@ -112,92 +112,111 @@ fun DialogoLector(almacen: Almacen, alCerrar: () -> Unit) {
                 )
 
                 Spacer(Modifier.height(20.dp))
-                TituloSeccion("Pantalla")
-                Spacer(Modifier.height(8.dp))
-                Text("Color de fondo")
-                Fondo.entries.forEach { f ->
-                    FilaOpcion(etiqueta = nombreFondo(f), marcada = almacen.fondoLector == f) {
-                        almacen.elegirFondoLector(f)
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                Text("Orientación")
-                Orientacion.entries.forEach { o ->
-                    FilaOpcion(etiqueta = nombreOrientacion(o), marcada = almacen.orientacion == o) {
-                        almacen.elegirOrientacion(o)
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                FilaInterruptor(
-                    titulo = "Brillo personalizado",
-                    detalle = "Usa un brillo propio solo mientras lees.",
-                    activado = almacen.brilloPersonalizado,
-                    alCambiar = { almacen.elegirBrilloPersonalizado(it) },
-                )
-                if (almacen.brilloPersonalizado) {
-                    Slider(
-                        value = almacen.brillo,
-                        onValueChange = { almacen.elegirBrillo(it) },
-                        valueRange = 0.01f..1f,
-                    )
-                }
-
-                Spacer(Modifier.height(20.dp))
-                TituloSeccion("Imagen")
-                Spacer(Modifier.height(8.dp))
-                FilaInterruptor(
-                    titulo = "Escala de grises",
-                    detalle = null,
-                    activado = almacen.escalaGrises,
-                    alCambiar = { almacen.elegirEscalaGrises(it) },
-                )
-                Spacer(Modifier.height(12.dp))
-                FilaInterruptor(
-                    titulo = "Invertir colores",
-                    detalle = "Útil para leer de noche páginas con fondo blanco.",
-                    activado = almacen.invertirColores,
-                    alCambiar = { almacen.elegirInvertirColores(it) },
-                )
-                Spacer(Modifier.height(12.dp))
-                FilaInterruptor(
-                    titulo = "Recortar bordes",
-                    detalle = "Quita los márgenes lisos (blancos o negros) de cada página. " +
-                        "Solo en los modos paginados.",
-                    activado = almacen.recortarBordes,
-                    alCambiar = { almacen.elegirRecortarBordes(it) },
-                )
-                Spacer(Modifier.height(12.dp))
-                Text("Filtro de color")
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Tinte.entries.forEach { t ->
-                        FilterChip(
-                            selected = almacen.tinte == t,
-                            onClick = { almacen.elegirTinte(t) },
-                            label = { Text(nombreTinte(t)) },
-                        )
-                    }
-                }
-                if (almacen.tinte != Tinte.NINGUNO) {
-                    Text(
-                        "Intensidad",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Slider(
-                        value = almacen.intensidadTinte,
-                        onValueChange = { almacen.elegirIntensidadTinte(it) },
-                        valueRange = 0.05f..0.6f,
-                    )
-                }
+                AjustesPantallaImagen(almacen)
             }
         },
         confirmButton = {
             TextButton(onClick = alCerrar) { Text("Listo") }
         },
+    )
+}
+
+// Secciones «Pantalla» e «Imagen»: las comparten el lector local y el online.
+@Composable
+fun AjustesPantallaImagen(almacen: Almacen) {
+    Column {
+        TituloSeccion("Pantalla")
+        Spacer(Modifier.height(8.dp))
+        Text("Color de fondo")
+        Fondo.entries.forEach { f ->
+            FilaOpcion(etiqueta = nombreFondo(f), marcada = almacen.fondoLector == f) {
+                almacen.elegirFondoLector(f)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("Orientación")
+        Orientacion.entries.forEach { o ->
+            FilaOpcion(etiqueta = nombreOrientacion(o), marcada = almacen.orientacion == o) {
+                almacen.elegirOrientacion(o)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        FilaInterruptor(
+            titulo = "Brillo personalizado",
+            detalle = "Usa un brillo propio solo mientras lees.",
+            activado = almacen.brilloPersonalizado,
+            alCambiar = { almacen.elegirBrilloPersonalizado(it) },
+        )
+        if (almacen.brilloPersonalizado) {
+            Slider(
+                value = almacen.brillo,
+                onValueChange = { almacen.elegirBrillo(it) },
+                valueRange = 0.01f..1f,
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+        TituloSeccion("Imagen")
+        Spacer(Modifier.height(8.dp))
+        FilaInterruptor(
+            titulo = "Escala de grises",
+            detalle = null,
+            activado = almacen.escalaGrises,
+            alCambiar = { almacen.elegirEscalaGrises(it) },
+        )
+        Spacer(Modifier.height(12.dp))
+        FilaInterruptor(
+            titulo = "Invertir colores",
+            detalle = "Útil para leer de noche páginas con fondo blanco.",
+            activado = almacen.invertirColores,
+            alCambiar = { almacen.elegirInvertirColores(it) },
+        )
+        Spacer(Modifier.height(12.dp))
+        FilaInterruptor(
+            titulo = "Recortar bordes",
+            detalle = "Quita los márgenes lisos (blancos o negros) de cada página. " +
+                "Solo en los modos paginados.",
+            activado = almacen.recortarBordes,
+            alCambiar = { almacen.elegirRecortarBordes(it) },
+        )
+        Spacer(Modifier.height(12.dp))
+        Text("Filtro de color")
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Tinte.entries.forEach { t ->
+                FilterChip(
+                    selected = almacen.tinte == t,
+                    onClick = { almacen.elegirTinte(t) },
+                    label = { Text(nombreTinte(t)) },
+                )
+            }
+        }
+        if (almacen.tinte != Tinte.NINGUNO) {
+            Text(
+                "Intensidad",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Slider(
+                value = almacen.intensidadTinte,
+                onValueChange = { almacen.elegirIntensidadTinte(it) },
+                valueRange = 0.05f..0.6f,
+            )
+        }
+    }
+}
+
+// Solo pantalla e imagen (sin las opciones de navegación del lector local).
+@Composable
+fun DialogoPantallaLector(almacen: Almacen, alCerrar: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = alCerrar,
+        title = { Text("Pantalla y color") },
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { AjustesPantallaImagen(almacen) } },
+        confirmButton = { TextButton(onClick = alCerrar) { Text("Listo") } },
     )
 }
