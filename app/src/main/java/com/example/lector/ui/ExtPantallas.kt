@@ -412,9 +412,18 @@ private fun NavegarFuente(
                 Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text)
             }
             Spacer(Modifier.width(14.dp))
-            LText(f.nombre, LectorType.Display.copy(fontSize = 26.sp), Modifier.weight(1f, fill = false), maxLines = 1)
+            LText(f.nombre, LectorType.Display.copy(fontSize = 26.sp), Modifier.weight(1f), maxLines = 1)
+            // WebView del sitio, siempre a mano (como el icono de Komikku en la barra).
+            if (f.baseUrl.isNotBlank()) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier.height(44.dp).pressable { webAbierta = true }.clip(CircleShape).background(LectorColors.PillFill)
+                        .padding(horizontal = 14.dp),
+                    Alignment.Center,
+                ) { LText("WebView", LectorType.Body) }
+            }
             if (onAjustes != null) {
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
                 Box(Modifier.size(44.dp).pressable(onAjustes).clip(CircleShape).background(LectorColors.PillFill), Alignment.Center) {
                     Icon(Icons.Rounded.Settings, "Ajustes de la fuente", tint = LectorColors.Text)
                 }
@@ -424,7 +433,6 @@ private fun NavegarFuente(
             ChipSel("Populares", modo == 0) { modo = 0 }
             ChipSel("Recientes", modo == 1) { modo = 1 }
             if (filtros != null) ChipSel(if (aplicados != null) "Filtros ✓" else "Filtros", aplicados != null) { panel = true }
-            if (f.baseUrl.isNotBlank()) ChipSel("WebView", false) { webAbierta = true }
         }
         // Búsquedas guardadas (TachiyomiSY/Komikku): tocar = repetirla · mantener pulsado = borrarla.
         val guardadas = ext.busquedas(f.id)
