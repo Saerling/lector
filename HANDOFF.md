@@ -510,6 +510,16 @@ Cierre por `OutOfMemoryError` en un móvil con >6.000 mangas. Cambios:
 - Pruebas en el emulador: `probar-huerfano:<título>`, `probar-version` y la instalación de la versión publicada
   encima de la instalada (`adb install -r`).
 
+## 2x. PASO 24 — Recomendaciones (2026-10-21, versión 0.10)
+- Tocar una recomendación (AniList) la busca en la fuente de la ficha abierta (`buscarEnFuente`, FuenteManga.kt:
+  prueba inglés, romaji, sinónimos y original; prefiere el título exacto) y abre su ficha directamente. Si no está,
+  un aviso con botón «Buscar en todas» (`Avisos.mostrar(texto, accion) { … }`, nuevo) lleva a la búsqueda global.
+- Pila de fichas en LectorApp (`fichasAnteriores`): abrir otro manga desde una ficha (recomendación o «Fuente no
+  disponible») guarda la actual; «atrás» (`volverDeFicha`) vuelve a ella. Se vacía al salir de la ficha. Cada ficha
+  va en un `AnimatedContent` con clave fuente|url (antes el estado de la ficha anterior podía quedarse).
+- Prueba: `probar:<pkg>|autorec` (`PruebaAuto`) abre sola la primera recomendación; la ficha anima sin parar y
+  uiautomator no puede leerla, así que se comprueba con los registros «ficha abierta: …».
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,
