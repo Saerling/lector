@@ -47,7 +47,7 @@ probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiy
 probar "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tachiyomi-all.imhentai-v1.6.25.apk" eu.kanade.tachiyomi.extension.all.imhentai
 # ---- «Fuente no disponible»: un manga de una fuente que no existe; debe buscar su título en las demás ----
 adb shell am force-stop com.example.lector; adb logcat -c
-adb shell am start -n com.example.lector/.MainActivity --es destino "probar-huerfano:Gacha infinita"
+adb shell am start -n com.example.lector/.MainActivity --es destino "'probar-huerfano:Gacha infinita'"
 sleep 75
 adb exec-out screencap -p > "captura-$ETIQUETA-huerfano.png"
 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "ui-huerfano.xml" >/dev/null 2>&1
