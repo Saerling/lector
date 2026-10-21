@@ -135,7 +135,10 @@ fun Inicio(
             }
             else -> {
                 val depurable = (contexto.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-                if (destino?.startsWith("probar:") == true && depurable) paquetePrueba = destino.removePrefix("probar:")
+                if (destino?.startsWith("probar:") == true && depurable) {
+                    paquetePrueba = destino.removePrefix("probar:").substringBefore('|')
+                    if (destino.endsWith("|autorec")) PruebaAuto.abrirRecomendacion = true
+                }
                 // Pruebas de las copias en el emulador: restaurar un archivo y crear una copia, midiendo el tiempo.
                 if (destino?.startsWith("probar-restaurar:") == true && depurable) {
                     val ruta = destino.removePrefix("probar-restaurar:")

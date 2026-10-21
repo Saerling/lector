@@ -291,6 +291,30 @@ fun FichaMangaScreen(
 
     BackHandler(enabled = seleccion.isNotEmpty()) { seleccion = emptySet() }
 
+    // Recomendación tocada: se busca en ESTA fuente y se abre directamente la que coincide (encima de esta ficha,
+    // así «atrás» vuelve aquí). Si la fuente no la tiene, un aviso ofrece buscarla en todas.
+    fun abrirRecomendacion(r: ResultadoAnilist) {
+        if (abriendoRec != null) return
+        abriendoRec = r.id
+        scope.launch {
+            val hallado = runCatching { buscarEnFuente(motor, f, r.titulos.ifEmpty { listOf(r.titulo) }) }.getOrNull()
+            abriendoRec = null
+            android.util.Log.i("LectorPrueba", "recomendación «${r.titulo}» en ${f.nombre}: ${hallado?.titulo ?: "no está"}")
+            if (hallado != null) alAbrirOtro(f, hallado)
+            else Avisos.mostrar("«${r.titulo}» no está en ${f.nombre}", "Buscar en todas") { alBuscarGlobal(r.titulo) }
+        }
+    }
+    LaunchedEffect(manga.url) { android.util.Log.i("LectorPrueba", "ficha abierta: ${f.nombre} · ${manga.titulo}") }
+    // Solo en la prueba del emulador: abre la primera recomendación en cuanto llegan.
+    LaunchedEffect(recomendaciones) {
+        val recs = recomendaciones
+        if (PruebaAuto.abrirRecomendacion && !recs.isNullOrEmpty()) {
+            PruebaAuto.abrirRecomendacion = false
+            kotlinx.coroutines.delay(1500)
+            abrirRecomendacion(recs.first())
+        }
+    }
+
     // ---- Lista de capítulos con filtros y orden ----
     val leidosAhora = ext.leidos
     val marcadosAhora = ext.marcados
@@ -434,17 +458,7 @@ fun FichaMangaScreen(
                         Spacer(Modifier.height(8.dp))
                         LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             items(recs, key = { it.id }) { r ->
-                                Column(Modifier.width(96.dp).press3D().pressable {
-                                    if (abriendoRec != null) return@pressable
-                                    // Se busca en ESTA fuente y se abre directamente el que coincide.
-                                    abriendoRec = r.id
-                                    scope.launch {
-                                        val hallado = runCatching { buscarEnFuente(motor, f, r.titulos.ifEmpty { listOf(r.titulo) }) }.getOrNull()
-                                        abriendoRec = null
-                                        if (hallado != null) alAbrirOtro(f, hallado)
-                                        else Avisos.mostrar("«${r.titulo}» no está en ${f.nombre}", "Buscar en todas") { alBuscarGlobal(r.titulo) }
-                                    }
-                                }) {
+                                Column(Modifier.width(96.dp).press3D().pressable { abrirRecomendacion(r) }) {
                                     Box {
                                         ImagenRemota(r.portada, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)))
                                         if (abriendoRec == r.id) Box(
@@ -1093,4 +1107,9 @@ private suspend fun buscarEnFuente(motor: com.example.lector.ext.MotorFuentes?, 
         if (primero == null) primero = res.firstOrNull()
     }
     return primero
+}
+
+/** Interruptores de las pruebas automáticas del emulador (solo se activan en compilaciones depurables). */
+object PruebaAuto {
+    @Volatile var abrirRecomendacion = false
 }
