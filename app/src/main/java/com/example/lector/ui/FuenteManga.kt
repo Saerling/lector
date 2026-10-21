@@ -179,6 +179,7 @@ fun FichaMangaScreen(
     var editarInfo by remember { mutableStateOf(false) }
     var seguimiento by remember { mutableStateOf(false) }
     var recomendaciones by remember { mutableStateOf<List<ResultadoAnilist>?>(null) }
+    var abriendoRec by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(fuenteId, manga.url, recarga) {
         if (f == null || motor == null) return@LaunchedEffect
@@ -420,7 +421,7 @@ fun FichaMangaScreen(
                         }
                     }
                 }
-                // Recomendaciones (AniList): tocar una busca ese título en todas tus fuentes.
+                // Recomendaciones (AniList): tocar una la busca en la fuente de esta ficha y abre su ficha.
                 val recs = recomendaciones
                 if (!recs.isNullOrEmpty()) item {
                     Column(Modifier.padding(top = 16.dp)) {
@@ -428,8 +429,24 @@ fun FichaMangaScreen(
                         Spacer(Modifier.height(8.dp))
                         LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             items(recs, key = { it.id }) { r ->
-                                Column(Modifier.width(96.dp).press3D().pressable { alBuscarGlobal(r.titulo) }) {
-                                    ImagenRemota(r.portada, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)))
+                                Column(Modifier.width(96.dp).press3D().pressable {
+                                    if (abriendoRec != null) return@pressable
+                                    // Se busca en ESTA fuente y se abre directamente el que coincide.
+                                    abriendoRec = r.id
+                                    scope.launch {
+                                        val hallado = runCatching { buscarEnFuente(motor, f, r.titulos.ifEmpty { listOf(r.titulo) }) }.getOrNull()
+                                        abriendoRec = null
+                                        if (hallado != null) alAbrirOtro(f, hallado)
+                                        else Avisos.mostrar("«${r.titulo}» no está en ${f.nombre}", "Buscar en todas") { alBuscarGlobal(r.titulo) }
+                                    }
+                                }) {
+                                    Box {
+                                        ImagenRemota(r.portada, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)))
+                                        if (abriendoRec == r.id) Box(
+                                            Modifier.matchParentSize().clip(SuaveShape(12.dp)).background(Color.Black.copy(alpha = 0.5f)),
+                                            Alignment.Center,
+                                        ) { CircularProgressIndicator(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) }
+                                    }
                                     Spacer(Modifier.height(6.dp))
                                     LText(r.titulo, LectorType.Label, maxLines = 2)
                                 }
@@ -1055,4 +1072,20 @@ fun LeerOnlineScreen(
         ),
         onBack = onBack,
     )
+}
+
+/**
+ * Busca un manga en la fuente [f] probando sus títulos por orden y devuelve el mejor resultado: uno con exactamente
+ * alguno de esos títulos (sin contar mayúsculas ni signos) o, si no hay, el primero que salga con el título principal.
+ */
+private suspend fun buscarEnFuente(motor: com.example.lector.ext.MotorFuentes?, f: FuenteUI, titulos: List<String>): MangaFuente? {
+    if (motor == null) return null
+    val claves = titulos.map { tituloComparable(it) }.toSet()
+    var primero: MangaFuente? = null
+    for (t in titulos.take(4)) {
+        val res = runCatching { motor.buscar(f, t, 1).mangas }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it else emptyList() }
+        res.firstOrNull { tituloComparable(it.titulo) in claves }?.let { return it }
+        if (primero == null) primero = res.firstOrNull()
+    }
+    return primero
 }

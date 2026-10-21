@@ -42,7 +42,7 @@ jobs:
           msg=$(sed -e 's/%/%25/g' fallos.txt | head -150 | awk '{printf "%s%%0A", $0}')
           echo "::warning title=Prueba en emulador::${msg}"
           # Las pruebas del final, en su propio aviso (el primero se corta si es muy largo).
-          msg2=$(sed -n '/===== Fuente no disponible/,/=====  *Restaurar/p;/===== Actualización/,$p' fallos.txt | sed -e 's/%/%25/g' | head -60 | awk '{printf "%s%%0A", $0}')
+          msg2=$(sed -n '/===== Recomendaciones/,/=====  *Restaurar/p;/===== Actualización/,$p' fallos.txt | sed -e 's/%/%25/g' | head -60 | awk '{printf "%s%%0A", $0}')
           echo "::notice title=Pruebas finales::${msg2}"
       - uses: actions/upload-artifact@v4
         if: always()

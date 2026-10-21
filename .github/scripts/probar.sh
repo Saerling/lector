@@ -48,6 +48,52 @@ probar "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tach
 # Las dos extensiones de Nyora (normal y 18+) traen fuentes repetidas: antes cerraban las listas de fuentes.
 probar "https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/apk/eu.kanade.tachiyomi.extension.all.nyoralocal.apk" eu.kanade.tachiyomi.extension.all.nyoralocal
 probar "https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/apk/eu.kanade.tachiyomi.extension.all.nyoralocal18.apk" eu.kanade.tachiyomi.extension.all.nyoralocal18
+# ---- Recomendaciones: abrir una desde la ficha (en la MISMA fuente) y volver con «atrás» a la ficha de antes ----
+volcar() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$1" >/dev/null 2>&1; }
+textos() { grep -o 'text="[^"]*"' "$1" 2>/dev/null | sed 's/text=//' | grep -v '""' | head -${2:-14} | tr '\n' ' '; }
+# Toca el centro del primer elemento con ese texto (o, con $3, el primero que esté por debajo de ese texto).
+tocar() {
+  python3 - "$1" "$2" "${3:-}" <<'PY' > /tmp/xy.txt
+import re,sys
+x=open(sys.argv[1],encoding='utf-8',errors='ignore').read()
+nodos=[(m.group(1),tuple(map(int,m.group(2,3,4,5)))) for m in re.finditer(r'text="([^"]*)"[^>]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',x)]
+obj=sys.argv[2]; debajo=sys.argv[3]
+if debajo:
+    ref=next((b for t,b in nodos if t==obj),None)
+    c=[b for t,b in nodos if ref and t and b[1]>ref[3]+10 and t!=obj]
+else:
+    c=[b for t,b in nodos if t==obj]
+if c: b=c[0]; print((b[0]+b[2])//2,(b[1]+b[3])//2)
+PY
+  read -r X Y < /tmp/xy.txt || true
+  [ -n "$X" ] && adb shell input tap "$X" "$Y"
+  echo "$X $Y"
+}
+adb shell am force-stop com.example.lector; adb logcat -c
+adb shell am start -n com.example.lector/.MainActivity --es destino "probar:eu.kanade.tachiyomi.extension.es.anzmanga"
+sleep 45
+volcar rec0.xml; tocar rec0.xml "One Piece" >/dev/null
+sleep 25
+for k in 1 2 3 4 5 6; do volcar rec1.xml; grep -q 'text="Recomendaciones"' rec1.xml && break; adb shell input swipe 540 1700 540 1100 400; sleep 3; done
+{
+  echo "===== Recomendaciones ====="
+  echo "Ficha de partida: $(textos rec1.xml 8)"
+  grep -q 'text="Recomendaciones"' rec1.xml && echo "Hay recomendaciones" || echo "NO SALIERON RECOMENDACIONES"
+} >> fallos.txt
+echo "toque: $(tocar rec1.xml Recomendaciones debajo)" >> fallos.txt
+sleep 30
+volcar rec2.xml; adb exec-out screencap -p > "captura-$ETIQUETA-recomendada.png"
+echo "Tras tocar una recomendación: $(textos rec2.xml 10)" >> fallos.txt
+adb logcat -d | grep -A20 "FATAL EXCEPTION" | head -20 >> fallos.txt
+adb shell input keyevent 4
+sleep 12
+volcar rec3.xml
+{
+  echo "Tras «atrás»: $(textos rec3.xml 8)"
+  grep -q 'text="One Piece"' rec3.xml && echo "VUELVE A LA FICHA DE ANTES" || echo "NO VOLVIÓ A LA FICHA DE ANTES"
+  adb shell pidof com.example.lector >/dev/null && echo "La app sigue abierta" || echo "LA APP NO ESTÁ ABIERTA"
+} >> fallos.txt
+
 # ---- «Fuente no disponible»: un manga de una fuente que no existe; debe buscar su título en las demás ----
 adb shell am force-stop com.example.lector; adb logcat -c
 adb shell am start -n com.example.lector/.MainActivity --es destino "'probar-huerfano:Gacha infinita'"

@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -90,6 +91,9 @@ fun Inicio(
     var reanudar by remember { mutableStateOf<Pair<String, Int>?>(null) }
     // Pantalla a la que vuelve la ficha cuando no se abrió desde la lista de una fuente (p. ej. búsqueda global).
     var vueltaFicha by remember { mutableStateOf<Ruta?>(null) }
+    // Mangas abiertos uno encima de otro desde una ficha (recomendaciones, «Fuente no disponible»): «atrás» vuelve
+    // al anterior en vez de salir de la ficha. Se vacía al salir de la ficha.
+    val fichasAnteriores = remember { androidx.compose.runtime.mutableStateListOf<Pair<Long, MangaFuente>>() }
     var consultaGlobal by rememberSaveable { mutableStateOf("") }
     var migrarId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -204,8 +208,18 @@ fun Inicio(
         else if (ruta == Ruta.LeerOnline && capsLectura.isEmpty()) ruta = Ruta.Ficha
     }
 
+    // Atrás desde una ficha: primero al manga anterior (si se abrió esta desde otra ficha); si no, a donde se venía.
+    val volverDeFicha: () -> Unit = {
+        val previa = fichasAnteriores.removeLastOrNull()
+        if (previa != null) {
+            fuenteId = previa.first; mangaSel = previa.second; reanudar = null
+        } else ruta = if (desdeNovedades) vueltaFicha else Ruta.FuenteDetalle
+    }
+    LaunchedEffect(ruta) { if (ruta != Ruta.Ficha && ruta != Ruta.LeerOnline) fichasAnteriores.clear() }
+
     BackHandler(enabled = activo && ruta != null && detalleId == null) {
-        ruta = if (ruta == Ruta.Ficha && desdeNovedades) vueltaFicha else ruta?.padre()
+        if (ruta == Ruta.Ficha) volverDeFicha()
+        else ruta = ruta?.padre()
     }
     BackHandler(enabled = activo && detalleId != null) { detalleId = null }
 
@@ -423,9 +437,18 @@ fun Inicio(
                         Ruta.Ficha -> {
                             val m = mangaSel
                             if (m == null) Box(Modifier.fillMaxSize().background(LectorColors.Bg))
-                            else FichaMangaScreen(
-                                ext, fuenteId ?: 0L, m, almacen, alRecargar,
-                                onBack = { ruta = if (desdeNovedades) vueltaFicha else Ruta.FuenteDetalle },
+                            // Una ficha por manga: al pasar a otro (o volver al anterior) se crea de nuevo, con su estado.
+                            else androidx.compose.animation.AnimatedContent(
+                                targetState = (fuenteId ?: 0L) to m,
+                                transitionSpec = {
+                                    (fadeIn(tween(260)) + scaleIn(tween(320, easing = EnfasisEasing), initialScale = 0.94f)) togetherWith
+                                        fadeOut(tween(180))
+                                },
+                                contentKey = { "${it.first}|${it.second.url}" },
+                                label = "ficha",
+                            ) { (fid, mm) -> FichaMangaScreen(
+                                ext, fid, mm, almacen, alRecargar,
+                                onBack = volverDeFicha,
                                 onLeer = { caps, i, pagina ->
                                     capsLectura = caps; capIndice = i; paginaLectura = pagina; ruta = Ruta.LeerOnline
                                 },
@@ -434,8 +457,11 @@ fun Inicio(
                                 // Vuelve a la lista de la fuente (si la ficha venía de la biblioteca, se abre) y busca el género.
                                 alGenero = { g -> generoBuscar = g; desdeNovedades = false; ruta = Ruta.FuenteDetalle },
                                 alBuscarGlobal = { q -> consultaGlobal = q; ruta = Ruta.BusquedaGlobal },
-                                alAbrirOtro = { f2, m2 -> fuenteId = f2.id; mangaSel = m2; reanudar = null },
-                            )
+                                alAbrirOtro = { f2, m2 ->
+                                    fichasAnteriores.add(fid to mm)
+                                    fuenteId = f2.id; mangaSel = m2; reanudar = null
+                                },
+                            ) }
                         }
                         Ruta.LeerOnline -> LeerOnlineScreen(
                             ext, fuenteId ?: 0L, mangaSel?.titulo.orEmpty(), capsLectura, capIndice,

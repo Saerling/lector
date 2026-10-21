@@ -389,7 +389,7 @@ fun BonesPortadas(cantidad: Int = 3) {
 // ───────────────────────── Avisos (en lugar de Toast) ─────────────────────────
 
 @Immutable
-data class Aviso(val id: Long, val texto: String)
+data class Aviso(val id: Long, val texto: String, val accion: String? = null, val alAccion: (() -> Unit)? = null)
 
 /**
  * Avisos como una píldora oscura que cae desde arriba. Se pueden lanzar desde cualquier sitio (también desde hilos
@@ -401,6 +401,11 @@ object Avisos {
     private val contador = AtomicLong(0)
 
     fun mostrar(texto: String) { _actual.value = Aviso(contador.incrementAndGet(), texto) }
+
+    /** Aviso con un botón (p. ej. «Buscar en todas»): tocarlo lo ejecuta y cierra el aviso. */
+    fun mostrar(texto: String, accion: String, alAccion: () -> Unit) {
+        _actual.value = Aviso(contador.incrementAndGet(), texto, accion, alAccion)
+    }
 
     fun ocultar(id: Long) { _actual.update { if (it?.id == id) null else it } }
 }
@@ -445,7 +450,7 @@ private fun TarjetaAviso(a: Aviso) {
     var sujeto by remember(a.id) { mutableStateOf(false) }
     LaunchedEffect(a.id, sujeto) {
         if (sujeto) return@LaunchedEffect
-        delay(if (a.texto.length > 40) 3500L else 2400L)
+        delay(if (a.accion != null) 5000L else if (a.texto.length > 40) 3500L else 2400L)
         Avisos.ocultar(a.id)
     }
     val error = remember(a.texto) { esError(a.texto) }
@@ -485,7 +490,13 @@ private fun TarjetaAviso(a: Aviso) {
             a.texto, LectorType.Body.copy(fontSize = 17.sp, lineHeight = 21.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
             Modifier.weight(1f), maxLines = 3,
         )
-        if (!error) Box(Modifier.padding(start = 12.dp).size(26.dp).clip(CircleShape).background(claro), Alignment.Center) {
+        if (a.accion != null) {
+            Box(
+                Modifier.padding(start = 12.dp).clip(CircleShape).background(claro)
+                    .pressable { Avisos.ocultar(a.id); a.alAccion?.invoke() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) { LText(a.accion, LectorType.Label.copy(fontWeight = FontWeight.Bold), color = Color(0xFF232323), maxLines = 1) }
+        } else if (!error) Box(Modifier.padding(start = 12.dp).size(26.dp).clip(CircleShape).background(claro), Alignment.Center) {
             Icon(Icons.Rounded.Check, null, tint = Color(0xFF232323), modifier = Modifier.size(16.dp))
         }
     }
