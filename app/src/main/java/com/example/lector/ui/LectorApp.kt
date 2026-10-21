@@ -124,6 +124,7 @@ fun Inicio(
             Notificaciones.DESTINO_ACTUALIZACIONES -> { ruta = null; detalleId = null; onTab(LectorTab.Updates) }
             Notificaciones.DESTINO_DESCARGAS -> { detalleId = null; ruta = Ruta.Descargas }
             Notificaciones.DESTINO_EXTENSIONES -> { ruta = null; detalleId = null; onTab(LectorTab.Search) }
+            com.example.lector.NuevaVersion.DESTINO -> com.example.lector.NuevaVersion.abrirDesdeNotificacion(contexto)
             com.example.lector.TareaCopia.DESTINO -> {
                 com.example.lector.TareaCopia.informeVisto = true
                 com.example.lector.TareaCopia.verInforme = com.example.lector.TareaCopia.informe != null
@@ -139,6 +140,28 @@ fun Inicio(
                         val inf = com.example.lector.Tachibk.restaurar(contexto, java.io.File(ruta).readBytes(), this)
                         android.util.Log.i("LectorPrueba", "restaurar ms=${android.os.SystemClock.elapsedRealtime() - t0} bien=${inf.bien} avisos=${inf.avisos} errores=${inf.errores}")
                         inf
+                    }
+                }
+                // «Fuente no disponible»: abre un manga de una fuente que no existe (busca su título en las demás).
+                if (destino?.startsWith("probar-huerfano:") == true && depurable) {
+                    fuenteId = 424242L
+                    mangaSel = com.example.lector.ext.MangaFuente("/no-existe", destino.removePrefix("probar-huerfano:"), null)
+                    desdeNovedades = true; vueltaFicha = null; reanudar = null
+                    ruta = Ruta.Ficha
+                }
+                // Actualización de la app: lee la última versión de GitHub y descarga su APK (sin instalarlo).
+                if (destino == "probar-version" && depurable) {
+                    kotlin.concurrent.thread {
+                        val r = runCatching {
+                            val v = kotlinx.coroutines.runBlocking { com.example.lector.NuevaVersion.ultima(contexto) }
+                            if (v == null) "sin versiones publicadas" else {
+                                val f = java.io.File(contexto.cacheDir, "prueba-version.apk")
+                                com.example.lector.ext.ExtRepos.descargarA(v.apkUrl, f) {}
+                                "ultima=${v.nombre} codigo=${v.codigo} actual=${com.example.lector.NuevaVersion.codigoActual(contexto)} " +
+                                    "descargado=${f.length()} esperado=${v.tamano} notas=${v.notas.lineSequence().firstOrNull()}"
+                            }
+                        }
+                        android.util.Log.i("LectorPrueba", "version " + r.getOrElse { "error ${it.message ?: it.javaClass.simpleName}" })
                     }
                 }
                 // Prueba de un listado de extensiones: lo mismo que «Añadir listado», sin guardarlo.
@@ -359,9 +382,10 @@ fun Inicio(
                         val c = comics.firstOrNull { it.id == migrarId }
                         val origen = c?.let { x -> ext.fuentes.firstOrNull { it.id == x.fuenteId } }
                         if (c == null || origen == null) {
+                            // Sin su fuente: se abre su ficha, que enseña «Fuente no disponible» con la búsqueda en las demás.
                             LaunchedEffect(Unit) {
-                                Avisos.mostrar("La fuente de esta serie no está instalada: búscala con la búsqueda global")
-                                ruta = null
+                                if (c != null && c.enLinea) abrirEnLinea(c.fuenteId, c.urlManga.orEmpty(), c.titulo, c.portadaUrl, null)
+                                else ruta = null
                             }
                             Box(Modifier.fillMaxSize().background(LectorColors.Bg))
                         } else MigrarScreen(
@@ -410,6 +434,7 @@ fun Inicio(
                                 // Vuelve a la lista de la fuente (si la ficha venía de la biblioteca, se abre) y busca el género.
                                 alGenero = { g -> generoBuscar = g; desdeNovedades = false; ruta = Ruta.FuenteDetalle },
                                 alBuscarGlobal = { q -> consultaGlobal = q; ruta = Ruta.BusquedaGlobal },
+                                alAbrirOtro = { f2, m2 -> fuenteId = f2.id; mangaSel = m2; reanudar = null },
                             )
                         }
                         Ruta.LeerOnline -> LeerOnlineScreen(

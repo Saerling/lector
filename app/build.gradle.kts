@@ -12,17 +12,34 @@ android {
         applicationId = "com.example.lector"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8"
+        // En GitHub Actions el número sube solo en cada compilación (1000 + número de ejecución): así cada versión
+        // publicada es mayor que la anterior y Android la instala como actualización. Compilado a mano: 9.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.let { 1000 + it } ?: 9
+        versionName = "0.9"
+    }
+
+    // Una sola firma fija para todas las versiones (antes cada compilación de GitHub creaba una clave de depuración
+    // nueva y Android no dejaba instalar encima: había que desinstalar). La clave está en el repositorio a propósito,
+    // para que cualquier compilación pueda actualizar a la anterior; ver HANDOFF (PASO 23).
+    signingConfigs {
+        create("shiori") {
+            storeFile = file("firma/shiori.jks")
+            storePassword = "shiori-lector"
+            keyAlias = "shiori"
+            keyPassword = "shiori-lector"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("shiori")
+        }
         release {
             // Como Komikku: se reduce el código pero sin ofuscar, para que las extensiones encuentren las clases por nombre.
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("shiori")
             // Solo para la prueba automática en el emulador (gradle assembleRelease -Pprueba).
             isDebuggable = project.hasProperty("prueba")
         }

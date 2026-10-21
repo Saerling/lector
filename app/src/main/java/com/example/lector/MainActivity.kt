@@ -85,6 +85,8 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             bloqueada = almacen.bloqueo && dispositivoSeguro()
             pedirPermisoNotificaciones()
+            // ¿Hay versión nueva en GitHub? Si la hay, sale el aviso para actualizar.
+            NuevaVersion.alArrancar(applicationContext)
         }
         procesarEnlace(intent)
         setContent {
@@ -226,6 +228,7 @@ fun App(
                 },
             ) { Contenido(almacen, destino, alConsumirDestino) }
             if (arranque) ArranqueOverlay { arranque = false }
+            if (!bloqueada) com.example.lector.ui.DialogoActualizacion()
             if (bloqueada) PantallaBloqueo(alDesbloquear)
         }
     }

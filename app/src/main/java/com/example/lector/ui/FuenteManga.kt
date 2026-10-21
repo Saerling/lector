@@ -149,6 +149,8 @@ fun FichaMangaScreen(
     alGenero: (String) -> Unit = {},
     // Buscar este título en todas las fuentes (búsqueda global).
     alBuscarGlobal: (String) -> Unit = {},
+    // Abrir otro manga (de otra fuente) en esta misma ficha: lo usa la pantalla «Fuente no disponible».
+    alAbrirOtro: (FuenteUI, MangaFuente) -> Unit = { _, _ -> },
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -276,12 +278,8 @@ fun FichaMangaScreen(
     }
 
     if (f == null || motor == null) {
-        Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                BotonRedondoTema(Icons.Rounded.ArrowBack, "Atrás", onBack)
-            }
-            LText("La fuente no está disponible (¿se desinstaló la extensión o dejó de ser de confianza?).", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
-        }
+        // En vez de un aviso sin salida: por qué falta, cómo arreglarlo y el mismo título en tus otras fuentes.
+        FuenteNoDisponible(ext, almacen, fuenteId, manga, enBiblioteca, alRecargar, onBack, alAbrirOtro)
         return
     }
 

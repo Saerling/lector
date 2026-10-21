@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-private sealed interface EstadoBusqueda {
+internal sealed interface EstadoBusqueda {
     object Cargando : EstadoBusqueda
     data class Hecho(val mangas: List<MangaFuente>) : EstadoBusqueda
     data class Fallo(val motivo: String) : EstadoBusqueda
@@ -51,7 +51,6 @@ fun BusquedaGlobalScreen(
     var consulta by rememberSaveable { mutableStateOf(consultaInicial) }
     var enviada by rememberSaveable { mutableStateOf(consultaInicial) }
     var soloConResultados by remember { mutableStateOf(false) }
-    val resultados = remember { mutableStateMapOf<Long, EstadoBusqueda>() }
     val fuentes = remember(ext.fuentes, almacen.globalSoloAncladas, ext.idiomas, ext.mostrarNsfw) {
         ext.fuentes.filter {
             (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas &&
@@ -60,25 +59,7 @@ fun BusquedaGlobalScreen(
     }
     val enBiblioteca = remember(almacen.version) { almacen.clavesEnLinea() }
 
-    LaunchedEffect(enviada, fuentes) {
-        resultados.clear()
-        if (enviada.isBlank() || motor == null) return@LaunchedEffect
-        val limite = Semaphore(5)
-        fuentes.forEach { f -> resultados[f.id] = EstadoBusqueda.Cargando }
-        fuentes.forEach { f ->
-            launch {
-                limite.withPermit {
-                    resultados[f.id] = try {
-                        EstadoBusqueda.Hecho(motor.buscar(f, enviada.trim(), 1).mangas.distinctBy { it.url })
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        EstadoBusqueda.Fallo(e.message ?: "Error")
-                    }
-                }
-            }
-        }
-    }
+    val resultados = rememberResultadosGlobales(fuentes, enviada)
 
     Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -106,38 +87,98 @@ fun BusquedaGlobalScreen(
                 items(fuentes, key = { it.id }) { f ->
                     val e = resultados[f.id] ?: EstadoBusqueda.Cargando
                     if (soloConResultados && (e !is EstadoBusqueda.Hecho || e.mangas.isEmpty())) return@items
-                    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                        Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            LText(f.nombre, LectorType.Section.copy(fontSize = 17.sp), Modifier.weight(1f), maxLines = 1)
-                            LText(bandera(f.lang), LectorType.Body)
-                        }
-                        when (e) {
-                            EstadoBusqueda.Cargando -> Box(Modifier.fillMaxWidth().height(60.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp)) }
-                            is EstadoBusqueda.Fallo -> LText(e.motivo, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Error, maxLines = 2)
-                            is EstadoBusqueda.Hecho -> if (e.mangas.isEmpty()) {
-                                LText("Sin resultados", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
-                            } else LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                items(e.mangas, key = { it.url }) { m ->
-                                    val esta = "${f.id}|${m.url}" in enBiblioteca
-                                    Column(
-                                        Modifier.width(112.dp).press3D().pressable(onLongClick = {
-                                            alternarEnBiblioteca(ctx, almacen, f, m)
-                                        }) { onManga(f, m) },
-                                    ) {
-                                        Box {
-                                            ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), motor.cabeceras(f), fuenteId = f.id)
-                                            if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
-                                        }
-                                        Spacer(Modifier.height(6.dp))
-                                        LText(m.titulo, LectorType.Label, maxLines = 2)
-                                    }
-                                }
+                    FilaResultados(f, e, enBiblioteca, onManga = { m -> onManga(f, m) }) { m -> alternarEnBiblioteca(ctx, almacen, f, m) }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Busca [consulta] en todas las [fuentes] a la vez (5 en paralelo) y devuelve el estado de cada una por id. Vuelve a
+ * buscar si cambia la consulta o la lista de fuentes.
+ */
+@Composable
+internal fun rememberResultadosGlobales(fuentes: List<FuenteUI>, consulta: String): Map<Long, EstadoBusqueda> {
+    val motor = Motor.actual
+    val resultados = remember { mutableStateMapOf<Long, EstadoBusqueda>() }
+    LaunchedEffect(consulta, fuentes) {
+        resultados.clear()
+        if (consulta.isBlank() || motor == null) return@LaunchedEffect
+        val limite = Semaphore(5)
+        fuentes.forEach { f -> resultados[f.id] = EstadoBusqueda.Cargando }
+        fuentes.forEach { f ->
+            launch {
+                limite.withPermit {
+                    resultados[f.id] = try {
+                        EstadoBusqueda.Hecho(motor.buscar(f, consulta.trim(), 1).mangas.distinctBy { it.url })
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        EstadoBusqueda.Fallo(e.message ?: "Error")
+                    }
+                }
+            }
+        }
+    }
+    return resultados
+}
+
+/** Título reducido a letras y números en minúsculas, para comparar títulos de fuentes distintas. */
+internal fun tituloComparable(t: String): String = t.lowercase().filter { it.isLetterOrDigit() }
+
+/**
+ * Una fila de la búsqueda global: nombre de la fuente y sus resultados en horizontal (como en Novedades). Con
+ * [destacar], los resultados con ese mismo título van primero y llevan la insignia «Mismo título».
+ */
+@Composable
+internal fun FilaResultados(
+    f: FuenteUI,
+    e: EstadoBusqueda,
+    enBiblioteca: Set<String>,
+    destacar: String? = null,
+    onManga: (MangaFuente) -> Unit,
+    onLargo: (MangaFuente) -> Unit,
+) {
+    val motor = Motor.actual
+    val clave = destacar?.let { tituloComparable(it) }
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            LText(f.nombre, LectorType.Section.copy(fontSize = 17.sp), Modifier.weight(1f), maxLines = 1)
+            LText(bandera(f.lang), LectorType.Body)
+        }
+        when (e) {
+            EstadoBusqueda.Cargando -> Box(Modifier.fillMaxWidth().height(60.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp)) }
+            is EstadoBusqueda.Fallo -> LText(e.motivo, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Error, maxLines = 2)
+            is EstadoBusqueda.Hecho -> if (e.mangas.isEmpty()) {
+                LText("Sin resultados", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
+            } else {
+                val lista = if (clave == null) e.mangas else e.mangas.sortedByDescending { tituloComparable(it.titulo) == clave }
+                LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(lista, key = { it.url }) { m ->
+                        val esta = "${f.id}|${m.url}" in enBiblioteca
+                        val igual = clave != null && tituloComparable(m.titulo) == clave
+                        Column(Modifier.width(112.dp).press3D().pressable(onLongClick = { onLargo(m) }) { onManga(m) }) {
+                            Box {
+                                ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), motor?.cabeceras(f).orEmpty(), fuenteId = f.id)
+                                if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
+                                else if (igual) Insignia("Mismo título", Modifier.align(Alignment.TopStart).padding(6.dp))
                             }
+                            Spacer(Modifier.height(6.dp))
+                            LText(m.titulo, LectorType.Label, maxLines = 2)
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** Insignia pequeña sobre una portada. */
+@Composable
+internal fun Insignia(texto: String, modifier: Modifier = Modifier) {
+    Box(modifier.clip(SuaveShape(8.dp)).background(LectorColors.Text).padding(horizontal = 6.dp, vertical = 2.dp)) {
+        LText(texto, LectorType.Label.copy(fontSize = 10.sp), color = LectorColors.Bg, maxLines = 1)
     }
 }
 

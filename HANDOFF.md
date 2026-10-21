@@ -488,6 +488,28 @@ Cierre por `OutOfMemoryError` en un móvil con >6.000 mangas. Cambios:
 - Arranque: el primer fotograma es igual que la pantalla de inicio del sistema (sin parpadeo); el agujero «inspira» y
   se abre: el icono crece acelerando y la app aparece por dentro del horizonte (máscara con BlendMode.Clear).
 
+## 2w. PASO 23 — Fuente no disponible y actualizaciones de la app (2026-10-20, versión 0.9)
+- «La fuente no está disponible» ya no es un aviso sin salida: `FuenteNoDisponible` (ui/Reencontrar.kt) dice por qué
+  falta (extensión sin confianza / que no carga / no instalada pero en tus listados / desconocida, vía
+  `ExtManager.extensionDeFuente`) con su botón (Confiar, Actualizar, Instalar) y busca el título en todas tus demás
+  fuentes con filas como Novedades (`FilaResultados`/`rememberResultadosGlobales`, sacadas de BusquedaGlobal.kt).
+  Los de título igual van primero con la insignia «Mismo título». Si el manga está en la biblioteca, tocar un
+  resultado ofrece «Migrar aquí» (`migrarComic`, en Migrar.kt, ya sin necesitar la fuente vieja) o «Solo abrir».
+  «Migrar» desde la biblioteca de una serie sin fuente abre esta pantalla.
+- Firma fija: `app/firma/shiori.jks` (contraseña `shiori-lector`, alias `shiori`) para debug y release. Antes cada
+  compilación de GitHub firmaba con una clave de depuración nueva y Android exigía desinstalar. La clave está en el
+  repositorio a propósito (el repo es público: cualquiera podría firmar un APK «Shiori»; si se quiere evitar, pasarla
+  a un secreto de GitHub). Las versiones 0.8 y anteriores llevan otra firma: hay que desinstalar UNA vez.
+- `versionCode` = 1000 + número de ejecución de «Build APK» (sube solo); a mano, 9.
+- build.yml publica cada compilación release de `claude/komikku` y `main` como versión de GitHub
+  (`v<versionName>-<versionCode>`, APK adjunto, notas = mensaje del commit; guarda las 10 últimas).
+- `NuevaVersion` (NuevaVersion.kt; ojo, `Actualizador` en Trabajos.kt es el de la biblioteca): al abrir la app
+  (no en compilaciones depurables) mira `releases/latest`; si su número es mayor sale `DialogoActualizacion`
+  (novedades, descarga con %, instala con PackageInstaller vía `ExtManager.abrirSesion`, explica los errores de
+  firma). También cada 12 h con la revisión de extensiones (notificación una vez por versión) y en Ajustes → Acerca de.
+- Pruebas en el emulador: `probar-huerfano:<título>`, `probar-version` y la instalación de la versión publicada
+  encima de la instalada (`adb install -r`).
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

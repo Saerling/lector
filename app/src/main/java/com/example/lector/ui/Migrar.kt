@@ -153,20 +153,7 @@ fun MigrarScreen(
                     onClick = {
                         migrando = true
                         scope.launch {
-                            val resultado = runCatching {
-                                requireNotNull(motor) { "Motor de fuentes no disponible" }
-                                check(almacen.comicEnLinea(f.id, m.url) == null) { "Ese manga ya está en tu biblioteca" }
-                                val ficha = motor.ficha(f, m)
-                                val leidos = ext.migrarLeidos(origen.id, capsOrigen, f.id, ficha.capitulos, comic.ultimaPagina)
-                                val portada = ficha.detalle.portadaUrl ?: m.portadaUrl
-                                check(almacen.migrarEnLinea(comic, f.id, m.url, portada, ficha.capitulos.size, leidos)) {
-                                    "No se pudo migrar"
-                                }
-                                // Los capítulos que hay ahora son la base: solo lo que salga después contará como novedad.
-                                almacen.registrarCapitulos(
-                                    f.id, m.url, ficha.detalle.titulo.ifBlank { m.titulo }, portada, ficha.capitulos,
-                                )
-                            }
+                            val resultado = runCatching { migrarComic(ext, almacen, comic, origen.id, capsOrigen, f, m) }
                             migrando = false
                             resultado
                                 .onSuccess { elegido = null; alHecho(f) }
@@ -178,4 +165,21 @@ fun MigrarScreen(
             dismissButton = { TextButton(enabled = !migrando, onClick = { elegido = null }) { Text("Cancelar") } },
         )
     }
+}
+
+/**
+ * Pasa [comic] de la biblioteca a [m] de la fuente [f]: conserva categorías y portada y marca como leídos los
+ * capítulos equivalentes. Sirve también cuando la fuente vieja ya no está instalada ([capsOrigen] = null).
+ */
+suspend fun migrarComic(
+    ext: ExtManager, almacen: Almacen, comic: Comic, origenId: Long, capsOrigen: List<CapituloFuente>?, f: FuenteUI, m: MangaFuente,
+) {
+    val motor = requireNotNull(Motor.actual) { "Motor de fuentes no disponible" }
+    check(almacen.comicEnLinea(f.id, m.url) == null) { "Ese manga ya está en tu biblioteca" }
+    val ficha = motor.ficha(f, m)
+    val leidos = ext.migrarLeidos(origenId, capsOrigen, f.id, ficha.capitulos, comic.ultimaPagina)
+    val portada = ficha.detalle.portadaUrl ?: m.portadaUrl
+    check(almacen.migrarEnLinea(comic, f.id, m.url, portada, ficha.capitulos.size, leidos)) { "No se pudo migrar" }
+    // Los capítulos que hay ahora son la base: solo lo que salga después contará como novedad.
+    almacen.registrarCapitulos(f.id, m.url, ficha.detalle.titulo.ifBlank { m.titulo }, portada, ficha.capitulos)
 }

@@ -262,6 +262,8 @@ class TrabajoExtensiones(ctx: Context, params: WorkerParameters) : CoroutineWork
     override suspend fun doWork(): Result {
         Notificaciones.crearCanales(applicationContext)
         runCatching { RevisorExtensiones.revisarSiToca(applicationContext) }
+        // De paso, si hay una versión nueva de la app en GitHub, se avisa con una notificación.
+        runCatching { NuevaVersion.revisarEnSegundoPlano(applicationContext) }
         return Result.success()
     }
 }

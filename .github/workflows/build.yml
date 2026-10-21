@@ -5,6 +5,10 @@ on:
     branches: ['**']
   workflow_dispatch:
 
+# Para publicar cada versión en «Releases» (de ahí la descarga la app para actualizarse).
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -62,3 +66,22 @@ jobs:
         with:
           name: lector-release-apk
           path: app/build/outputs/apk/release/*.apk
+
+      # Cada compilación de las ramas principales se publica como versión. La app mira la última («latest») y, si su
+      # número (lo que va tras el último guion de la etiqueta) es mayor que el suyo, ofrece descargarla e instalarla.
+      - name: Publicar versión
+        if: steps.release.outcome == 'success' && (github.ref_name == 'claude/komikku' || github.ref_name == 'main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          nombre=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          codigo=$((1000 + ${{ github.run_number }}))
+          apk="shiori-${nombre}-${codigo}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          git log -1 --format=%B | grep -v -E "^(Co-Authored-By|Claude-Session):" > notas.txt
+          gh release create "v${nombre}-${codigo}" "$apk" --target "$GITHUB_SHA" \
+            --title "Shiori ${nombre} (compilación ${codigo})" --notes-file notas.txt --latest
+          # Se guardan solo las 10 más recientes.
+          gh release list --limit 100 --json tagName --jq '.[10:][].tagName' | while read -r t; do
+            gh release delete "$t" --yes --cleanup-tag || true
+          done

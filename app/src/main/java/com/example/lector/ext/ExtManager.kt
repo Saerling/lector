@@ -226,6 +226,16 @@ class ExtManager private constructor(private val app: Context) {
         }
 
     /**
+     * Qué extensión trae la fuente [id]: la instalada (aunque no sea de confianza o no cargue) y la que ofrecen tus
+     * listados. Sirve para decir por qué falta una fuente y ofrecer arreglarlo.
+     */
+    fun extensionDeFuente(id: Long): Pair<ExtInstalada?, ExtDisponible?> {
+        val disp = disponibles.firstOrNull { d -> d.fuentes.any { it.id == id } }
+        val inst = instaladas.firstOrNull { i -> fuentesCargadas[i.pkg]?.any { it.id == id } == true || i.pkg == disp?.pkg }
+        return inst to disp
+    }
+
+    /**
      * Fuentes de una extensión que tienen ajustes propios (ConfigurableSource). Vacío mientras la extensión
      * no esté cargada; al terminar de cargar, las pantallas que lo leen se repintan solas.
      */
@@ -612,7 +622,8 @@ class ExtManager private constructor(private val app: Context) {
         }
     }
 
-    private fun abrirSesion(pkg: String, apk: File) {
+    /** Instala un APK con PackageInstaller (extensiones y la propia app al actualizarse). El resultado llega a [progreso]. */
+    fun abrirSesion(pkg: String, apk: File) {
         val instalador = app.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(pkg)

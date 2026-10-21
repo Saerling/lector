@@ -26,6 +26,7 @@ object Notificaciones {
     const val ID_EXTENSIONES = 104
     const val ID_COPIA = 105
     const val ID_DESCARGAS_FIN = 106
+    const val ID_APP = 107
 
     /** Destinos que entiende MainActivity (extra "destino" del intent). */
     const val DESTINO_ACTUALIZACIONES = "actualizaciones"

@@ -45,6 +45,19 @@ probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiy
 probar "https://github.com/keiyoushi/extensions/releases/download/4c8cda7/tachiyomi-all.webtoons-v1.6.2.apk" eu.kanade.tachiyomi.extension.all.webtoons
 probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-all.myreadingmanga-v1.6.0.apk" eu.kanade.tachiyomi.extension.all.myreadingmanga
 probar "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tachiyomi-all.imhentai-v1.6.25.apk" eu.kanade.tachiyomi.extension.all.imhentai
+# ---- «Fuente no disponible»: un manga de una fuente que no existe; debe buscar su título en las demás ----
+adb shell am force-stop com.example.lector; adb logcat -c
+adb shell am start -n com.example.lector/.MainActivity --es destino "probar-huerfano:Gacha infinita"
+sleep 75
+adb exec-out screencap -p > "captura-$ETIQUETA-huerfano.png"
+adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "ui-huerfano.xml" >/dev/null 2>&1
+{
+  echo "===== Fuente no disponible ====="
+  echo "Textos: $(grep -o 'text="[^"]*"' ui-huerfano.xml 2>/dev/null | sed 's/text=//' | grep -v '""' | head -20 | tr '\n' ' ')"
+  adb logcat -d | grep -A30 "FATAL EXCEPTION" | head -30
+  adb shell pidof com.example.lector >/dev/null && echo "La app sigue abierta" || echo "LA APP NO ESTÁ ABIERTA"
+} >> fallos.txt
+
 # ---- Copias de seguridad: restaurar una copia grande de Mihon (600 mangas, 48.000 capítulos) y volver a exportarla ----
 probar_copias() {
   adb shell am force-stop com.example.lector
@@ -88,5 +101,23 @@ probar_copias() {
   } >> fallos.txt
 }
 probar_copias
+
+# ---- Actualización de la app: la última versión de GitHub se lee, se descarga y se instala ENCIMA (sin desinstalar) ----
+adb shell am force-stop com.example.lector; adb logcat -c
+adb shell am start -n com.example.lector/.MainActivity --es destino "probar-version"
+for i in $(seq 1 24); do adb logcat -d | grep -q "LectorPrueba: version" && break; sleep 5; done
+{
+  echo "===== Actualización de la app ====="
+  adb logcat -d | grep "LectorPrueba: version" | tail -1
+  url=$(curl -s https://api.github.com/repos/Saerling/lector/releases/latest | python3 -c "import json,sys;d=json.load(sys.stdin);print(next((a['browser_download_url'] for a in d.get('assets',[]) if a['name'].endswith('.apk')),''))" 2>/dev/null)
+  if [ -n "$url" ]; then
+    curl -sL -o publicada.apk "$url"
+    # -d: si la publicada tuviera un número menor que esta compilación de prueba. Lo que se comprueba es la firma.
+    echo "Instalar la publicada encima de la instalada: $(adb install -r -d publicada.apk 2>&1 | tail -1)"
+    adb shell dumpsys package com.example.lector | grep -m2 -E "versionCode|versionName"
+  else
+    echo "Aún no hay ninguna versión publicada"
+  fi
+} >> fallos.txt
 cat fallos.txt
 exit 0

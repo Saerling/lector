@@ -539,6 +539,19 @@ fun AcercaDeScreen(onBack: () -> Unit) {
     PaginaAjustes("Acerca de", onBack) {
         Box(Modifier.fillMaxWidth().padding(vertical = 20.dp), Alignment.Center) { LogoApp(Modifier.size(120.dp)) }
         Dato2("Versión", version)
+        val hay = com.example.lector.NuevaVersion.disponible
+        FilaAjuste(
+            Icons.Rounded.Refresh,
+            when {
+                com.example.lector.NuevaVersion.comprobando -> "Buscando actualizaciones…"
+                hay != null -> "Actualizar a la ${hay.nombre}"
+                else -> "Buscar actualizaciones"
+            },
+            "Las versiones nuevas se publican en GitHub (Saerling/lector) y se instalan encima de esta",
+        ) {
+            if (hay != null) com.example.lector.NuevaVersion.verDialogo = true
+            else com.example.lector.NuevaVersion.buscarAhora(ctx)
+        }
         LText(
             "Lector de cómics y manga para Android, inspirado en Komikku (fork de Mihon/Tachiyomi). " +
                 "Usa las extensiones de Mihon/Komikku (source-api y red copiados de Komikku, licencia Apache 2.0).",
