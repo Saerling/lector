@@ -563,7 +563,7 @@ private fun NavegarFuente(
                 // Mantener pulsado = añadir o quitar de la biblioteca (como en Komikku).
                 val mod = Modifier.entrada(i % 12).press3D().pressable(onLongClick = { alternarEnBiblioteca(ctx, almacen, f, m) }) { onManga(m) }
                 if (enLista) Row(mod, verticalAlignment = Alignment.CenterVertically) {
-                    ImagenRemota(m.portadaUrl, Modifier.width(52.dp).aspectRatio(2f / 3f).clip(SuaveShape(10.dp)), motor.cabeceras(f))
+                    ImagenRemota(m.portadaUrl, Modifier.width(52.dp).aspectRatio(2f / 3f).clip(SuaveShape(10.dp)), motor.cabeceras(f), fuenteId = f.id)
                     Spacer(Modifier.width(14.dp))
                     LText(m.titulo, LectorType.Body, Modifier.weight(1f), maxLines = 2)
                     if (esta) EnBiblioteca()
@@ -571,7 +571,7 @@ private fun NavegarFuente(
                     Box {
                         ImagenRemota(
                             m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(14.dp)).alpha(if (esta) 0.55f else 1f),
-                            motor.cabeceras(f)
+                            motor.cabeceras(f), fuenteId = f.id
                         )
                         if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                     }
@@ -579,7 +579,7 @@ private fun NavegarFuente(
                     LText(m.titulo, LectorType.Label, maxLines = 2)
                 } else Box(mod.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(14.dp))) {
                     // Compacta (título sobre la portada) o solo portadas.
-                    ImagenRemota(m.portadaUrl, Modifier.fillMaxSize().alpha(if (esta) 0.55f else 1f), motor.cabeceras(f))
+                    ImagenRemota(m.portadaUrl, Modifier.fillMaxSize().alpha(if (esta) 0.55f else 1f), motor.cabeceras(f), fuenteId = f.id)
                     if (vista == com.example.lector.VistaExplorar.COMPACTA) {
                         Box(
                             Modifier.align(Alignment.BottomCenter).fillMaxWidth()

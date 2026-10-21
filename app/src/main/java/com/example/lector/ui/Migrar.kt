@@ -123,7 +123,7 @@ fun MigrarScreen(
                     ImagenRemota(
                         m.portadaUrl,
                         Modifier.width(52.dp).aspectRatio(2f / 3f).clip(SuaveShape(10.dp)),
-                        motor?.cabeceras(f).orEmpty(),
+                        motor?.cabeceras(f).orEmpty(), fuenteId = f.id,
                     )
                     Spacer(Modifier.width(16.dp))
                     LText(m.titulo, LectorType.Body, Modifier.weight(1f), maxLines = 3)

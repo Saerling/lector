@@ -344,7 +344,7 @@ private fun NovedadesFuente(
                         ImagenRemota(
                             m.portadaUrl,
                             Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)),
-                            motor.cabeceras(f)
+                            motor.cabeceras(f), fuenteId = f.id
                         )
                         Spacer(Modifier.height(6.dp))
                         LText(m.titulo, LectorType.Body, maxLines = 3)
@@ -504,7 +504,9 @@ private fun ExtensionesTab(
                 PillButton("Confiar en todas", Icons.Rounded.Check, { confirmarTodas = true })
             }
         }
-        LazyColumn(contentPadding = PaddingValues(bottom = 190.dp)) {
+        val estadoLista = androidx.compose.foundation.lazy.rememberLazyListState()
+        Box(Modifier.weight(1f)) {
+        LazyColumn(state = estadoLista, contentPadding = PaddingValues(bottom = 190.dp)) {
             if (ext.repos.none { it.activo }) {
                 item { Aviso("No tienes ningún listado de extensiones activo.", "Añadir listado", onRepos) }
             }
@@ -515,18 +517,22 @@ private fun ExtensionesTab(
                     }
                 }
             }
+            // contentType = nombre de la sección: es lo que enseña la burbuja de la barra de desplazamiento.
             if (pendientes.isNotEmpty()) {
-                item { TituloSeccion("Actualizaciones pendientes (${pendientes.size})") }
-                items(pendientes) { FilaInstalada(it, ext, onDetalle, onConfiar) }
+                item(contentType = "Actualizaciones") { TituloSeccion("Actualizaciones pendientes (${pendientes.size})") }
+                items(pendientes, contentType = { "Actualizaciones" }) { FilaInstalada(it, ext, onDetalle, onConfiar) }
             }
             if (alDia.isNotEmpty()) {
-                item { TituloSeccion("Instalado") }
-                items(alDia) { FilaInstalada(it, ext, onDetalle, onConfiar) }
+                item(contentType = "Instalado") { TituloSeccion("Instalado") }
+                items(alDia, contentType = { "Instalado" }) { FilaInstalada(it, ext, onDetalle, onConfiar) }
             }
             disp.forEach { (lang, lista) ->
-                item { TituloSeccion(nombreIdioma(lang)) }
-                items(lista) { FilaDisponible(it, ext) }
+                val n = nombreIdioma(lang)
+                item(contentType = n) { TituloSeccion(n) }
+                items(lista, contentType = { n }) { FilaDisponible(it, ext) }
             }
+        }
+        BarraDesplazamiento(estadoLista)
         }
     }
 }
@@ -754,8 +760,9 @@ object Imagenes {
     }
 
     /** Bytes originales de una imagen (de la caché en disco o de la red), para compartirla o guardarla. */
-    suspend fun bytes(url: String, cabeceras: Map<String, String> = emptyMap()): ByteArray? = kotlinx.coroutines.withContext(Dispatchers.IO) {
+    suspend fun bytes(url: String, cabeceras: Map<String, String> = emptyMap(), fuenteId: Long? = null): ByteArray? = kotlinx.coroutines.withContext(Dispatchers.IO) {
         archivoDe(url)?.takeIf { it.exists() && it.length() > 0 }?.let { f -> return@withContext runCatching { f.readBytes() }.getOrNull() }
+        descargar(url, cabeceras, fuenteId)?.let { return@withContext it }
         runCatching {
             val c = URL(url).openConnection() as HttpURLConnection
             try {
@@ -779,13 +786,13 @@ object Imagenes {
     /** Devuelve la imagen si ya está en memoria (sin esperar), para pintarla en el primer fotograma. */
     fun enMemoria(url: String): ImageBitmap? = memoria.get(url)
 
-    suspend fun cargar(url: String, cabeceras: Map<String, String> = emptyMap(), maxLado: Int = 512): ImageBitmap? {
+    suspend fun cargar(url: String, cabeceras: Map<String, String> = emptyMap(), maxLado: Int = 512, fuenteId: Long? = null): ImageBitmap? {
         memoria.get(url)?.let { return it }
         val tarea = synchronized(enVuelo) {
             enVuelo.getOrPut(url) {
                 scope.async {
                     try {
-                        limite.withPermit { obtener(url, cabeceras, maxLado) }
+                        limite.withPermit { obtener(url, cabeceras, maxLado, fuenteId) }
                     } finally {
                         synchronized(enVuelo) { enVuelo.remove(url) }
                     }
@@ -802,7 +809,34 @@ object Imagenes {
         return File(carpeta, h)
     }
 
-    private fun obtener(url: String, cabeceras: Map<String, String>, maxLado: Int): ImageBitmap? {
+    /** Bytes de una imagen de internet: cliente de la fuente → cliente general → conexión simple. */
+    private suspend fun descargar(url: String, cabeceras: Map<String, String>, fuenteId: Long?): ByteArray? {
+        val motor = com.example.lector.ext.Motor.actual
+        if (fuenteId != null && fuenteId != 0L && motor != null) {
+            runCatching { motor.bytesImagen(fuenteId, url) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        motor?.clienteGeneral()?.let { cliente ->
+            runCatching {
+                val b = okhttp3.Request.Builder().url(url)
+                cabeceras.forEach { (k, v) -> b.header(k, v) }
+                cliente.newCall(b.build()).execute().use { r -> if (r.isSuccessful) r.body.bytes() else null }
+            }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        return runCatching {
+            val c = URL(url).openConnection() as HttpURLConnection
+            try {
+                c.connectTimeout = 15_000
+                c.readTimeout = 30_000
+                c.setRequestProperty("User-Agent", eu.kanade.tachiyomi.network.NetworkHelper.DEFAULT_USER_AGENT)
+                cabeceras.forEach { (k, v) -> c.setRequestProperty(k, v) }
+                if (c.responseCode !in 200..299) null else c.inputStream.use { it.readBytes() }
+            } finally {
+                c.disconnect()
+            }
+        }.getOrNull()
+    }
+
+    private suspend fun obtener(url: String, cabeceras: Map<String, String>, maxLado: Int, fuenteId: Long?): ImageBitmap? {
         val archivo = archivoDe(url)
         // 1) Disco.
         if (archivo != null && archivo.exists() && archivo.length() > 0) {
@@ -815,19 +849,8 @@ object Imagenes {
             }
             archivo.delete() // archivo dañado
         }
-        // 2) Red.
-        val bytes = runCatching {
-            val c = URL(url).openConnection() as HttpURLConnection
-            try {
-                c.connectTimeout = 15_000
-                c.readTimeout = 30_000
-                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) Lector/1.0")
-                cabeceras.forEach { (k, v) -> c.setRequestProperty(k, v) }
-                if (c.responseCode !in 200..299) null else c.inputStream.use { it.readBytes() }
-            } finally {
-                c.disconnect()
-            }
-        }.getOrNull() ?: return null
+        // 2) Red: con el cliente de la fuente si se sabe cuál es; si no, con el cliente general (cookies + Cloudflare).
+        val bytes = descargar(url, cabeceras, fuenteId) ?: return null
         val img = decodificar(bytes, maxLado) ?: return null
         if (archivo != null) {
             runCatching {
@@ -857,14 +880,16 @@ fun ImagenRemota(
     onCargada: ((ImageBitmap) -> Unit)? = null,
     escala: ContentScale = ContentScale.Crop,
     maxLado: Int = 512,
+    // Fuente de la que viene la imagen: se descarga con su cliente (cookies, Cloudflare, Referer…).
+    fuenteId: Long? = null,
 ) {
     val ctx = LocalContext.current
     remember { Imagenes.iniciar(ctx) }
     // Si ya estaba en memoria se pinta en el primer fotograma, sin parpadeo ni fundido al hacer scroll.
     var img by remember(url) { mutableStateOf(url?.takeIf { it.isNotBlank() }?.let { Imagenes.enMemoria(it) }) }
-    LaunchedEffect(url, cabeceras) {
+    LaunchedEffect(url, cabeceras, fuenteId) {
         if (!url.isNullOrBlank()) {
-            val cargada = img ?: Imagenes.cargar(url, cabeceras, maxLado)
+            val cargada = img ?: Imagenes.cargar(url, cabeceras, maxLado, fuenteId)
             img = cargada
             if (cargada != null) onCargada?.invoke(cargada)
         }

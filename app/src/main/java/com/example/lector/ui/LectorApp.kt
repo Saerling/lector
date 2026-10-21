@@ -141,6 +141,21 @@ fun Inicio(
                         inf
                     }
                 }
+                // Prueba de un listado de extensiones: lo mismo que «Añadir listado», sin guardarlo.
+                if (destino?.startsWith("probar-repo:") == true && depurable) {
+                    val entrada = destino.removePrefix("probar-repo:")
+                    kotlin.concurrent.thread {
+                        val c = com.example.lector.ext.ExtRepos.candidatos(entrada)
+                        for (u in c) {
+                            val r = runCatching { com.example.lector.ext.ExtRepos.extensiones(com.example.lector.ext.ExtRepos.leerTienda(u)) }
+                            android.util.Log.i(
+                                "LectorPrueba",
+                                "repo $u -> " + r.fold({ l -> "ok ${l.size} extensiones, p. ej. ${l.firstOrNull()?.apkUrl}" }, { e -> "error ${e.message ?: e.javaClass.simpleName}" }),
+                            )
+                            if (r.isSuccess) break
+                        }
+                    }
+                }
                 if (destino == "probar-copia" && depurable) {
                     com.example.lector.TareaCopia.lanzar(contexto, "Creando copia .tachibk") {
                         val t0 = android.os.SystemClock.elapsedRealtime()
@@ -435,7 +450,7 @@ fun Inicio(
                             e.titulo, e.capNombre.trim().trimEnd(':').trim().ifBlank { "Seguir leyendo" },
                             onClick = { abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, null) },
                             progreso = if (e.total > 0) ((e.pagina + 1).toFloat() / e.total).coerceIn(0f, 1f) else null,
-                        ) { m -> ImagenRemota(e.portadaUrl, m.clip(CircleShape), cabeceras) }
+                        ) { m -> ImagenRemota(e.portadaUrl, m.clip(CircleShape), cabeceras, fuenteId = e.fuenteId) }
                         Spacer(Modifier.height(8.dp))
                     } else if (ultimo != null) {
                         MiniReader(ultimo, almacen, onClick = { abrirDetalle(ultimo) })

@@ -1,5 +1,13 @@
 package com.example.lector.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -204,4 +212,72 @@ fun HojaLector(onCerrar: () -> Unit, content: @Composable ColumnScope.() -> Unit
         },
         content = content,
     )
+}
+
+/**
+ * Barra de desplazamiento rápido para listas largas (se pone encima de la lista, ocupando lo mismo): aparece al
+ * moverse, y su «pulgar» se puede arrastrar para saltar por la lista. Mientras se arrastra enseña una burbuja con la
+ * sección: el `contentType` del primer elemento visible, si es un texto. Solo la franja de la derecha recibe toques.
+ */
+@Composable
+fun BarraDesplazamiento(estado: androidx.compose.foundation.lazy.LazyListState, modifier: Modifier = Modifier) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var arrastrando by remember { mutableStateOf(false) }
+    var alto by remember { mutableIntStateOf(1) }
+    val total by remember { androidx.compose.runtime.derivedStateOf { estado.layoutInfo.totalItemsCount } }
+    val visibles by remember { androidx.compose.runtime.derivedStateOf { estado.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1) } }
+    val fraccion by remember {
+        androidx.compose.runtime.derivedStateOf {
+            val t = estado.layoutInfo.totalItemsCount - estado.layoutInfo.visibleItemsInfo.size
+            if (t <= 0) 0f else (estado.firstVisibleItemIndex.toFloat() / t).coerceIn(0f, 1f)
+        }
+    }
+    val seccion by remember {
+        androidx.compose.runtime.derivedStateOf { estado.layoutInfo.visibleItemsInfo.firstOrNull()?.contentType as? String }
+    }
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(estado.isScrollInProgress, arrastrando) {
+        if (estado.isScrollInProgress || arrastrando) visible = true
+        else { kotlinx.coroutines.delay(1500); visible = false }
+    }
+    if (total <= visibles * 2) return // lista corta: no hace falta
+    val opacidad by androidx.compose.animation.core.animateFloatAsState(if (visible) 1f else 0f, tween(250), label = "barra")
+    val ancho by androidx.compose.animation.core.animateDpAsState(if (arrastrando) 10.dp else 5.dp, label = "anchoBarra")
+    val densidad = androidx.compose.ui.platform.LocalDensity.current
+    val altoPulgar = 56.dp
+    val y = with(densidad) { ((alto - altoPulgar.toPx()).coerceAtLeast(0f) * fraccion).toDp() }
+
+    Box(modifier.fillMaxSize().graphicsLayer { alpha = opacidad }) {
+        // Franja que recibe el arrastre (solo esto tapa la lista).
+        Box(
+            Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(36.dp)
+                .onSizeChanged { alto = it.height }
+                .pointerInput(total, visible) {
+                    if (!visible) return@pointerInput
+                    fun ir(py: Float) {
+                        val h = altoPulgar.toPx()
+                        val f = ((py - h / 2) / (alto - h).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                        val destino = (f * (total - visibles)).toInt().coerceIn(0, (total - 1).coerceAtLeast(0))
+                        scope.launch { estado.scrollToItem(destino) }
+                    }
+                    detectVerticalDragGestures(
+                        onDragStart = { o -> arrastrando = true; ir(o.y) },
+                        onDragEnd = { arrastrando = false },
+                        onDragCancel = { arrastrando = false },
+                    ) { cambio, _ -> cambio.consume(); ir(cambio.position.y) }
+                },
+        ) {
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(end = 6.dp).offset(y = y).width(ancho).height(altoPulgar)
+                    .clip(CircleShape).background(if (arrastrando) LectorColors.Text else LectorColors.Muted.copy(alpha = 0.8f)),
+            )
+        }
+        val s = seccion
+        if (arrastrando && s != null) {
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(end = 44.dp).offset(y = y + 8.dp)
+                    .clip(CircleShape).background(LectorColors.Aviso).padding(horizontal = 16.dp, vertical = 9.dp),
+            ) { LText(s, LectorType.Body, maxLines = 1) }
+        }
+    }
 }

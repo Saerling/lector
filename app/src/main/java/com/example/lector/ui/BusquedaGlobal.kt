@@ -125,7 +125,7 @@ fun BusquedaGlobalScreen(
                                         }) { onManga(f, m) },
                                     ) {
                                         Box {
-                                            ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), motor.cabeceras(f))
+                                            ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), motor.cabeceras(f), fuenteId = f.id)
                                             if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                                         }
                                         Spacer(Modifier.height(6.dp))

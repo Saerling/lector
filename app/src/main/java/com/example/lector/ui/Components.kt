@@ -81,7 +81,7 @@ fun ComicCover(comic: Comic, almacen: Almacen, modifier: Modifier = Modifier, sh
                 Image(bitmap = portada, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             // Manga en línea sin portada guardada (añadido con pulsación larga, copia restaurada…): la de la fuente.
             comic.enLinea && !comic.portadaUrl.isNullOrBlank() ->
-                ImagenRemota(comic.portadaUrl, Modifier.fillMaxSize(), rememberCabeceras(comic.fuenteId))
+                ImagenRemota(comic.portadaUrl, Modifier.fillMaxSize(), rememberCabeceras(comic.fuenteId), fuenteId = comic.fuenteId)
             else -> LText(comic.titulo.take(1).uppercase(), LectorType.Display, color = LectorColors.Muted)
         }
     }

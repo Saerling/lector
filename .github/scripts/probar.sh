@@ -35,6 +35,11 @@ probar() {
     adb shell pidof com.example.lector >/dev/null || echo "LA APP SE CERRÓ AL DESPLAZAR"
   } >> fallos.txt
 }
+# Listado de extensiones con "index_v2": null en su repo.json (antes fallaba con «no protocol: null»).
+adb shell am force-stop com.example.lector; adb logcat -c
+adb shell am start -n com.example.lector/.MainActivity --es destino "probar-repo:https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/repo.json"
+sleep 25
+{ echo "===== listado Nyora ====="; adb logcat -d | grep "LectorPrueba" | tail -5; } >> fallos.txt
 probar "https://github.com/keiyoushi/extensions/releases/download/d0c0864/tachiyomi-es.cerberusseries-v1.6.1.apk" eu.kanade.tachiyomi.extension.es.cerberusseries
 probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-es.anzmanga-v1.6.0.apk" eu.kanade.tachiyomi.extension.es.anzmanga
 probar "https://github.com/keiyoushi/extensions/releases/download/4c8cda7/tachiyomi-all.webtoons-v1.6.2.apk" eu.kanade.tachiyomi.extension.all.webtoons

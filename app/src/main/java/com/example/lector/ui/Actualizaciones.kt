@@ -323,7 +323,7 @@ fun ActualizacionesScreen(
 @Composable
 private fun PortadaActualizacion(a: ActualizacionCap, comic: Comic?, almacen: Almacen, modifier: Modifier) {
     if (comic != null) ComicCover(comic, almacen, modifier, SuaveShape(8.dp))
-    else ImagenRemota(a.portadaUrl, modifier.clip(SuaveShape(8.dp)), rememberCabeceras(a.fuenteId))
+    else ImagenRemota(a.portadaUrl, modifier.clip(SuaveShape(8.dp)), rememberCabeceras(a.fuenteId), fuenteId = a.fuenteId)
 }
 
 @Composable

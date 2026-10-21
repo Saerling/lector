@@ -335,7 +335,7 @@ fun FichaMangaScreen(
                     fi?.let { "${it.capitulos.size} capítulos" },
                 )
                 CabeceraFicha(
-                    portada = fi?.detalle?.portadaUrl ?: manga.portadaUrl, cabeceras = motor.cabeceras(f),
+                    fuenteId = f.id, portada = fi?.detalle?.portadaUrl ?: manga.portadaUrl, cabeceras = motor.cabeceras(f),
                     comicLocal = comic?.takeIf { it.portadaPropia }, almacen = almacen,
                     titulo = tituloFicha, lineas = lineas, acento = acento, fondo = fondoAnim,
                     scroll = scrollPx, portadaLista = portadaLista,
@@ -369,7 +369,7 @@ fun FichaMangaScreen(
                                     Row(Modifier.padding(22.dp), verticalAlignment = Alignment.CenterVertically) {
                                         ImagenRemota(
                                             fi.detalle.portadaUrl ?: manga.portadaUrl,
-                                            Modifier.size(64.dp).clip(SuaveShape(16.dp)), motor.cabeceras(f),
+                                            Modifier.size(64.dp).clip(SuaveShape(16.dp)), motor.cabeceras(f), fuenteId = f.id,
                                         )
                                         Spacer(Modifier.width(14.dp))
                                         Column(Modifier.weight(1f)) {
@@ -752,7 +752,7 @@ fun FichaMangaScreen(
     )
 
     if (verPortada) VisorPortada(
-        url = fi?.detalle?.portadaUrl ?: manga.portadaUrl, cabeceras = motor.cabeceras(f), titulo = tituloFicha,
+        fuenteId = f.id, url = fi?.detalle?.portadaUrl ?: manga.portadaUrl, cabeceras = motor.cabeceras(f), titulo = tituloFicha,
         comic = comic, almacen = almacen, onCerrar = { verPortada = false },
     )
 }
@@ -806,6 +806,7 @@ private fun DialogoEditarInfo(comic: Comic, almacen: Almacen, alRestablecer: () 
 @Composable
 private fun VisorPortada(
     url: String?, cabeceras: Map<String, String>, titulo: String, comic: Comic?, almacen: Almacen, onCerrar: () -> Unit,
+    fuenteId: Long? = null,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -820,14 +821,14 @@ private fun VisorPortada(
     }
     suspend fun bytes(): ByteArray? =
         if (comic?.portadaPropia == true) withContext(Dispatchers.IO) { runCatching { almacen.portadaDe(comic.id).readBytes() }.getOrNull() }
-        else url?.let { Imagenes.bytes(it, cabeceras) }
+        else url?.let { Imagenes.bytes(it, cabeceras, fuenteId) }
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onCerrar,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Box(Modifier.fillMaxSize().background(Color(0xF0000000)).pointerInput(Unit) { detectTapGestures { onCerrar() } }) {
             if (local != null) Image(local, null, Modifier.fillMaxSize().padding(24.dp), contentScale = ContentScale.Fit)
-            else ImagenRemota(url, Modifier.fillMaxSize().padding(24.dp), cabeceras, escala = ContentScale.Fit, maxLado = 1400)
+            else ImagenRemota(url, Modifier.fillMaxSize().padding(24.dp), cabeceras, escala = ContentScale.Fit, maxLado = 1400, fuenteId = fuenteId)
             Row(
                 Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp).clip(CircleShape)
                     .background(Color(0xCC1A1A1C)).padding(horizontal = 12.dp, vertical = 6.dp),
@@ -890,7 +891,7 @@ private fun PildoraClara(texto: String, icono: ImageVector, onClick: () -> Unit)
 @Composable
 private fun CabeceraFicha(
     portada: String?, cabeceras: Map<String, String>, comicLocal: com.example.lector.Comic?, almacen: Almacen,
-    titulo: String, lineas: List<String>,
+    titulo: String, lineas: List<String>, fuenteId: Long? = null,
     acento: Color, fondo: Color, scroll: () -> Float, portadaLista: Boolean,
     onCargada: (ImageBitmap) -> Unit,
     enBiblioteca: Boolean, textoPildora: String,
@@ -908,7 +909,7 @@ private fun CabeceraFicha(
                 translationY = scroll() * 0.5f
                 alpha = aparece * (1f - (scroll() / 1100f).coerceIn(0f, 1f) * 0.8f)
             },
-            cabeceras, onCargada,
+            cabeceras, onCargada, fuenteId = fuenteId,
         )
         // Oscurece un poco arriba (barra de estado) y funde la portada con el fondo por abajo.
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x66000000), 0.22f to Color.Transparent)))
@@ -923,7 +924,7 @@ private fun CabeceraFicha(
         ) {
             val avatar = Modifier.size(96.dp).pressable(onPortada).clip(CircleShape)
             if (comicLocal != null) ComicCover(comicLocal, almacen, avatar, CircleShape)
-            else ImagenRemota(portada, avatar, cabeceras)
+            else ImagenRemota(portada, avatar, cabeceras, fuenteId = fuenteId)
             Spacer(Modifier.height(14.dp))
             LText(
                 titulo, LectorType.Display.copy(fontSize = 44.sp, lineHeight = 46.sp, letterSpacing = (-1.5).sp),

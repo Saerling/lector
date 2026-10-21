@@ -1,93 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Agujero negro en blanco y negro (estilo Gargantua): halo de luz pegado al horizonte, arco de luz curvada por encima y
+  el disco de acreción cruzando por delante. El horizonte (radio 18) NO se rellena: el fondo del icono ya es negro, y así
+  la animación de arranque puede «abrir» el agujero y enseñar la app a través de él. Cabe en el círculo seguro (r 33).
+  LogoApp (Arranque.kt) depende de ese radio 18 de 108.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Disco de acreción inclinado (queda detrás del horizonte) -->
-    <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:rotation="-18">
-        <path
-            android:pathData="M23,54a31,8 0 1 0 62,0a31,8 0 1 0 -62,0z"
-            android:strokeWidth="2.6">
-            <aapt:attr name="android:strokeColor">
-                <gradient
-                    android:startX="23"
-                    android:startY="54"
-                    android:endX="85"
-                    android:endY="54"
-                    android:type="linear">
-                    <item android:offset="0.0" android:color="#FF4DA3FF" />
-                    <item android:offset="0.5" android:color="#FFC9A8FF" />
-                    <item android:offset="1.0" android:color="#FF7B3FF2" />
-                </gradient>
-            </aapt:attr>
-        </path>
-    </group>
-    <!-- Horizonte de sucesos -->
-    <path
-        android:fillColor="#FF000000"
-        android:pathData="M35,54a19,19 0 1 0 38,0a19,19 0 1 0 -38,0z" />
-    <!-- Anillo de fotones -->
-    <path
-        android:pathData="M33.5,54a20.5,20.5 0 1 0 41,0a20.5,20.5 0 1 0 -41,0z"
-        android:strokeWidth="2.4">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:startX="34"
-                android:startY="34"
-                android:endX="74"
-                android:endY="74"
-                android:type="linear">
-                <item android:offset="0.0" android:color="#FF8FD0FF" />
-                <item android:offset="0.5" android:color="#FFC9A8FF" />
-                <item android:offset="1.0" android:color="#FF8A5CFF" />
+    <!-- Halo -->
+    <path android:pathData="M21,54a33,33 0 1 0 66,0a33,33 0 1 0 -66,0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="54" android:centerY="54" android:gradientRadius="33">
+                <item android:offset="0" android:color="#00FFFFFF" />
+                <item android:offset="0.53" android:color="#00FFFFFF" />
+                <item android:offset="0.545" android:color="#FFFFFFFF" />
+                <item android:offset="0.6" android:color="#D9FFFFFF" />
+                <item android:offset="0.7" android:color="#59FFFFFF" />
+                <item android:offset="0.85" android:color="#14FFFFFF" />
+                <item android:offset="1" android:color="#00FFFFFF" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- Lente gravitacional: luz del disco curvada sobre y bajo el horizonte -->
-    <path
-        android:pathData="M32.35,41.5A25,25 0 0 1 75.65,41.5"
-        android:strokeColor="#FFB9C8FF"
-        android:strokeWidth="2.2"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M32.35,66.5A25,25 0 0 0 75.65,66.5"
-        android:strokeColor="#B08A5CFF"
-        android:strokeWidth="1.6"
-        android:strokeLineCap="round" />
-    <!-- Kana お (segunda sílaba de shiori) -->
-    <group
-        android:pivotX="0"
-        android:pivotY="0"
-        android:scaleX="0.56"
-        android:scaleY="0.56"
-        android:translateX="42.5"
-        android:translateY="41.5">
-        <path
-            android:pathData="M6,16C12,15.5 19,15 26,14"
-            android:strokeColor="#FFA9DCFF"
-            android:strokeWidth="6"
-            android:strokeLineCap="round" />
-        <path
-            android:pathData="M17,4L17,30C17,43 4,43 4,33C4,24 14,25 27,31"
-            android:strokeColor="#FFA9DCFF"
-            android:strokeWidth="6"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M28,10C35,12 38,18 36,28C34,38 38,43 43,39"
-            android:strokeColor="#FFA9DCFF"
-            android:strokeWidth="6"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M33,2L37,6"
-            android:strokeColor="#FFA9DCFF"
-            android:strokeWidth="6"
-            android:strokeLineCap="round" />
+    <!-- Luz del disco curvada por encima del agujero -->
+    <path android:pathData="M34.5,54A19.5,21 0 0 1 73.5,54" android:strokeWidth="4.5">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="0" android:startY="30" android:endX="0" android:endY="60">
+                <item android:offset="0" android:color="#F2FFFFFF" />
+                <item android:offset="1" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Disco de acreción por delante -->
+    <group android:pivotX="54" android:pivotY="54" android:rotation="-11">
+    <path android:pathData="M21,54a33,5.5 0 1 0 66,0a33,5.5 0 1 0 -66,0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="21" android:startY="0" android:endX="87" android:endY="0">
+                <item android:offset="0" android:color="#00FFFFFF" />
+                <item android:offset="0.5" android:color="#38FFFFFF" />
+                <item android:offset="1" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M21,54a33,1.9 0 1 0 66,0a33,1.9 0 1 0 -66,0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="21" android:startY="0" android:endX="87" android:endY="0">
+                <item android:offset="0" android:color="#00FFFFFF" />
+                <item android:offset="0.2" android:color="#BFFFFFFF" />
+                <item android:offset="0.42" android:color="#8CFFFFFF" />
+                <item android:offset="0.62" android:color="#CCFFFFFF" />
+                <item android:offset="0.8" android:color="#FFFFFFFF" />
+                <item android:offset="1" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
     </group>
 </vector>

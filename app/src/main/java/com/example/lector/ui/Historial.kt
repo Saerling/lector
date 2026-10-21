@@ -176,7 +176,7 @@ private fun FilaHistorial(item: ItemHistorial, almacen: Almacen, hora: String, a
             is ItemHistorial.Local -> ComicCover(item.comic, almacen, portada, SuaveShape(10.dp))
             is ItemHistorial.EnLinea ->
                 if (item.comic != null) ComicCover(item.comic, almacen, portada, SuaveShape(10.dp))
-                else ImagenRemota(item.entrada.portadaUrl, portada.clip(SuaveShape(10.dp)), rememberCabeceras(item.entrada.fuenteId))
+                else ImagenRemota(item.entrada.portadaUrl, portada.clip(SuaveShape(10.dp)), rememberCabeceras(item.entrada.fuenteId), fuenteId = item.entrada.fuenteId)
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {

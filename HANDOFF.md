@@ -474,6 +474,20 @@ Cierre por `OutOfMemoryError` en un móvil con >6.000 mangas. Cambios:
 - Explorar → Extensiones: «Confiar en todas» (con confirmación).
 - Biblioteca: recuerda la última pestaña (`Almacen.ultimaPestanaBiblioteca`, por la clave del grupo).
 
+## 2v. PASO 22 — Listados, portadas, barra rápida, icono y arranque (2026-10-20, versión 0.8)
+- «No se pudo leer el listado (no protocol: null)» con repo.json que traen `"index_v2": null` (p. ej. Nyora):
+  `optString` de org.json devuelve el texto "null" para un null; ahora `ExtRepos` usa `txt()` (null = vacío).
+  Prueba en el emulador: destino `probar-repo:<url>` (solo depurable) y paso en `probar.sh`.
+- Portadas que no salían (MyReadingManga y otras con Cloudflare/cookies): `Imagenes` descarga primero con el
+  cliente OkHttp de la propia fuente (`MotorFuentes.bytesImagen`: sus cabeceras, cookies e interceptores), luego
+  con el cliente general de la app y por último con HttpURLConnection. Todas las `ImagenRemota` pasan `fuenteId`.
+- `BarraDesplazamiento` (Comunes.kt): pulgar arrastrable para listas largas, con burbuja de sección (el
+  `contentType` del primer elemento visible). Puesta en Explorar → Extensiones (secciones = idioma).
+- Icono nuevo: agujero negro en blanco y negro (halo, arco curvado por encima y disco por delante) sobre fondo negro;
+  el horizonte (r 17,6 de 108) es transparente. Monocromo a juego. `LogoApp(conFondo)` le pone el disco negro debajo.
+- Arranque: el primer fotograma es igual que la pantalla de inicio del sistema (sin parpadeo); el agujero «inspira» y
+  se abre: el icono crece acelerando y la app aparece por dentro del horizonte (máscara con BlendMode.Clear).
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

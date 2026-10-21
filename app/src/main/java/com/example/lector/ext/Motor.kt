@@ -67,6 +67,16 @@ interface MotorFuentes {
     /** Dirección web de un manga en el sitio de la fuente (null si no se sabe). */
     fun urlManga(fuente: FuenteUI, manga: MangaFuente): String? = null
 
+    /**
+     * Descarga una imagen (una portada) con el cliente y las cabeceras de la PROPIA fuente, como Mihon/Komikku: así
+     * lleva sus cookies (Cloudflare), su User-Agent, su Referer y sus interceptores. Carga la extensión si hace falta.
+     * null si no se puede.
+     */
+    suspend fun bytesImagen(fuenteId: Long, url: String): ByteArray? = null
+
+    /** Cliente HTTP general de la app (cookies compartidas con el WebView, Cloudflare, DNS sobre HTTPS). */
+    fun clienteGeneral(): okhttp3.OkHttpClient? = null
+
     /** Cabeceras HTTP (Referer, User-Agent...) para cargar las portadas de esta fuente. */
     fun cabeceras(fuente: FuenteUI): Map<String, String> = emptyMap()
 

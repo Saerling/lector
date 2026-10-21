@@ -1,16 +1,18 @@
 package com.example.lector.ui
 
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -24,70 +26,78 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.lector.R
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /** Tamaño y sitio del icono fijo de la esquina (arriba a la izquierda, en Inicio). */
 val LogoEsquina: Dp = 56.dp
 val LogoEsquinaInicio: Dp = 14.dp
 val LogoEsquinaArriba: Dp = 8.dp
 
-/** El icono de la app (la capa frontal del icono adaptable). */
-@Composable
-fun LogoApp(modifier: Modifier = Modifier) {
-    Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = "Shiori", modifier = modifier)
-}
+/** Radio del horizonte de sucesos dentro del icono (en unidades del lienzo de 108 del vector). */
+private const val HORIZONTE = 17.6f / 108f
 
 /**
- * Animación de arranque (como la de musicfy): pantalla negra con el icono grande en el centro; tras un instante el
- * icono se encoge y vuela a la esquina de arriba a la izquierda mientras la negrura se desvanece y aparece la app.
+ * El icono de la app (la capa frontal del icono adaptable: el agujero negro). Con [conFondo] lleva debajo su disco
+ * negro, para que el agujero se vea igual sobre el tema claro; sin él, el horizonte es transparente.
+ */
+@Composable
+fun LogoApp(modifier: Modifier = Modifier, conFondo: Boolean = true) {
+    Box(modifier) {
+        if (conFondo) Canvas(Modifier.matchParentSize()) { drawCircle(Color.Black, radius = size.minDimension * 0.33f) }
+        Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = "Shiori", modifier = Modifier.matchParentSize())
+    }
+}
+
+/** Empieza despacio y acelera: la sensación de caer dentro. */
+private val Caida = CubicBezierEasing(0.55f, 0f, 0.8f, 0.2f)
+
+/**
+ * Animación de arranque. El primer fotograma es idéntico a la pantalla de inicio del sistema (Android 12+: fondo negro
+ * y el mismo icono, del mismo tamaño y en el mismo sitio), así que el paso de una a otra no se nota. Después el
+ * agujero negro «inspira» un instante y se abre: el icono crece acelerando y por dentro del horizonte aparece la
+ * app, como si se cayera dentro. El halo y el disco se apagan mientras pasan de largo.
  */
 @Composable
 fun ArranqueOverlay(alTerminar: () -> Unit) {
     val densidad = LocalDensity.current
-    val entrada = remember { Animatable(0f) }
-    val mover = remember { Animatable(0f) }
-    val fondo = remember { Animatable(1f) }
-    val brillo = remember { Animatable(1f) }
+    val inspirar = remember { Animatable(1f) }
+    val caer = remember { Animatable(0f) }
 
-    LaunchedEffect(Unit) {
-        entrada.animateTo(1f, tween(200, easing = EnfasisEasing))
-        delay(160)
-        coroutineScope {
-            launch { mover.animateTo(1f, tween(560, easing = EnfasisEasing)) }
-            launch { delay(80); fondo.animateTo(0f, tween(440)) }
-            launch { delay(460); brillo.animateTo(0f, tween(120)) }
-        }
-        alTerminar()
-    }
-
-    val arribaPx = WindowInsets.statusBars.getTop(densidad).toFloat()
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val ancho = constraints.maxWidth.toFloat()
         val alto = constraints.maxHeight.toFloat()
-        val grande = with(densidad) { 288.dp.toPx() }
-        val chico = with(densidad) { LogoEsquina.toPx() }
-        val destinoX = with(densidad) { LogoEsquinaInicio.toPx() } + chico / 2f
-        val destinoY = arribaPx + with(densidad) { LogoEsquinaArriba.toPx() } + chico / 2f
+        val lado = with(densidad) { 288.dp.toPx() }
+        val radioHorizonte = lado * HORIZONTE
+        // Escala con la que el horizonte cubre la pantalla entera (desde el centro hasta la esquina más lejana).
+        val escalaFinal = (kotlin.math.hypot(ancho, alto) / 2f) / radioHorizonte * 1.04f
 
-        // Mientras dura, el fondo negro se come los toques (la app de debajo aún no debe responder).
-        Box(
+        LaunchedEffect(Unit) {
+            delay(90)
+            inspirar.animateTo(0.94f, tween(260, easing = EnfasisEasing))
+            caer.animateTo(1f, tween(640, easing = Caida))
+            alTerminar()
+        }
+
+        val escala: () -> Float = { inspirar.value * (1f + (escalaFinal - 1f) * caer.value) }
+
+        // Negro con un agujero (transparente) del tamaño del horizonte: a través de él se ve la app.
+        Canvas(
             Modifier.fillMaxSize()
-                .graphicsLayer { alpha = fondo.value }
-                .background(Color.Black)
-                .pointerInput(Unit) { detectTapGestures { } },
-        )
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .pointerInput(Unit) { detectTapGestures { } }, // mientras dura, nada de toques a la app de debajo
+        ) {
+            drawRect(Color.Black)
+            if (caer.value > 0f) drawCircle(Color.Transparent, radius = radioHorizonte * escala(), center = Offset(ancho / 2f, alto / 2f), blendMode = BlendMode.Clear)
+        }
         LogoApp(
             Modifier.size(288.dp).align(Alignment.Center).graphicsLayer {
-                val m = mover.value
-                val escala = (0.9f + 0.1f * entrada.value) * (1f + (chico / grande - 1f) * m)
-                scaleX = escala
-                scaleY = escala
-                translationX = (destinoX - ancho / 2f) * m
-                translationY = (destinoY - alto / 2f) * m
-                alpha = entrada.value * brillo.value
+                val e = escala()
+                scaleX = e
+                scaleY = e
+                // La luz se apaga según pasa de largo (ya casi nada cuando el icono es 5 veces mayor).
+                alpha = (1f - (e - 1.6f) / 3.4f).coerceIn(0f, 1f)
             },
+            conFondo = false,
         )
     }
 }

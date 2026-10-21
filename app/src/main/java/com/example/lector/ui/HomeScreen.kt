@@ -107,7 +107,7 @@ fun HomeScreen(
             ) { LText("Inicio", LectorType.Display) }
         }
 
-        // El icono de la app, fijo en la esquina (a donde llega la animación de arranque).
+        // El icono de la app, fijo en la esquina.
         LogoApp(
             Modifier.align(Alignment.TopStart).statusBarsPadding()
                 .padding(start = LogoEsquinaInicio, top = LogoEsquinaArriba).size(LogoEsquina)

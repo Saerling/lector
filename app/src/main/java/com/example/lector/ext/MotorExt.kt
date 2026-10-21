@@ -28,6 +28,7 @@ import uy.kohesive.injekt.api.InjektModule
 import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addSingleton
 import uy.kohesive.injekt.api.addSingletonFactory
+import uy.kohesive.injekt.api.get
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipEntry
@@ -194,6 +195,17 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         cabecerasCache.clear()
         synchronized(paginasCache) { paginasCache.clear() }
     }
+
+    override suspend fun bytesImagen(fuenteId: Long, url: String): ByteArray? = withContext(Dispatchers.IO) {
+        val f = ext.fuentes.firstOrNull { it.id == fuenteId } ?: return@withContext null
+        val src = runCatching { fuenteReal(f) as? HttpSource }.getOrNull() ?: return@withContext null
+        val absoluta = if (url.startsWith("http")) url else src.baseUrl.trimEnd('/') + "/" + url.trimStart('/')
+        val pedido = okhttp3.Request.Builder().url(absoluta).headers(src.headers).build()
+        src.client.newCall(pedido).execute().use { r -> if (r.isSuccessful) r.body.bytes() else null }
+    }
+
+    override fun clienteGeneral(): okhttp3.OkHttpClient? =
+        runCatching { uy.kohesive.injekt.Injekt.get<NetworkHelper>().client }.getOrNull()
 
     private fun calcularCabeceras(fuente: FuenteUI): Map<String, String> = runCatching {
         val h = (fuenteReal(fuente) as? HttpSource)?.headers ?: return@runCatching emptyMap<String, String>()
