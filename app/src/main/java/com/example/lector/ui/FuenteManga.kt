@@ -225,7 +225,12 @@ fun FichaMangaScreen(
     // Recomendaciones (AniList) del título.
     LaunchedEffect(tituloFicha, fi != null) {
         if (fi != null && recomendaciones == null) {
-            recomendaciones = withContext(Dispatchers.IO) { runCatching { Anilist.recomendaciones(tituloFicha).distinctBy { it.id } }.getOrDefault(emptyList()) }
+            recomendaciones = withContext(Dispatchers.IO) {
+                runCatching { Anilist.recomendaciones(tituloFicha).distinctBy { it.id } }
+                    .onSuccess { android.util.Log.i("LectorPrueba", "recomendaciones de «$tituloFicha»: ${it.size}") }
+                    .onFailure { android.util.Log.w("LectorPrueba", "recomendaciones de «$tituloFicha»: error ${it.message}") }
+                    .getOrDefault(emptyList())
+            }
         }
     }
 

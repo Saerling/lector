@@ -74,23 +74,28 @@ adb shell am start -n com.example.lector/.MainActivity --es destino "probar:eu.k
 sleep 45
 volcar rec0.xml; tocar rec0.xml "One Piece" >/dev/null
 sleep 25
-for k in 1 2 3 4 5 6; do volcar rec1.xml; grep -q 'text="Recomendaciones"' rec1.xml && break; adb shell input swipe 540 1700 540 1100 400; sleep 3; done
+for i in $(seq 1 12); do adb logcat -d | grep -q "recomendaciones de" && break; sleep 5; done
+for k in $(seq 1 12); do volcar rec1.xml; grep -q 'text="Recomendaciones"' rec1.xml && break; adb shell input swipe 540 1500 540 1150 500; sleep 2; done
+# Que la sección quede a media pantalla, con las portadas visibles.
+adb shell input swipe 540 1500 540 1200 500; sleep 2; volcar rec1.xml
 {
   echo "===== Recomendaciones ====="
   echo "Ficha de partida: $(textos rec1.xml 8)"
+  adb logcat -d | grep "recomendaciones de" | tail -2
   grep -q 'text="Recomendaciones"' rec1.xml && echo "Hay recomendaciones" || echo "NO SALIERON RECOMENDACIONES"
 } >> fallos.txt
 echo "toque: $(tocar rec1.xml Recomendaciones debajo)" >> fallos.txt
 sleep 30
 volcar rec2.xml; adb exec-out screencap -p > "captura-$ETIQUETA-recomendada.png"
 echo "Tras tocar una recomendación: $(textos rec2.xml 10)" >> fallos.txt
+grep -q 'text="One Piece"' rec2.xml && echo "(sigue en One Piece: no se abrió la recomendada)" >> fallos.txt
 adb logcat -d | grep -A20 "FATAL EXCEPTION" | head -20 >> fallos.txt
 adb shell input keyevent 4
 sleep 12
 volcar rec3.xml
 {
   echo "Tras «atrás»: $(textos rec3.xml 8)"
-  grep -q 'text="One Piece"' rec3.xml && echo "VUELVE A LA FICHA DE ANTES" || echo "NO VOLVIÓ A LA FICHA DE ANTES"
+  if grep -q 'text="One Piece"' rec3.xml && grep -q 'text="AnzManga · ' rec3.xml; then echo "VUELVE A LA FICHA DE ANTES"; else echo "NO VOLVIÓ A LA FICHA DE ANTES"; fi
   adb shell pidof com.example.lector >/dev/null && echo "La app sigue abierta" || echo "LA APP NO ESTÁ ABIERTA"
 } >> fallos.txt
 
