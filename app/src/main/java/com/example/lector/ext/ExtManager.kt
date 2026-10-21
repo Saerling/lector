@@ -224,6 +224,9 @@ class ExtManager private constructor(private val app: Context) {
             }
             base.map { FuenteUI(it.id, it.nombre.ifBlank { e.nombre }, it.lang.ifBlank { e.lang }, e.nsfw, e.pkg, it.baseUrl) }
         }
+            // Hay extensiones que traen las mismas fuentes que otra (p. ej. «Nyora-Sources» y «Nyora-Sources 18+»): con
+            // las dos instaladas cada fuente salía dos veces y las listas con el id como clave se cerraban. Una por id.
+            .distinctBy { it.id }
 
     /**
      * Qué extensión trae la fuente [id]: la instalada (aunque no sea de confianza o no cargue) y la que ofrecen tus

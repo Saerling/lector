@@ -45,6 +45,9 @@ probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiy
 probar "https://github.com/keiyoushi/extensions/releases/download/4c8cda7/tachiyomi-all.webtoons-v1.6.2.apk" eu.kanade.tachiyomi.extension.all.webtoons
 probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-all.myreadingmanga-v1.6.0.apk" eu.kanade.tachiyomi.extension.all.myreadingmanga
 probar "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tachiyomi-all.imhentai-v1.6.25.apk" eu.kanade.tachiyomi.extension.all.imhentai
+# Las dos extensiones de Nyora (normal y 18+) traen fuentes repetidas: antes cerraban las listas de fuentes.
+probar "https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/apk/eu.kanade.tachiyomi.extension.all.nyoralocal.apk" eu.kanade.tachiyomi.extension.all.nyoralocal
+probar "https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/apk/eu.kanade.tachiyomi.extension.all.nyoralocal18.apk" eu.kanade.tachiyomi.extension.all.nyoralocal18
 # ---- «Fuente no disponible»: un manga de una fuente que no existe; debe buscar su título en las demás ----
 adb shell am force-stop com.example.lector; adb logcat -c
 adb shell am start -n com.example.lector/.MainActivity --es destino "'probar-huerfano:Gacha infinita'"
