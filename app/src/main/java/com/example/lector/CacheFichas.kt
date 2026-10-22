@@ -4,9 +4,13 @@ import android.content.Context
 import com.example.lector.ext.CapituloFuente
 import com.example.lector.ext.DetalleManga
 import com.example.lector.ext.FichaManga
-import org.json.JSONArray
-import org.json.JSONObject
+import android.util.JsonReader
+import android.util.JsonToken
+import android.util.JsonWriter
 import java.io.File
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.util.zip.Deflater
 import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -44,62 +48,93 @@ object CacheFichas {
         val k = clave(fuenteId, url)
         synchronized(recientes) { recientes[k] }?.let { return it }
         val a = archivo(fuenteId, url)?.takeIf { it.exists() } ?: return null
+        // Lectura en flujo (sin montar el JSON entero): con miles de fichas, las copias van mucho más rápido.
         val f = runCatching {
-            val o = JSONObject(GZIPInputStream(a.inputStream().buffered()).bufferedReader().use { it.readText() })
-            val d = o.getJSONObject("detalle")
-            val gen = d.optJSONArray("generos")
-            val caps = o.getJSONArray("caps")
-            FichaManga(
-                detalle = DetalleManga(
-                    titulo = d.optString("titulo"),
-                    autor = d.txt("autor"), artista = d.txt("artista"), descripcion = d.txt("descripcion"),
-                    generos = (0 until (gen?.length() ?: 0)).map { gen!!.getString(it) },
-                    estado = d.optInt("estado"),
-                    portadaUrl = d.txt("portada"),
-                ),
-                capitulos = (0 until caps.length()).map { i ->
-                    val c = caps.getJSONObject(i)
-                    CapituloFuente(
-                        c.getString("u"), c.optString("n"), c.optLong("f"), c.txt("s"),
-                        c.optDouble("x", -1.0).toFloat(), c.txt("m"),
-                    )
-                },
-                memo = o.txt("memo"),
-                guardada = o.optLong("t"),
-            )
+            JsonReader(InputStreamReader(GZIPInputStream(a.inputStream(), 16 * 1024), Charsets.UTF_8)).use { r ->
+                var t = 0L; var memo: String? = null; var detalle: DetalleManga? = null
+                val caps = ArrayList<CapituloFuente>()
+                r.beginObject()
+                while (r.hasNext()) when (r.nextName()) {
+                    "t" -> t = r.nextLong()
+                    "memo" -> memo = r.texto()
+                    "detalle" -> detalle = leerDetalle(r)
+                    "caps" -> { r.beginArray(); while (r.hasNext()) caps += leerCapitulo(r); r.endArray() }
+                    else -> r.skipValue()
+                }
+                r.endObject()
+                FichaManga(detalle ?: return@use null, caps, memo, t)
+            }
         }.getOrNull() ?: return null
         synchronized(recientes) { recientes[k] = f }
         return f
     }
 
-    /** Guarda la ficha recién cargada de la fuente (escritura segura: .tmp y renombrar). */
+    private fun JsonReader.texto(): String? = if (peek() == JsonToken.NULL) { nextNull(); null } else nextString().ifBlank { null }
+
+    private fun leerDetalle(r: JsonReader): DetalleManga {
+        var titulo = ""; var autor: String? = null; var artista: String? = null; var desc: String? = null
+        val generos = ArrayList<String>(); var estado = 0; var portada: String? = null
+        r.beginObject()
+        while (r.hasNext()) when (r.nextName()) {
+            "titulo" -> titulo = r.texto().orEmpty()
+            "autor" -> autor = r.texto()
+            "artista" -> artista = r.texto()
+            "descripcion" -> desc = r.texto()
+            "generos" -> { r.beginArray(); while (r.hasNext()) r.texto()?.let { generos += it }; r.endArray() }
+            "estado" -> estado = r.nextInt()
+            "portada" -> portada = r.texto()
+            else -> r.skipValue()
+        }
+        r.endObject()
+        return DetalleManga(titulo, autor, artista, desc, generos, estado, portada)
+    }
+
+    private fun leerCapitulo(r: JsonReader): CapituloFuente {
+        var u = ""; var n = ""; var f = 0L; var s: String? = null; var x = -1f; var m: String? = null
+        r.beginObject()
+        while (r.hasNext()) when (r.nextName()) {
+            "u" -> u = r.nextString()
+            "n" -> n = r.texto().orEmpty()
+            "f" -> f = r.nextLong()
+            "s" -> s = r.texto()
+            "x" -> x = r.nextDouble().toFloat()
+            "m" -> m = r.texto()
+            else -> r.skipValue()
+        }
+        r.endObject()
+        return CapituloFuente(u, n, f, s, x, m)
+    }
+
+    /** Guarda la ficha recién cargada de la fuente (escritura en flujo y segura: .tmp y renombrar). */
     fun guardar(fuenteId: Long, url: String, f: FichaManga) {
         val a = archivo(fuenteId, url) ?: return
         val ahora = System.currentTimeMillis()
-        val d = f.detalle
-        val o = JSONObject()
-            .put("t", ahora)
-            .put("memo", f.memo)
-            .put(
-                "detalle",
-                JSONObject().put("titulo", d.titulo).put("autor", d.autor).put("artista", d.artista)
-                    .put("descripcion", d.descripcion).put("generos", JSONArray(d.generos)).put("estado", d.estado)
-                    .put("portada", d.portadaUrl),
-            )
-            .put(
-                "caps",
-                JSONArray().also { arr ->
-                    f.capitulos.forEach { c ->
-                        arr.put(
-                            JSONObject().put("u", c.url).put("n", c.nombre).put("f", c.fecha).put("s", c.scanlator)
-                                .put("x", c.numero.toDouble()).put("m", c.memo),
-                        )
-                    }
-                },
-            )
         runCatching {
             val tmp = File(a.path + ".tmp")
-            GZIPOutputStream(tmp.outputStream().buffered()).bufferedWriter().use { it.write(o.toString()) }
+            // Compresión rápida: el archivo queda algo mayor pero se escribe varias veces más rápido.
+            val gz = object : GZIPOutputStream(tmp.outputStream(), 16 * 1024) { init { def.setLevel(Deflater.BEST_SPEED) } }
+            JsonWriter(OutputStreamWriter(gz, Charsets.UTF_8).buffered(16 * 1024)).use { w ->
+                val d = f.detalle
+                w.beginObject()
+                w.name("t").value(ahora)
+                w.name("memo").value(f.memo)
+                w.name("detalle").beginObject()
+                    .name("titulo").value(d.titulo).name("autor").value(d.autor).name("artista").value(d.artista)
+                    .name("descripcion").value(d.descripcion)
+                w.name("generos").beginArray(); d.generos.forEach { w.value(it) }; w.endArray()
+                w.name("estado").value(d.estado.toLong()).name("portada").value(d.portadaUrl)
+                w.endObject()
+                w.name("caps").beginArray()
+                f.capitulos.forEach { c ->
+                    w.beginObject().name("u").value(c.url).name("n").value(c.nombre).name("f").value(c.fecha)
+                    if (c.scanlator != null) w.name("s").value(c.scanlator)
+                    if (c.numero.isFinite()) w.name("x").value(c.numero.toDouble())
+                    if (c.memo != null) w.name("m").value(c.memo)
+                    w.endObject()
+                }
+                w.endArray()
+                w.endObject()
+            }
             if (!tmp.renameTo(a)) { a.delete(); tmp.renameTo(a) }
         }
         synchronized(recientes) { recientes[clave(fuenteId, url)] = f.copy(guardada = ahora) }
@@ -116,5 +151,4 @@ object CacheFichas {
         return c.copy(memo = m)
     }
 
-    private fun JSONObject.txt(k: String): String? = if (isNull(k)) null else optString(k).ifBlank { null }
 }
