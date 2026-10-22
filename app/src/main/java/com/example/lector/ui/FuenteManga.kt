@@ -14,6 +14,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import com.example.lector.Comic
+import com.example.lector.CacheFichas
 import com.example.lector.Anilist
 import com.example.lector.ResultadoAnilist
 import com.example.lector.rememberPortada
@@ -162,6 +163,7 @@ fun FichaMangaScreen(
     var cargando by remember { mutableStateOf(true) }
     var descExpandida by remember { mutableStateOf(false) }
     var recarga by remember { mutableStateOf(0) }
+    var refrescando by remember { mutableStateOf(false) }
     var webUrl by remember { mutableStateOf<String?>(null) }
 
     // Biblioteca y categorías (se recalcula sola cuando cambia la biblioteca).
@@ -183,31 +185,53 @@ fun FichaMangaScreen(
 
     LaunchedEffect(fuenteId, manga.url, recarga) {
         if (f == null || motor == null) return@LaunchedEffect
-        cargando = true; error = null
-        val r = runCatching { motor.ficha(f, manga) }
-        r.onSuccess { ficha = it }
-            .onFailure { error = it.message ?: "No se pudo cargar la ficha" }
-        cargando = false
-        val cargada = r.getOrNull() ?: return@LaunchedEffect
+        // Como Mihon: la primera vez se trae de la fuente y queda guardada; después se abre lo guardado al instante y
+        // solo se vuelve a pedir al deslizar hacia abajo (o con la actualización de la biblioteca).
+        var cargada: FichaManga? = if (recarga == 0) withContext(Dispatchers.IO) { CacheFichas.leer(f.id, manga.url) } else null
+        if (cargada != null) {
+            ficha = cargada; error = null; cargando = false
+            android.util.Log.i("LectorPrueba", "ficha «${manga.titulo}» desde el móvil (${cargada.capitulos.size} caps)")
+        } else {
+            android.util.Log.i("LectorPrueba", "ficha «${manga.titulo}» desde la fuente")
+            val antes = ficha
+            if (antes == null) cargando = true
+            error = null
+            val r = runCatching { motor.ficha(f, manga) }
+            r.onSuccess { nueva ->
+                ficha = nueva; cargada = nueva
+                if (antes != null) {
+                    val viejas = antes.capitulos.mapTo(HashSet()) { it.url }
+                    val nuevos = nueva.capitulos.count { it.url !in viejas }
+                    Avisos.mostrar(if (nuevos > 0) "$nuevos capítulos nuevos" else "Ficha actualizada: sin capítulos nuevos")
+                }
+            }.onFailure {
+                val m = it.message ?: "No se pudo cargar la ficha"
+                if (antes == null) error = m else Avisos.mostrar("No se pudo actualizar: $m")
+            }
+            cargando = false
+        }
+        refrescando = false
+        val cargada2 = cargada ?: return@LaunchedEffect
+        val cargadaF: FichaManga = cargada2
         // Si está en la biblioteca: progreso, datos (autor, estado, géneros…) y capítulos nuevos.
         if (almacen.comicEnLinea(f.id, manga.url) != null) {
             almacen.actualizarProgresoEnLinea(
-                f.id, manga.url, cargada.capitulos.count { ext.esLeido(f.id, it.url) }, cargada.capitulos.size,
+                f.id, manga.url, cargadaF.capitulos.count { ext.esLeido(f.id, it.url) }, cargadaF.capitulos.size,
             )
             almacen.actualizarInfoEnLinea(
-                f.id, manga.url, cargada.detalle.autor, cargada.detalle.estado, cargada.detalle.generos,
-                cargada.detalle.descripcion, cargada.detalle.portadaUrl, cargada.capitulos.maxOfOrNull { it.fecha } ?: 0L,
+                f.id, manga.url, cargadaF.detalle.autor, cargadaF.detalle.estado, cargadaF.detalle.generos,
+                cargadaF.detalle.descripcion, cargadaF.detalle.portadaUrl, cargadaF.capitulos.maxOfOrNull { it.fecha } ?: 0L,
             )
             almacen.registrarCapitulos(
-                f.id, manga.url, cargada.detalle.titulo.ifBlank { manga.titulo },
-                cargada.detalle.portadaUrl ?: manga.portadaUrl, cargada.capitulos,
+                f.id, manga.url, cargadaF.detalle.titulo.ifBlank { manga.titulo },
+                cargadaF.detalle.portadaUrl ?: manga.portadaUrl, cargadaF.capitulos,
             )
         }
         // Venimos del historial: abre directamente el capítulo donde lo dejaste.
         if (reanudarCap != null) {
             alConsumirReanudar()
-            val i = cargada.capitulos.indexOfFirst { it.url == reanudarCap.first }
-            if (i >= 0) onLeer(cargada.capitulos, i, reanudarCap.second)
+            val i = cargadaF.capitulos.indexOfFirst { it.url == reanudarCap.first }
+            if (i >= 0) onLeer(cargadaF.capitulos, i, reanudarCap.second)
         }
     }
 
@@ -354,6 +378,12 @@ fun FichaMangaScreen(
     val enSeleccion = seleccion.isNotEmpty()
 
     Box(Modifier.fillMaxSize().drawBehind { drawRect(fondoAnim) }) {
+        // Deslizar hacia abajo: vuelve a pedir la ficha y los capítulos a la fuente (lo normal es usar lo guardado).
+        androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+            isRefreshing = refrescando,
+            onRefresh = { refrescando = true; recarga++ },
+            modifier = Modifier.fillMaxSize(),
+        ) {
         LazyColumn(Modifier.fillMaxSize(), state = lista, contentPadding = PaddingValues(bottom = if (enSeleccion) 130.dp else 60.dp)) {
             item {
                 val lineas = listOfNotNull(
@@ -620,6 +650,7 @@ fun FichaMangaScreen(
                     }
                 }
             }
+        }
         }
 
         if (enSeleccion) {
@@ -1112,4 +1143,5 @@ private suspend fun buscarEnFuente(motor: com.example.lector.ext.MotorFuentes?, 
 /** Interruptores de las pruebas automáticas del emulador (solo se activan en compilaciones depurables). */
 object PruebaAuto {
     @Volatile var abrirRecomendacion = false
+    @Volatile var probarCapitulo = false
 }

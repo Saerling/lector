@@ -284,6 +284,22 @@ private fun FilaFuente(f: FuenteUI, ext: ExtManager, onFuente: (FuenteUI) -> Uni
 
 // ───────────────────────── Novedades ─────────────────────────
 
+/**
+ * Lo cargado en Novedades: se pide una vez por sesión de la app y se reutiliza al cambiar de pestaña o de pantalla.
+ * Vuelve a pedirse al deslizar hacia abajo ([recargar]) o al abrir la app de nuevo ([olvidar], desde MainActivity).
+ */
+object NovedadesGuardadas {
+    // id de la fuente → (generación en la que se cargó, mangas)
+    val datos = androidx.compose.runtime.mutableStateMapOf<Long, Pair<Int, List<MangaFuente>>>()
+    // id de la fuente → generación en la que falló
+    val fallos = androidx.compose.runtime.mutableStateMapOf<Long, Int>()
+    var generacion by mutableStateOf(0); private set
+
+    fun recargar() { generacion++ }
+    fun olvidar() { datos.clear(); fallos.clear(); generacion++ }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun NovedadesTab(
     ext: ExtManager,
@@ -299,8 +315,21 @@ private fun NovedadesTab(
         todas.isEmpty() -> Vacio("Aquí salen las novedades de las fuentes que elijas.", "Añadir fuentes", onAnadir)
         motor == null -> Vacio("El motor de fuentes no está disponible.")
         reordenar -> OrdenarNovedades(ext)
-        else -> LazyColumn(contentPadding = PaddingValues(bottom = 190.dp)) {
-            items(lista) { NovedadesFuente(it, motor, onManga, onFuente) }
+        else -> {
+            var refrescando by remember { mutableStateOf(false) }
+            val gen = NovedadesGuardadas.generacion
+            val pendientes = lista.any { NovedadesGuardadas.datos[it.id]?.first != gen && NovedadesGuardadas.fallos[it.id] != gen }
+            LaunchedEffect(pendientes) { if (!pendientes) refrescando = false }
+            // Deslizar hacia abajo vuelve a pedir las novedades de todas las fuentes (lo de antes se ve mientras tanto).
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = refrescando && pendientes,
+                onRefresh = { refrescando = true; NovedadesGuardadas.recargar() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 190.dp)) {
+                    items(lista, key = { it.id }) { NovedadesFuente(it, motor, onManga, onFuente) }
+                }
+            }
         }
     }
 }
@@ -310,15 +339,24 @@ private fun NovedadesFuente(
     f: FuenteUI, motor: MotorFuentes,
     onManga: (FuenteUI, MangaFuente) -> Unit, onFuente: (FuenteUI) -> Unit,
 ) {
-    var estado by remember(f.id) { mutableStateOf<List<MangaFuente>?>(null) }
+    val gen = NovedadesGuardadas.generacion
+    val estado = NovedadesGuardadas.datos[f.id]?.second
     var fallo by remember(f.id) { mutableStateOf<String?>(null) }
     var intento by remember(f.id) { mutableStateOf(0) }
-    LaunchedEffect(f.id, intento) {
+    LaunchedEffect(f.id, intento, gen) {
+        // Ya cargadas en esta sesión (y sin pedir recargar): no se vuelven a pedir.
+        if (NovedadesGuardadas.datos[f.id]?.first == gen) return@LaunchedEffect
         fallo = null
         // Si la fuente no tiene "recientes", se usan los populares.
-        runCatching { runCatching { motor.recientes(f, 1) }.getOrElse { motor.populares(f, 1) }.mangas.take(15) }
-            .onSuccess { estado = it }
-            .onFailure { fallo = it.message ?: "No se pudieron cargar las novedades" }
+        runCatching { runCatching { motor.recientes(f, 1) }.getOrElse { motor.populares(f, 1) }.mangas.distinctBy { it.url }.take(15) }
+            .onSuccess { NovedadesGuardadas.datos[f.id] = gen to it; NovedadesGuardadas.fallos.remove(f.id) }
+            .onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                NovedadesGuardadas.fallos[f.id] = gen
+                // Si ya había algo cargado, se sigue enseñando; el fallo solo se ve si no hay nada.
+                if (estado == null) fallo = it.message ?: "No se pudieron cargar las novedades"
+                else Avisos.mostrar("${f.nombre}: no se pudieron actualizar las novedades")
+            }
     }
     Column(Modifier.padding(bottom = 12.dp)) {
         Row(
@@ -333,13 +371,13 @@ private fun NovedadesFuente(
         }
         val lst = estado
         when {
-            fallo != null -> Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+            lst == null && fallo != null -> Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                 LText(fallo!!, LectorType.Label, Modifier.weight(1f), color = Rojo, maxLines = 2)
                 IconButton(onClick = { intento++ }) { Icon(Icons.Rounded.Refresh, "Reintentar", tint = LectorColors.Text) }
             }
             lst == null -> BonesPortadas()
             else -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(lst) { m ->
+                items(lst, key = { it.url }) { m ->
                     Column(Modifier.width(124.dp).press3D().pressable { onManga(f, m) }) {
                         ImagenRemota(
                             m.portadaUrl,

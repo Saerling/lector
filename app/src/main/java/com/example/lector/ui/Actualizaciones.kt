@@ -276,7 +276,7 @@ fun ActualizacionesScreen(
                         val f = ext.fuentes.firstOrNull { it.id == k.first } ?: return@forEach
                         n += Descargas.encolar(
                             ctx, f, k.second, filas.first().titulo,
-                            filas.map { CapituloFuente(it.capUrl, it.capNombre, it.capFecha, it.scanlator, it.capNumero) }.asReversed(),
+                            filas.map { com.example.lector.CacheFichas.conMemo(it.fuenteId, it.urlManga, CapituloFuente(it.capUrl, it.capNombre, it.capFecha, it.scanlator, it.capNumero)) }.asReversed(),
                             avisar = false,
                         )
                     }
@@ -400,7 +400,7 @@ private fun FilaActualizacion(
                 estado is EstadoDescarga.Descargando -> Descargas.cancelar(ctx, k)
                 estado is EstadoDescarga.Listo -> Avisos.mostrar("Ya está descargado")
                 f == null -> Avisos.mostrar("Esa fuente no está disponible ahora")
-                else -> Descargas.encolar(ctx, f, a.urlManga, a.titulo, listOf(CapituloFuente(a.capUrl, a.capNombre, a.capFecha, a.scanlator, a.capNumero)))
+                else -> Descargas.encolar(ctx, f, a.urlManga, a.titulo, listOf(com.example.lector.CacheFichas.conMemo(a.fuenteId, a.urlManga, CapituloFuente(a.capUrl, a.capNombre, a.capFecha, a.scanlator, a.capNumero))))
             }
         })
     }

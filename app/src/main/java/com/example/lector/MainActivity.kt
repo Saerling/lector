@@ -85,6 +85,8 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             bloqueada = almacen.bloqueo && dispositivoSeguro()
             pedirPermisoNotificaciones()
+            // App abierta de nuevo: Novedades se vuelven a pedir (dentro de la misma sesión se reutilizan).
+            com.example.lector.ui.NovedadesGuardadas.olvidar()
             // ¿Hay versión nueva en GitHub? Si la hay, sale el aviso para actualizar.
             NuevaVersion.alArrancar(applicationContext)
         }

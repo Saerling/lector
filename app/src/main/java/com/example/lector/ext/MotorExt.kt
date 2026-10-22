@@ -45,6 +45,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
     private val ctx: Context = app
 
     init {
+        com.example.lector.CacheFichas.iniciar(app)
         // Lo que las extensiones piden con Injekt.get<...>() / injectLazy<...>().
         Injekt.importModule(object : InjektModule {
             override fun InjektRegistrar.registerInjectables() {
@@ -71,7 +72,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
     }
 
     private fun MangasPage.aPagina() = PaginaMangas(
-        mangas = mangas.map { MangaFuente(it.url, it.title, it.thumbnail_url) },
+        mangas = mangas.map { MangaFuente(it.url, it.title, it.thumbnail_url, it.memo.aTexto()) },
         haySiguiente = hasNextPage,
     )
 
@@ -103,15 +104,25 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Page>>?): Boolean = size > 24
     }
 
-    private fun sManga(m: MangaFuente) = SManga.create().apply { url = m.url; title = m.titulo }
+    // El memo va y vuelve tal cual: si el manga no lo trae, el de su ficha guardada.
+    private fun sManga(fuente: FuenteUI, m: MangaFuente) = SManga.create().apply {
+        url = m.url; title = m.titulo
+        (m.memo ?: com.example.lector.CacheFichas.memoManga(fuente.id, m.url))?.aMemo()?.let { memo = it }
+    }
 
     private fun sCapitulo(c: CapituloFuente) = SChapter.create().apply {
         url = c.url; name = c.nombre; date_upload = c.fecha; chapter_number = c.numero; scanlator = c.scanlator
+        c.memo?.aMemo()?.let { memo = it }
     }
+
+    private fun kotlinx.serialization.json.JsonObject.aTexto(): String? = if (isEmpty()) null else toString()
+    private fun String.aMemo(): kotlinx.serialization.json.JsonObject? =
+        runCatching { kotlinx.serialization.json.Json.parseToJsonElement(this) as? kotlinx.serialization.json.JsonObject }.getOrNull()
 
     override suspend fun ficha(fuente: FuenteUI, manga: MangaFuente): FichaManga = withContext(Dispatchers.IO) {
         val s = fuenteReal(fuente)
-        val r = s.getMangaUpdate(sManga(manga), emptyList(), fetchDetails = true, fetchChapters = true)
+        val entrada = sManga(fuente, manga)
+        val r = s.getMangaUpdate(entrada, emptyList(), fetchDetails = true, fetchChapters = true)
         val m = r.manga
         FichaManga(
             detalle = DetalleManga(
@@ -124,9 +135,10 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
                 portadaUrl = m.thumbnail_url ?: manga.portadaUrl,
             ),
             capitulos = r.chapters.map {
-                CapituloFuente(it.url, it.name, it.date_upload, it.scanlator?.takeIf { x -> x.isNotBlank() }, it.chapter_number)
+                CapituloFuente(it.url, it.name, it.date_upload, it.scanlator?.takeIf { x -> x.isNotBlank() }, it.chapter_number, it.memo.aTexto())
             },
-        )
+            memo = m.memo.aTexto() ?: entrada.memo.aTexto(),
+        ).also { com.example.lector.CacheFichas.guardar(fuente.id, manga.url, it) } // queda guardada en el móvil
     }
 
     private suspend fun paginasDe(fuente: FuenteUI, capitulo: CapituloFuente): List<Page> {
@@ -185,7 +197,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
     }
 
     override fun urlManga(fuente: FuenteUI, manga: MangaFuente): String? = runCatching {
-        (fuenteReal(fuente) as? HttpSource)?.getMangaUrl(sManga(manga))?.takeIf { it.startsWith("http") }
+        (fuenteReal(fuente) as? HttpSource)?.getMangaUrl(sManga(fuente, manga))?.takeIf { it.startsWith("http") }
     }.getOrNull()
 
     private val cabecerasCache = ConcurrentHashMap<Long, Map<String, String>>()

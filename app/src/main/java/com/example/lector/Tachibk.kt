@@ -39,6 +39,7 @@ object Tachibk {
      * miles de capítulos no cabría entera en memoria). Devuelve el informe.
      */
     fun crear(ctx: Context, salida: java.io.OutputStream, avance: TareaCopia.Avance? = null): TareaCopia.Informe {
+        CacheFichas.iniciar(ctx)
         val almacen = Almacen.obtener(ctx)
         val ext = ExtManager.obtener(ctx)
         val todos = almacen.cargar()
@@ -61,6 +62,22 @@ object Tachibk {
             else TachibkFormato.Capitulo(u, nombres[u].orEmpty(), leido = leido, marcado = marcado, pagina = pagina.toLong())
         }.also { capsConEstado += it.size }
 
+        // Con la ficha guardada en el móvil: TODOS sus capítulos (nombre, número, orden y datos internos de la
+        // extensión), como hace Komikku; los del historial que no estén en ella se añaden al final.
+        fun capitulosCompletos(fuente: Long, ficha: com.example.lector.ext.FichaManga, hist: List<EntradaHistorial>): List<TachibkFormato.Capitulo> {
+            val lista = ficha.capitulos.mapIndexed { i, cap ->
+                val pagina = ext.paginaDe(fuente, cap.url)
+                TachibkFormato.Capitulo(
+                    cap.url, cap.nombre, cap.scanlator, ext.esLeido(fuente, cap.url), ext.esMarcado(fuente, cap.url), pagina.toLong(),
+                    cap.fecha, cap.numero, i.toLong(), cap.memo,
+                )
+            }
+            capsConEstado += lista.count { it.leido || it.marcado || it.pagina > 0 }
+            val ya = ficha.capitulos.mapTo(HashSet()) { it.url }
+            val extra = hist.filter { it.capUrl !in ya }
+            return lista + capitulos(fuente, extra.map { it.capUrl }, extra.associate { it.capUrl to it.capNombre })
+        }
+
         var bytes = 0L
         val contador = object : java.io.FilterOutputStream(salida) {
             override fun write(b: Int) { bytes++; out.write(b) }
@@ -72,12 +89,16 @@ object Tachibk {
                 val url = c.urlManga!!
                 val hist = histPorManga[c.fuenteId to url].orEmpty()
                 val conocidos = almacen.capitulosConocidos(c.fuenteId, url)
-                if (conocidos.isEmpty() && c.ultimaPagina > 0) sinLista++
+                val ficha = CacheFichas.leer(c.fuenteId, url)
+                if (ficha == null && conocidos.isEmpty() && c.ultimaPagina > 0) sinLista++
                 w.manga(
                     TachibkFormato.Manga(
                         fuente = c.fuenteId, url = url, titulo = c.titulo, autor = c.autor, descripcion = c.descripcion,
                         generos = c.generos, estado = c.estado, portada = c.portadaUrl, anadido = c.anadido,
-                        capitulos = capitulos(c.fuenteId, conocidos + hist.map { it.capUrl }, hist.associate { it.capUrl to it.capNombre }),
+                        capitulos = if (ficha != null) capitulosCompletos(c.fuenteId, ficha, hist)
+                        else capitulos(c.fuenteId, conocidos + hist.map { it.capUrl }, hist.associate { it.capUrl to it.capNombre }),
+                        memo = ficha?.memo,
+                        artista = ficha?.detalle?.artista,
                         // Mihon referencia las categorías por su «order».
                         categorias = asign[c.id].orEmpty().mapNotNull { ordenCat[it] },
                         seguimiento = listOfNotNull(almacen.seguimientoDe(c.id)?.let { s ->
@@ -131,6 +152,7 @@ object Tachibk {
     // ───────────────────────────── Importar ─────────────────────────────
 
     suspend fun restaurar(ctx: Context, bytes: ByteArray, avance: TareaCopia.Avance? = null): TareaCopia.Informe {
+        CacheFichas.iniciar(ctx)
         val almacen = Almacen.obtener(ctx)
         val ext = ExtManager.obtener(ctx)
         avance?.paso(0.03f, "Leyendo la copia…")
@@ -185,6 +207,16 @@ object Tachibk {
                     // Sus capítulos quedan como «conocidos» (en disco, no en memoria): así la primera actualización no
                     // los toma por nuevos y la copia para Mihon puede volver a exportar su progreso.
                     if (m.urls.isNotEmpty()) almacen.guardarConocidosYa(m.fuente, m.url, m.urls)
+                    // Su lista de capítulos (con los datos internos de la extensión) queda guardada en el móvil, como en
+                    // Mihon: la ficha se abre al instante y sin «Refresh the chapter list». No pisa una ficha ya guardada.
+                    if (m.todos.isNotEmpty() && !CacheFichas.existe(m.fuente, m.url)) CacheFichas.guardar(
+                        m.fuente, m.url,
+                        com.example.lector.ext.FichaManga(
+                            com.example.lector.ext.DetalleManga(titulo, m.autor, m.artista, m.descripcion, m.generos, m.estado, m.portada),
+                            m.todos.map { com.example.lector.ext.CapituloFuente(it.url, it.nombre, it.fechaSubida, it.scanlator, it.numero, it.memo) },
+                            m.memo,
+                        ),
+                    )
                     favoritos++
                     porFuente[m.fuente] = (porFuente[m.fuente] ?: 0) + 1
                     nuevos += Almacen.NuevoEnLinea(

@@ -10,7 +10,8 @@ import eu.kanade.tachiyomi.source.model.FilterList
  * solo tiene que crear una clase que implemente esta interfaz y asignarla a [Motor.actual].
  * Con eso se activan solas las pestañas Novedades y la pantalla de cada fuente.
  */
-data class MangaFuente(val url: String, val titulo: String, val portadaUrl: String?)
+// memo: datos internos de la extensión (JSON, tachiyomix 1.6); hay que devolvérselos tal cual. Ver CacheFichas.
+data class MangaFuente(val url: String, val titulo: String, val portadaUrl: String?, val memo: String? = null)
 
 data class PaginaMangas(val mangas: List<MangaFuente>, val haySiguiente: Boolean)
 
@@ -31,9 +32,11 @@ data class CapituloFuente(
     val fecha: Long,
     val scanlator: String?,
     val numero: Float,
+    val memo: String? = null,
 )
 
-data class FichaManga(val detalle: DetalleManga, val capitulos: List<CapituloFuente>)
+/** [memo]: el del manga tras cargarlo; [guardada]: cuándo se guardó en el móvil (0 = recién traída de la fuente). */
+data class FichaManga(val detalle: DetalleManga, val capitulos: List<CapituloFuente>, val memo: String? = null, val guardada: Long = 0)
 
 interface MotorFuentes {
     suspend fun populares(fuente: FuenteUI, pagina: Int): PaginaMangas

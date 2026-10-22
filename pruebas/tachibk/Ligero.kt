@@ -21,6 +21,8 @@ fun pruebaLigera(mihon: Backup) {
     check(m.categorias == listOf(0L, 2L), "ligero: categorías del manga")
     check(m.seguimiento.single().mediaId == 21L && m.ultimaLectura?.url == "/c/2", "ligero: AniList e historial")
     check(m.tituloPropio == "Mi One Piece" && m.estadoPropio == 2 && !ms[1].favorito, "ligero: editados y no favorito")
+    check(m.todos.map { it.url } == listOf("/c/2", "/c/1") && m.todos[1].memo == "{\"mangaPath\":\"/manga/op\"}" && m.todos[1].nombre == "Capítulo 1", "ligero: todos los capítulos en orden de la fuente, con memo")
+    check(m.memo == "{\"id\":\"77\"}", "ligero: memo del manga")
 }
 
 /** Copia enorme al estilo Mihon (con TODOS los capítulos, como hace Mihon). */

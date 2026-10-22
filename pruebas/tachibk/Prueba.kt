@@ -40,6 +40,7 @@ import java.util.zip.GZIPOutputStream
     @ProtoNumber(109) var version: Long = 0,
     @ProtoNumber(110) var notes: String = "",
     @ProtoNumber(111) var initialized: Boolean = false,
+    @ProtoNumber(112) var memo: ByteArray = byteArrayOf(0x7B, 0x7D),
     @ProtoNumber(602) var customStatus: Int = 0,
     @ProtoNumber(603) var customThumbnailUrl: String? = null,
     @ProtoNumber(800) var customTitle: String? = null,
@@ -61,6 +62,7 @@ import java.util.zip.GZIPOutputStream
     @ProtoNumber(10) var sourceOrder: Long = 0,
     @ProtoNumber(11) var lastModifiedAt: Long = 0,
     @ProtoNumber(12) var version: Long = 0,
+    @ProtoNumber(13) var memo: ByteArray = byteArrayOf(0x7B, 0x7D),
 )
 @Serializable class BackupCategory(
     @ProtoNumber(1) var name: String,
@@ -105,10 +107,10 @@ fun main() {
     val mihon = Backup(
         backupManga = listOf(
             BackupManga(
-                source = idNegativo, url = "/manga/one-piece", title = "One Piece", author = "Oda", description = "Piratas",
+                source = idNegativo, url = "/manga/one-piece", title = "One Piece", author = "Oda", description = "Piratas", memo = "{\"id\":\"77\"}".encodeToByteArray(),
                 genre = listOf("Acción", "Aventura"), status = 1, thumbnailUrl = "https://x/p.jpg", dateAdded = 1_700_000_000_000,
                 chapters = listOf(
-                    BackupChapter("/c/1", "Capítulo 1", scanlator = "Grupo", read = true, chapterNumber = 1f, dateUpload = 123),
+                    BackupChapter("/c/1", "Capítulo 1", scanlator = "Grupo", read = true, chapterNumber = 1f, dateUpload = 123, sourceOrder = 1, memo = "{\"mangaPath\":\"/manga/op\"}".encodeToByteArray()),
                     BackupChapter("/c/2", "Capítulo 2", bookmark = true, lastPageRead = 7, chapterNumber = 2.5f),
                 ),
                 categories = listOf(0, 2),
@@ -136,6 +138,8 @@ fun main() {
     check(m.capitulos.size == 2 && m.capitulos[0].leido && m.capitulos[0].nombre == "Capítulo 1" && m.capitulos[0].scanlator == "Grupo", "capítulo leído")
     check(m.capitulos[1].marcado && m.capitulos[1].pagina == 7L && m.capitulos[1].numero == 2.5f, "capítulo marcado + página + número")
     check(m.categorias == listOf(0L, 2L), "categorías del manga ${m.categorias}")
+    check(m.capitulos[0].memo == "{\"mangaPath\":\"/manga/op\"}" && m.capitulos[1].memo == null && m.capitulos[0].orden == 1L, "memo y orden del capítulo")
+    check(m.memo == "{\"id\":\"77\"}", "memo del manga")
     check(m.seguimiento.single().servicio == 2 && m.seguimiento.single().mediaId == 21L, "AniList")
     check(m.historial.single().url == "/c/2" && m.historial.single().ultimaLectura == 1_700_000_500_000, "historial")
     check(m.tituloPropio == "Mi One Piece" && m.estadoPropio == 2, "datos editados de Komikku")
@@ -154,6 +158,8 @@ fun main() {
     check(v.chapters.size == 2 && v.chapters[0].read && v.chapters[1].bookmark && v.chapters[1].lastPageRead == 7L, "Mihon: capítulos")
     check(v.chapters[1].chapterNumber == 2.5f && v.chapters[0].scanlator == "Grupo", "Mihon: número y scanlator")
     check(v.categories == listOf(0L, 2L), "Mihon: categorías del manga")
+    check(v.chapters[0].memo.decodeToString() == "{\"mangaPath\":\"/manga/op\"}" && v.chapters[1].memo.decodeToString() == "{}", "Mihon: memo de capítulos")
+    check(v.memo.decodeToString() == "{\"id\":\"77\"}" && v.chapters[0].sourceOrder == 1L, "Mihon: memo del manga y orden")
     check(v.tracking.single().syncId == 2 && v.tracking.single().mediaId == 21L, "Mihon: AniList")
     check(v.history.single().lastRead == 1_700_000_500_000, "Mihon: historial")
     check(v.customTitle == "Mi One Piece" && v.customStatus == 2, "Komikku: datos editados")

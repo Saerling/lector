@@ -48,6 +48,26 @@ probar "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tach
 # Las dos extensiones de Nyora (normal y 18+) traen fuentes repetidas: antes cerraban las listas de fuentes.
 probar "https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/apk/eu.kanade.tachiyomi.extension.all.nyoralocal.apk" eu.kanade.tachiyomi.extension.all.nyoralocal
 probar "https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/apk/eu.kanade.tachiyomi.extension.all.nyoralocal18.apk" eu.kanade.tachiyomi.extension.all.nyoralocal18
+# ---- Extensiones Madara (las que guardan «memo» en los capítulos): abrir un capítulo sin «Refresh the chapter list» ----
+adb shell am force-stop com.example.lector; adb logcat -c
+adb shell am start -n com.example.lector/.MainActivity --es destino "probar-url:barmanga,manhwalatino,mangasnosekai,manhwaonline,mhscans,toonily,manhuaus,mangaread"
+for i in $(seq 1 30); do [ "$(adb logcat -d | grep -c 'LectorPrueba: url ')" -ge 8 ] && break; sleep 4; done
+adb logcat -d | grep "LectorPrueba: url " | sed 's/.*LectorPrueba: url //' > madara.txt
+echo "===== Madara =====" >> fallos.txt
+probadas=0
+while read -r corto pkg url <&3; do
+  [ "$probadas" -ge 4 ] && break
+  case "$url" in http*) ;; *) echo "$corto: no está en los listados" >> fallos.txt; continue ;; esac
+  probadas=$((probadas+1))
+  curl -sL -o madara.apk "$url" && adb install -r madara.apk >/dev/null 2>&1
+  adb shell am force-stop com.example.lector; adb logcat -c
+  adb shell am start -n com.example.lector/.MainActivity --es destino "probar:$pkg\|capitulo"
+  for i in $(seq 1 30); do adb logcat -d | grep -q "LectorPrueba: capitulo " && break; sleep 4; done
+  { adb logcat -d | grep "LectorPrueba: capitulo " | sed 's/.*LectorPrueba: //' | tail -1 || true; } >> fallos.txt
+  adb logcat -d | grep -q "LectorPrueba: capitulo " || echo "$corto: sin respuesta" >> fallos.txt
+  adb uninstall "$pkg" >/dev/null 2>&1 || true
+done 3< madara.txt
+
 # ---- Recomendaciones: abrir una desde la ficha (en la MISMA fuente) y volver con «atrás» a la ficha de antes ----
 volcar() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$1" >/dev/null 2>&1; }
 textos() { grep -o 'text="[^"]*"' "$1" 2>/dev/null | sed 's/text=//' | grep -v '""' | head -${2:-14} | tr '\n' ' '; }
@@ -82,7 +102,7 @@ sleep 12
 adb exec-out screencap -p > "captura-$ETIQUETA-tras-atras.png"
 {
   echo "===== Recomendaciones ====="
-  adb logcat -d | grep -E "recomendaciones de|recomendación «|ficha abierta" | sed 's/.*LectorPrueba: //'
+  adb logcat -d | grep -E "recomendaciones de|recomendación «|ficha abierta|ficha «" | sed 's/.*LectorPrueba: //'
   n=$(adb logcat -d | grep -c "ficha abierta: AnzManga · One Piece")
   [ "$n" -ge 2 ] && echo "VUELVE A LA FICHA DE ANTES (One Piece abierta $n veces)" || echo "NO VOLVIÓ A LA FICHA DE ANTES ($n)"
   adb logcat -d | grep -A20 "FATAL EXCEPTION" | head -20

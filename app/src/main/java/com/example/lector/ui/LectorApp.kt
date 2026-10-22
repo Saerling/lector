@@ -119,6 +119,24 @@ fun Inicio(
             if (ahora != null) fuente = ahora
         }
         android.util.Log.i("LectorPrueba", "fuente=${fuente?.nombre} id=${fuente?.id}")
+        val fp = fuente
+        // «|capitulo»: recorre populares → ficha → primer capítulo como lo haría el usuario, sin tocar la pantalla.
+        if (fp != null && PruebaAuto.probarCapitulo) {
+            PruebaAuto.probarCapitulo = false
+            val motor = com.example.lector.ext.Motor.actual
+            val r = runCatching {
+                requireNotNull(motor)
+                val m = motor.populares(fp, 1).mangas.first()
+                val fi = motor.ficha(fp, m)
+                val cap = fi.capitulos.firstOrNull() ?: error("«${m.titulo}» sin capítulos")
+                // Como al abrirlo desde Actualizaciones o la cola de descargas: sin memo, recuperado de la ficha guardada.
+                val recuperado = com.example.lector.CacheFichas.conMemo(fp.id, m.url, cap.copy(memo = null))
+                val n = motor.cantidadPaginas(fp, recuperado)
+                "«${m.titulo}»: ${fi.capitulos.size} caps, memo manga=${fi.memo != null}, memo cap=${cap.memo != null} " +
+                    "(guardado=${recuperado.memo != null}); «${cap.nombre}»: $n páginas"
+            }
+            android.util.Log.i("LectorPrueba", "capitulo ${fp.nombre}: " + r.getOrElse { "ERROR ${it.message ?: it.javaClass.simpleName}" })
+        }
         fuente?.let { fuenteId = it.id; desdeNovedades = false; ruta = Ruta.FuenteDetalle }
     }
 
@@ -138,6 +156,7 @@ fun Inicio(
                 if (destino?.startsWith("probar:") == true && depurable) {
                     paquetePrueba = destino.removePrefix("probar:").substringBefore('|')
                     if (destino.endsWith("|autorec")) PruebaAuto.abrirRecomendacion = true
+                    if (destino.endsWith("|capitulo")) PruebaAuto.probarCapitulo = true
                 }
                 // Pruebas de las copias en el emulador: restaurar un archivo y crear una copia, midiendo el tiempo.
                 if (destino?.startsWith("probar-restaurar:") == true && depurable) {
@@ -169,6 +188,17 @@ fun Inicio(
                             }
                         }
                         android.util.Log.i("LectorPrueba", "version " + r.getOrElse { "error ${it.message ?: it.javaClass.simpleName}" })
+                    }
+                }
+                // Direcciones de descarga de unas extensiones (de los listados), para instalarlas en la prueba.
+                if (destino?.startsWith("probar-url:") == true && depurable) {
+                    val pkgs = destino.removePrefix("probar-url:").split(',')
+                    kotlin.concurrent.thread {
+                        repeat(90) { if (ext.disponibles.isEmpty()) Thread.sleep(1000) }
+                        pkgs.forEach { p ->
+                            val d = ext.disponibles.firstOrNull { it.pkg.endsWith(".$p") || it.pkg == p }
+                            android.util.Log.i("LectorPrueba", "url $p ${d?.pkg ?: "-"} ${d?.apkUrl ?: "-"}")
+                        }
                     }
                 }
                 // Prueba de un listado de extensiones: lo mismo que «Añadir listado», sin guardarlo.

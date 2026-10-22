@@ -48,6 +48,8 @@ object TachibkFormato {
         val descripcionPropia: String? = null,
         val generosPropios: List<String> = emptyList(),
         val estadoPropio: Int = 0,
+        // Datos internos de la extensión (JSON); Mihon/Komikku los guardan en el campo 112.
+        val memo: String? = null,
     )
 
     data class Capitulo(
@@ -59,6 +61,9 @@ object TachibkFormato {
         val pagina: Long = 0,
         val fechaSubida: Long = 0,
         val numero: Float = -1f,
+        // Posición en la lista de la fuente (0 = la primera) y datos internos de la extensión (campos 10 y 13).
+        val orden: Long = 0,
+        val memo: String? = null,
     )
 
     data class Historial(val url: String, val ultimaLectura: Long)
@@ -87,6 +92,7 @@ object TachibkFormato {
         texto(2, m.url)
         texto(3, m.titulo)
         texto(4, m.artista)
+        texto(112, m.memo)
         texto(5, m.autor)
         texto(6, m.descripcion)
         m.generos.forEach { texto(7, it) }
@@ -103,6 +109,8 @@ object TachibkFormato {
                 long(6, ch.pagina)
                 long(8, ch.fechaSubida)
                 float(9, ch.numero)
+                if (ch.orden > 0) long(10, ch.orden)
+                texto(13, ch.memo)
             }
         }
         m.categorias.forEach { long(17, it) }
@@ -194,6 +202,7 @@ object TachibkFormato {
                     Capitulo(
                         url = u, nombre = c.texto(2).orEmpty(), scanlator = c.texto(3), leido = c.bool(4), marcado = c.bool(5),
                         pagina = c.long(6), fechaSubida = c.long(8), numero = c.float(9, -1f),
+                        orden = c.long(10), memo = c.texto(13)?.takeIf { it.length > 2 },
                     )
                 },
                 categorias = m.longs(17),
@@ -202,6 +211,7 @@ object TachibkFormato {
                 },
                 favorito = m.bool(100, true),
                 historial = m.mensajes(104).mapNotNull { h -> h.texto(1)?.let { Historial(it, h.long(2)) } },
+                memo = m.texto(112)?.takeIf { it.length > 2 },
                 tituloPropio = m.texto(800),
                 autorPropio = m.texto(802),
                 descripcionPropia = m.texto(804),
@@ -231,6 +241,8 @@ object TachibkFormato {
         val seguimiento: List<Seguimiento>, val ultimaLectura: Historial?,
         val tituloPropio: String?, val autorPropio: String?, val descripcionPropia: String?,
         val generosPropios: List<String>, val estadoPropio: Int,
+        /** Todos sus capítulos, en el orden de la fuente (para guardar su ficha en el móvil), y el memo del manga. */
+        val todos: List<Capitulo>, val artista: String?, val memo: String?,
     )
 
     private fun flujo(bytes: ByteArray): java.io.InputStream =
@@ -273,18 +285,27 @@ object TachibkFormato {
         var total = 0; val conEstado = ArrayList<Capitulo>(); val urls = ArrayList<String>(); val cats = ArrayList<Long>(); val segs = ArrayList<Seguimiento>()
         var ultima: Historial? = null
         var tP: String? = null; var aP: String? = null; var dP: String? = null; val gP = ArrayList<String>(); var eP = 0
+        val todos = ArrayList<Capitulo>(); var artista: String? = null; var memo: String? = null
         while (c.siguiente()) {
             when (c.numero) {
                 1 -> fuente = c.valor
                 2 -> url = c.texto()
                 3 -> titulo = c.texto()
+                4 -> artista = c.texto()
                 5 -> autor = c.texto()
+                112 -> memo = c.texto().takeIf { it.length > 2 }
                 6 -> desc = c.texto()
                 7 -> generos += c.texto()
                 8 -> estado = c.valor.toInt()
                 9 -> portada = c.texto()
                 13 -> anadido = c.valor
-                16 -> { total++; leerCapitulo(c.sub(), urls)?.let { conEstado += it } }
+                16 -> {
+                    total++
+                    leerCapitulo(c.sub())?.let { cap ->
+                        urls += cap.url; todos += cap
+                        if (cap.leido || cap.marcado || cap.pagina > 0) conEstado += cap
+                    }
+                }
                 17 -> if (c.tipo == 0) cats += c.valor else { val p = c.sub(); while (p.siguienteVarintEmpaquetado()) cats += p.valor }
                 18 -> {
                     val t = c.sub(); var serv = 0; var m100 = 0L; var m3 = 0L; var tt = ""; var ult = 0f
@@ -305,29 +326,29 @@ object TachibkFormato {
             }
         }
         val u = url ?: return null
-        return MangaLigero(fuente, u, titulo, autor, desc, generos, estado, portada, anadido, favorito, total, conEstado, cats, urls, segs, ultima, tP, aP, dP, gP, eP)
+        return MangaLigero(
+            fuente, u, titulo, autor, desc, generos, estado, portada, anadido, favorito, total, conEstado, cats, urls, segs, ultima,
+            tP, aP, dP, gP, eP, todos.sortedBy { it.orden }, artista, memo,
+        )
     }
 
-    /** Un capítulo: solo se crean sus textos si tiene algo que restaurar. */
-    private fun leerCapitulo(c: Proto.Cursor, urls: MutableList<String>): Capitulo? {
-        var uIni = -1; var uLar = 0; var nIni = -1; var nLar = 0
-        var leido = false; var marcado = false; var pagina = 0L; var numero = -1f
+    /** Un capítulo completo (con lo necesario para enseñar la lista de capítulos sin pedirla a la fuente). */
+    private fun leerCapitulo(c: Proto.Cursor): Capitulo? {
+        var url: String? = null; var nombre = ""; var scan: String? = null
+        var leido = false; var marcado = false; var pagina = 0L; var numero = -1f; var fecha = 0L; var orden = 0L; var memo: String? = null
         while (c.siguiente()) when (c.numero) {
-            1 -> { uIni = c.inicio; uLar = c.largo }
-            2 -> { nIni = c.inicio; nLar = c.largo }
+            1 -> url = c.texto()
+            2 -> nombre = c.texto()
+            3 -> scan = c.texto().ifBlank { null }
             4 -> leido = c.bool()
             5 -> marcado = c.bool()
             6 -> pagina = c.valor
+            8 -> fecha = c.valor
             9 -> numero = c.float()
+            10 -> orden = c.valor
+            13 -> memo = c.texto().takeIf { it.length > 2 } // «{}» = vacío
         }
-        if (uIni < 0) return null
-        val url = String(c.b, uIni, uLar, Charsets.UTF_8)
-        urls += url
-        if (!leido && !marcado && pagina <= 0) return null
-        return Capitulo(
-            url = url,
-            nombre = if (nIni >= 0) String(c.b, nIni, nLar, Charsets.UTF_8) else "",
-            leido = leido, marcado = marcado, pagina = pagina, numero = numero,
-        )
+        val u = url ?: return null
+        return Capitulo(u, nombre, scan, leido, marcado, pagina, fecha, numero, orden, memo)
     }
 }

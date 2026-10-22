@@ -42,7 +42,7 @@ data class TareaDescarga(
     val scanlator: String?,
 ) {
     val clave: String get() = "$fuenteId|$capUrl"
-    fun capitulo() = CapituloFuente(capUrl, capNombre, capFecha, scanlator, capNumero)
+    fun capitulo() = CacheFichas.conMemo(fuenteId, mangaUrl, CapituloFuente(capUrl, capNombre, capFecha, scanlator, capNumero))
 }
 
 /**
