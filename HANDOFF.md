@@ -520,6 +520,21 @@ Cierre por `OutOfMemoryError` en un móvil con >6.000 mangas. Cambios:
 - Prueba: `probar:<pkg>|autorec` (`PruebaAuto`) abre sola la primera recomendación; la ficha anima sin parar y
   uiautomator no puede leerla, así que se comprueba con los registros «ficha abierta: …».
 
+## 2y. PASO 25 — memo, fichas guardadas y deslizar para recargar (2026-10-22, versión 0.11)
+- «Refresh the chapter list.»: las extensiones nuevas (tachiyomix 1.6; p. ej. todo lib-multisrc/madara) guardan datos
+  en `SManga.memo` / `SChapter.memo` y los piden al abrir un capítulo. La app los tiraba. Ahora `MangaFuente.memo`,
+  `CapituloFuente.memo` y `FichaManga.memo` (JSON en texto) van y vuelven en MotorExt (`sManga`/`sCapitulo`).
+- `CacheFichas` (CacheFichas.kt): cada `motor.ficha()` se guarda en `files/fichas/<sha1>.json.gz` (JsonWriter/Reader
+  en flujo, gzip rápido). La ficha se abre de ahí; deslizar hacia abajo (`PullToRefreshBox`) la pide a la fuente.
+  Capítulos reconstruidos sin memo (Actualizaciones, cola de descargas) lo recuperan con `CacheFichas.conMemo`.
+- Novedades (`NovedadesGuardadas`, Explorar.kt): una carga por sesión; deslizar para recargar; se olvidan al abrir
+  la app (MainActivity.onCreate).
+- .tachibk: memo del manga (112) y del capítulo (13) y orden (10), en los dos sentidos. Al restaurar se guarda la
+  ficha de cada manga con TODOS sus capítulos (3 hilos en paralelo); al exportar, si hay ficha guardada, van todos
+  sus capítulos. Emulador, 6.500 mangas: restaurar ~28 s, exportar ~36 s.
+- Pruebas: `probar-url:<pkgs>` (direcciones de los listados) y `probar:<pkg>|capitulo` (populares → ficha →
+  páginas del primer capítulo con el memo recuperado); BarManga (Madara) da 21 páginas.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,
