@@ -83,13 +83,25 @@ object Tachibk {
             override fun write(b: Int) { bytes++; out.write(b) }
             override fun write(b: ByteArray, off: Int, len: Int) { bytes += len; out.write(b, off, len) }
         }
-        TachibkFormato.EscritorFlujo(contador).use { w ->
+        // Las fichas guardadas se leen por adelantado en paralelo (3 hilos, hasta 24 por delante).
+        val lectura = java.util.concurrent.Executors.newFixedThreadPool(3)
+        val porDelante = ArrayDeque<java.util.concurrent.Future<com.example.lector.ext.FichaManga?>>()
+        var siguiente = 0
+        fun pedirFichas() {
+            while (porDelante.size < 24 && siguiente < comics.size) {
+                val cc = comics[siguiente++]
+                porDelante.addLast(lectura.submit<com.example.lector.ext.FichaManga?> { CacheFichas.leer(cc.fuenteId, cc.urlManga!!) })
+            }
+        }
+        try { TachibkFormato.EscritorFlujo(contador).use { w ->
             comics.forEachIndexed { i, c ->
+                pedirFichas()
+                val fichaAdelantada = runCatching { porDelante.removeFirst().get() }.getOrNull()
                 if (i % 50 == 0) avance?.paso(0.02f + 0.9f * i / comics.size.coerceAtLeast(1), "Mangas: $i de ${comics.size}")
                 val url = c.urlManga!!
                 val hist = histPorManga[c.fuenteId to url].orEmpty()
                 val conocidos = almacen.capitulosConocidos(c.fuenteId, url)
-                val ficha = CacheFichas.leer(c.fuenteId, url)
+                val ficha = fichaAdelantada
                 if (ficha == null && conocidos.isEmpty() && c.ultimaPagina > 0) sinLista++
                 w.manga(
                     TachibkFormato.Manga(
@@ -131,7 +143,7 @@ object Tachibk {
                 w.fuente(TachibkFormato.Fuente(fuentesPorId[id]?.nombre ?: id.toString(), id))
             }
             avance?.paso(0.97f, "Terminando…")
-        }
+        } } finally { lectura.shutdownNow() }
         return TareaCopia.Informe(
             titulo = "Copia para Mihon / Komikku",
             bien = listOfNotNull(
@@ -193,7 +205,10 @@ object Tachibk {
         var total = 0
         var favoritos = 0
         val porFuente = HashMap<Long, Int>()
-        TachibkFormato.recorrerMangas(bytes) { m ->
+        // Las fichas se guardan en paralelo (3 hilos) mientras se sigue leyendo la copia; como mucho 48 en cola.
+        val guardado = java.util.concurrent.Executors.newFixedThreadPool(3)
+        val cupo = java.util.concurrent.Semaphore(48)
+        try { TachibkFormato.recorrerMangas(bytes) { m ->
             total++
             if (total % 25 == 0) avance?.paso(0.05f + 0.6f * (total.toFloat() / (total + 50)).coerceAtMost(0.99f), "Mangas leídos: $total")
             runCatching {
@@ -209,14 +224,17 @@ object Tachibk {
                     if (m.urls.isNotEmpty()) almacen.guardarConocidosYa(m.fuente, m.url, m.urls)
                     // Su lista de capítulos (con los datos internos de la extensión) queda guardada en el móvil, como en
                     // Mihon: la ficha se abre al instante y sin «Refresh the chapter list». No pisa una ficha ya guardada.
-                    if (m.todos.isNotEmpty() && !CacheFichas.existe(m.fuente, m.url)) CacheFichas.guardar(
-                        m.fuente, m.url,
-                        com.example.lector.ext.FichaManga(
+                    if (m.todos.isNotEmpty()) {
+                        val ficha = com.example.lector.ext.FichaManga(
                             com.example.lector.ext.DetalleManga(titulo, m.autor, m.artista, m.descripcion, m.generos, m.estado, m.portada),
                             m.todos.map { com.example.lector.ext.CapituloFuente(it.url, it.nombre, it.fechaSubida, it.scanlator, it.numero, it.memo) },
                             m.memo,
-                        ),
-                    )
+                        )
+                        cupo.acquire()
+                        guardado.execute {
+                            try { if (!CacheFichas.existe(m.fuente, m.url)) CacheFichas.guardar(m.fuente, m.url, ficha) } finally { cupo.release() }
+                        }
+                    }
                     favoritos++
                     porFuente[m.fuente] = (porFuente[m.fuente] ?: 0) + 1
                     nuevos += Almacen.NuevoEnLinea(
@@ -237,6 +255,9 @@ object Tachibk {
                     )
                 }
             }.onFailure { errores += "«${m.titulo.ifBlank { m.url }}»: ${it.message ?: it.javaClass.simpleName}" }
+        } } finally {
+            guardado.shutdown()
+            guardado.awaitTermination(10, java.util.concurrent.TimeUnit.MINUTES)
         }
 
         // Una escritura por tipo de dato.
