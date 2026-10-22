@@ -44,6 +44,8 @@ jobs:
           # Las pruebas del final, en su propio aviso (el primero se corta si es muy largo).
           msg2=$(sed -n '/===== Madara/,/=====  *Restaurar/p;/===== Actualización/,$p' fallos.txt | sed -e 's/%/%25/g' | head -60 | awk '{printf "%s%%0A", $0}')
           echo "::notice title=Pruebas finales::${msg2}"
+          msg3=$(grep -E "restaurar ms=|crear ms=|Java Heap|TOTAL PSS|LA APP|FATAL" fallos.txt | cut -c1-420 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::notice title=Copias::${msg3}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
