@@ -15,7 +15,7 @@ android {
         // En GitHub Actions el número sube solo en cada compilación (1000 + número de ejecución): así cada versión
         // publicada es mayor que la anterior y Android la instala como actualización. Compilado a mano: 9.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.let { 1000 + it } ?: 9
-        versionName = "0.13"
+        versionName = "0.14"
     }
 
     // Una sola firma fija para todas las versiones (antes cada compilación de GitHub creaba una clave de depuración

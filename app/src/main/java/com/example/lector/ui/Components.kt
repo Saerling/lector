@@ -1,5 +1,10 @@
 package com.example.lector.ui
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
 import android.graphics.BitmapFactory
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -185,11 +190,18 @@ fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier:
     val indice = selected.ordinal
     val inicio = remember { Animatable(indice.toFloat()) }
     val fin = remember { Animatable(indice.toFloat()) }
+    // Ritmo que sigue al gesto (Living Flow): si cambias de pestaña rápido, la luz va más deprisa; con calma, más suave.
+    var ultimoCambio by remember { mutableStateOf(0L) }
     LaunchedEffect(indice) {
+        val ahora = android.os.SystemClock.uptimeMillis()
+        val rapido = ahora - ultimoCambio < 450
+        ultimoCambio = ahora
+        val delante = if (rapido) spring<Float>(dampingRatio = 0.86f, stiffness = 1300f) else LuzDelante
+        val detras = if (rapido) spring<Float>(dampingRatio = 0.86f, stiffness = 650f) else LuzDetras
         val destino = indice.toFloat()
         val aDerecha = destino > (inicio.value + fin.value) / 2f
-        launch { inicio.animateTo(destino, if (aDerecha) LuzDetras else LuzDelante) }
-        fin.animateTo(destino, if (aDerecha) LuzDelante else LuzDetras)
+        launch { inicio.animateTo(destino, if (aDerecha) detras else delante) }
+        fin.animateTo(destino, if (aDerecha) delante else detras)
     }
     val luz = LectorColors.Iluminada
     Box(
@@ -197,7 +209,8 @@ fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier:
             .press3D(4f, 0.985f)
             .sombraCromo(forma)
             .clip(forma)
-            .drawWithContent { drawContent(); lineaCristal(size.height / 2f) },
+            .drawWithContent { drawContent(); lineaCristal(size.height / 2f) }
+            .luzTactil(),
     ) {
         FondoCristal(CristalApp, Modifier.fillMaxSize())
         Row(
@@ -323,4 +336,38 @@ fun MiniReaderGenerico(
             Spacer(Modifier.width(2.dp))
         }
     }
+}
+
+/**
+ * Luz que sigue al dedo sobre una superficie de cristal (como la barra de progreso de Fluid Cloud en ColorOS 17):
+ * nace al tocar, se desliza con el dedo y se apaga despacio. Solo mira el dedo, no consume el toque.
+ */
+@Composable
+fun Modifier.luzTactil(): Modifier {
+    val luz = remember { Animatable(0f) }
+    var punto by remember { mutableStateOf(Offset.Zero) }
+    val scope = rememberCoroutineScope()
+    return this
+        .pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    val c = ev.changes.firstOrNull() ?: continue
+                    punto = c.position
+                    if (c.pressed && !c.previousPressed) scope.launch { luz.animateTo(1f, tween(140, easing = EnfasisEasing)) }
+                    if (!c.pressed && c.previousPressed) scope.launch { luz.animateTo(0f, tween(600, easing = EnfasisEasing)) }
+                }
+            }
+        }
+        .drawWithContent {
+            drawContent()
+            val l = luz.value
+            if (l > 0f) drawCircle(
+                Brush.radialGradient(
+                    0f to Color.White.copy(alpha = 0.22f * l), 0.5f to Color.White.copy(alpha = 0.06f * l), 1f to Color.Transparent,
+                    center = punto, radius = size.height * 1.4f,
+                ),
+                radius = size.height * 1.4f, center = punto,
+            )
+        }
 }

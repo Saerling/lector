@@ -184,6 +184,10 @@ private class PulsacionNode(
     var margen: Dp,
 ) : DelegatingNode(), LayoutModifierNode, DrawModifierNode {
     private val t = Animatable(0f)
+    // Living Flow (ColorOS 17): «la luz como respuesta». Un brillo suave nace bajo el dedo, lo sigue mientras se
+    // mantiene y se apaga despacio al soltar.
+    private val luz = Animatable(0f)
+    private var punto by androidx.compose.runtime.mutableStateOf(Offset.Zero)
     private var normal = Offset.Zero
     private var ancho = 0
 
@@ -207,10 +211,12 @@ private class PulsacionNode(
                     ancho = caja.width
                 }
                 val holgura = viewConfiguration.touchSlop * 1.5f
+                punto = abajo.position
                 pulsar(true)
                 while (true) {
                     val ev = awaitPointerEvent(PointerEventPass.Initial)
                     val c = ev.changes.firstOrNull { it.id == abajo.id } ?: break
+                    if (c.pressed) punto = c.position
                     // Si el dedo se arrastra (scroll), se suelta la pulsación.
                     if (!c.pressed || (c.position - abajo.position).getDistance() > holgura) break
                 }
@@ -224,6 +230,10 @@ private class PulsacionNode(
     }
 
     private fun pulsar(abajo: Boolean) {
+        coroutineScope.launch {
+            if (abajo) luz.animateTo(1f, tween(120, easing = EnfasisEasing))
+            else luz.animateTo(0f, tween(520, easing = EnfasisEasing))
+        }
         coroutineScope.launch {
             when (tipo) {
                 TipoPulsacion.REBOTE ->
@@ -279,6 +289,27 @@ private class PulsacionNode(
             }
         }
         drawContent()
+        val l = luz.value
+        if (l > 0f) {
+            // Luz radial recortada a la forma del elemento (píldora, portada o fila), sin salirse a los vecinos.
+            val menor = minOf(size.width, size.height)
+            val r = (maxOf(size.width, size.height) * 0.6f).coerceIn(40.dp.toPx(), 170.dp.toPx())
+            val esquina = when (tipo) {
+                TipoPulsacion.REBOTE -> menor / 2f
+                TipoPulsacion.INCLINAR -> 14.dp.toPx()
+                TipoPulsacion.RESALTE -> radio.toPx()
+            }
+            val mx = if (tipo == TipoPulsacion.RESALTE) margen.toPx() else 0f
+            drawRoundRect(
+                Brush.radialGradient(
+                    0f to LectorColors.Text.copy(alpha = 0.20f * l),
+                    0.45f to LectorColors.Text.copy(alpha = 0.07f * l),
+                    1f to Color.Transparent,
+                    center = punto, radius = r,
+                ),
+                topLeft = Offset(mx, 0f), size = Size(size.width - mx * 2f, size.height), cornerRadius = CornerRadius(esquina),
+            )
+        }
     }
 }
 

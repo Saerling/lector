@@ -552,6 +552,15 @@ Auditoría con las skills de diseño (design-engineering, ui-animation, apple-de
   ventanita animada (escala desde 0,94 + fundido; sale más rápido) con las dos portadas y «Ver el que tengo»,
   «Migrar aquí (con tu progreso)», «Añadir igualmente» y «Cancelar». Desde la ficha y al mantener pulsada una portada.
 
+## 2ab. PASO 28 — «Living Flow Design» de ColorOS 17 (2026-10-24, versión 0.14)
+Principios (oppo.com/es/coloros17 y su nota «Flow Everywhere»): luz como respuesta, capas translúcidas con luz,
+movimiento continuo que funde y transforma, rebote elástico y ritmo que sigue la velocidad del gesto.
+- Luz bajo el dedo en todo lo pulsable (`PulsacionNode`, Estilo.kt): brillo radial que nace al tocar, sigue al dedo y
+  se apaga en 520 ms; recortado a la forma (píldora, portada 14 dp, fila).
+- `Modifier.luzTactil()` (Components.kt) en la barra flotante de cristal.
+- Indicador de la barra: si se cambia de pestaña en < 450 ms, muelles más rígidos (ritmo del gesto).
+- Mini lector: brota de la barra (escala desde abajo + plegado) y se funde en ella al salir.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

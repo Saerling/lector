@@ -526,8 +526,11 @@ fun Inicio(
                 // Más tapaba contenido y la barra de selección. Entra y sale plegándose, sin saltos.
                 AnimatedVisibility(
                     visible = tab == LectorTab.Home || tab == LectorTab.History,
-                    enter = expandVertically(tween(260, easing = EnfasisEasing), expandFrom = Alignment.Bottom) + fadeIn(tween(200, 60)),
-                    exit = shrinkVertically(tween(220, easing = EnfasisEasing), shrinkTowards = Alignment.Bottom) + fadeOut(tween(140)),
+                    // Living Flow: brota de la barra (crece desde abajo) y vuelve a fundirse en ella al salir.
+                    enter = expandVertically(tween(300, easing = EnfasisEasing), expandFrom = Alignment.Bottom) + fadeIn(tween(220, 60)) +
+                        scaleIn(tween(320, easing = EnfasisEasing), initialScale = 0.88f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)),
+                    exit = shrinkVertically(tween(220, easing = EnfasisEasing), shrinkTowards = Alignment.Bottom) + fadeOut(tween(140)) +
+                        scaleOut(tween(200), targetScale = 0.92f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)),
                 ) { Column {
                     if (ultimoLinea != null && (ultimo == null || ultimoLinea.leido >= ultimo.leido)) {
                         val e = ultimoLinea
