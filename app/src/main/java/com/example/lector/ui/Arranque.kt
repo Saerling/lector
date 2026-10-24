@@ -72,6 +72,8 @@ fun ArranqueOverlay(alTerminar: () -> Unit) {
         val escalaFinal = (kotlin.math.hypot(ancho, alto) / 2f) / radioHorizonte * 1.04f
 
         LaunchedEffect(Unit) {
+            // Con «Quitar animaciones»: directamente a la app.
+            if (MovimientoReducido.activo) { alTerminar(); return@LaunchedEffect }
             delay(90)
             inspirar.animateTo(0.94f, tween(260, easing = EnfasisEasing))
             caer.animateTo(1f, tween(640, easing = Caida))

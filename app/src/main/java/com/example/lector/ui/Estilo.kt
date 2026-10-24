@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
@@ -253,7 +254,7 @@ private class PulsacionNode(
                     val s = 1f - (1f - escala) * v
                     scaleX = s
                     scaleY = s
-                    if (tipo == TipoPulsacion.INCLINAR) {
+                    if (tipo == TipoPulsacion.INCLINAR && !MovimientoReducido.activo) {
                         rotationX = -normal.y * inclinacion * v
                         rotationY = normal.x * inclinacion * v
                         cameraDistance = (ancho.takeIf { it > 0 }?.toFloat() ?: 1000f) * 3f
@@ -321,9 +322,11 @@ private val ColorHueso = Color(0xFFD9D9D9).copy(alpha = 0.22f)
 @Composable
 fun BonesHost(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val ola = rememberInfiniteTransition(label = "bones")
-    val fase = ola.animateFloat(
+    val faseOla = ola.animateFloat(
         0f, 1f, infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "fase",
     )
+    // Sin animaciones: los esqueletos quedan quietos (a media opacidad), sin la ola.
+    val fase = if (MovimientoReducido.activo) androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0.5f) } else faseOla
     Column(
         modifier
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
@@ -400,7 +403,10 @@ object Avisos {
     val actual: StateFlow<Aviso?> = _actual.asStateFlow()
     private val contador = AtomicLong(0)
 
-    fun mostrar(texto: String) { _actual.value = Aviso(contador.incrementAndGet(), texto) }
+    fun mostrar(texto: String) {
+        _actual.value = Aviso(contador.incrementAndGet(), texto)
+        if (esError(texto)) Tacto.rechazar()
+    }
 
     /** Aviso con un botón (p. ej. «Buscar en todas»): tocarlo lo ejecuta y cierra el aviso. */
     fun mostrar(texto: String, accion: String, alAccion: () -> Unit) {
@@ -454,11 +460,22 @@ private fun TarjetaAviso(a: Aviso) {
         Avisos.ocultar(a.id)
     }
     val error = remember(a.texto) { esError(a.texto) }
+    // Error: una sacudida corta (280 ms, amplitud decreciente) al llegar, junto a la vibración de rechazo.
+    val sacudida = remember(a.id) { Animatable(0f) }
+    LaunchedEffect(a.id) {
+        if (!error || MovimientoReducido.activo) return@LaunchedEffect
+        delay(200) // tras la entrada
+        sacudida.animateTo(0f, keyframes {
+            durationMillis = 280
+            -8f at 80; 6f at 160; -3f at 220
+        })
+    }
+    val dpx = androidx.compose.ui.platform.LocalDensity.current.density
     val forma = RoundedCornerShape(30.dp)
     val claro = Color(0xFFD9D9D9)
     Row(
         Modifier.widthIn(max = 480.dp).fillMaxWidth()
-            .graphicsLayer { translationY = subida.value }
+            .graphicsLayer { translationY = subida.value; translationX = sacudida.value * dpx }
             .shadow(14.dp, forma, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(forma).background(LectorColors.Aviso)
             .pointerInput(a.id) {

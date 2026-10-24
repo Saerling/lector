@@ -73,9 +73,17 @@ class MainActivity : ComponentActivity() {
     }
     private val permisoNotificaciones = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    // «Quitar animaciones» puede cambiar con la app en segundo plano.
+    override fun onResume() {
+        super.onResume()
+        com.example.lector.ui.MovimientoReducido.actualizar()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Fallos.instalar(applicationContext)
+        com.example.lector.ui.MovimientoReducido.actualizar()
+        com.example.lector.ui.Tacto.iniciar(window.decorView)
         if (savedInstanceState == null) fallo = Fallos.recoger(applicationContext)
         almacen = Almacen.obtener(applicationContext)
         aplicarBarras(oscuro = almacen.modoTema != ModoTema.CLARO)

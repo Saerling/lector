@@ -535,6 +535,15 @@ Cierre por `OutOfMemoryError` en un móvil con >6.000 mangas. Cambios:
 - Pruebas: `probar-url:<pkgs>` (direcciones de los listados) y `probar:<pkg>|capitulo` (populares → ficha →
   páginas del primer capítulo con el memo recuperado); BarManga (Madara) da 21 páginas.
 
+## 2z. PASO 26 — Tacto y movimiento reducido (2026-10-24, versión 0.12)
+Auditoría con las skills de diseño (design-engineering, ui-animation, apple-design/game-feel):
+- `Tacto` (ui/Tacto.kt): vocabulario háptico central (tic, alternar, umbral, confirmar, rechazar) con efectos del
+  sistema (respeta «Vibración al tocar»). Disparos: chips, interruptores, deslizar para recargar (ficha y
+  Novedades), añadir/quitar de la biblioteca, migrar, y todo aviso de error.
+- `MovimientoReducido`: con «Quitar animaciones» de Android se salta la animación de arranque, sin inclinación 3D,
+  sin entradas escalonadas y esqueletos sin ola. Se relee en `onResume`.
+- Avisos de error: sacudida de 280 ms (keyframes 80/160/220 ms, amplitud decreciente) + vibración de rechazo.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

@@ -244,7 +244,7 @@ fun Interruptor(activado: Boolean, onChange: ((Boolean) -> Unit)?, modifier: Mod
     val x by animateDpAsState(if (activado) 52.dp - 24.dp - 4.dp else 4.dp, tween(150), label = "x")
     Box(
         modifier.size(52.dp, 32.dp)
-            .then(if (onChange != null) Modifier.toggleable(activado, role = Role.Switch, onValueChange = onChange) else Modifier)
+            .then(if (onChange != null) Modifier.toggleable(activado, role = Role.Switch, onValueChange = { Tacto.alternar(it); onChange(it) }) else Modifier)
             .clip(CircleShape).background(pista).border(1.dp, borde, CircleShape),
     ) { Box(Modifier.align(Alignment.CenterStart).offset(x = x).size(24.dp).clip(CircleShape).background(boton)) }
 }
@@ -273,7 +273,7 @@ fun ChipSel(texto: String, seleccionado: Boolean, onLongClick: (() -> Unit)? = n
     )
     val forma = RoundedCornerShape(radio)
     Row(
-        Modifier.pressable(onLongClick, onClick).clip(forma)
+        Modifier.pressable(onLongClick) { Tacto.tic(); onClick() }.clip(forma)
             .background(if (seleccionado) LectorColors.PillFill else LectorColors.Card)
             .animateContentSize(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium))
             .height(36.dp).padding(horizontal = 14.dp),

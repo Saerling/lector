@@ -323,7 +323,7 @@ private fun NovedadesTab(
             // Deslizar hacia abajo vuelve a pedir las novedades de todas las fuentes (lo de antes se ve mientras tanto).
             androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                 isRefreshing = refrescando && pendientes,
-                onRefresh = { refrescando = true; NovedadesGuardadas.recargar() },
+                onRefresh = { Tacto.umbral(); refrescando = true; NovedadesGuardadas.recargar() },
                 modifier = Modifier.fillMaxSize(),
             ) {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 190.dp)) {

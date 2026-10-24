@@ -200,6 +200,7 @@ fun FuenteNoDisponible(
                         elegido = null
                         r.onSuccess {
                             alRecargar()
+                            Tacto.confirmar()
                             Avisos.mostrar("Migrado a ${f.nombre}")
                             onAbrir(f, m)
                         }.onFailure { Avisos.mostrar(it.message ?: "No se pudo migrar") }

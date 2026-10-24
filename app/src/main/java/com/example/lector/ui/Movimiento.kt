@@ -33,7 +33,7 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun Modifier.entrada(indice: Int, pasoMs: Int = 35): Modifier {
-    var visible by rememberSaveable { mutableStateOf(false) }
+    var visible by rememberSaveable { mutableStateOf(MovimientoReducido.activo) }
     LaunchedEffect(Unit) {
         if (!visible) {
             delay((indice.coerceIn(0, 8) * pasoMs).toLong())

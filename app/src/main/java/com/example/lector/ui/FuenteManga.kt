@@ -301,6 +301,7 @@ fun FichaMangaScreen(
             }
             guardando = false
             alRecargar()
+            Tacto.confirmar()
             Avisos.mostrar("Añadido a la biblioteca")
             // Como en Komikku: al añadir, pregunta las categorías (si hay).
             if (almacen.categorias().isNotEmpty()) dialogoCats = true
@@ -381,7 +382,7 @@ fun FichaMangaScreen(
         // Deslizar hacia abajo: vuelve a pedir la ficha y los capítulos a la fuente (lo normal es usar lo guardado).
         androidx.compose.material3.pulltorefresh.PullToRefreshBox(
             isRefreshing = refrescando,
-            onRefresh = { refrescando = true; recarga++ },
+            onRefresh = { Tacto.umbral(); refrescando = true; recarga++ },
             modifier = Modifier.fillMaxSize(),
         ) {
         LazyColumn(Modifier.fillMaxSize(), state = lista, contentPadding = PaddingValues(bottom = if (enSeleccion) 130.dp else 60.dp)) {

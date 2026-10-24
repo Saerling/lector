@@ -196,6 +196,7 @@ fun EnBiblioteca(modifier: Modifier = Modifier) {
 /** Mantener pulsada una portada en Explorar: la añade a la biblioteca (o la quita si ya estaba), como en Komikku. */
 fun alternarEnBiblioteca(ctx: android.content.Context, almacen: Almacen, f: FuenteUI, m: MangaFuente) {
     val ya = almacen.comicEnLinea(f.id, m.url)
+    Tacto.confirmar()
     if (ya != null) {
         almacen.eliminar(ya.id)
         Avisos.mostrar("Quitado de la biblioteca")
