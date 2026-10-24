@@ -544,6 +544,14 @@ Auditoría con las skills de diseño (design-engineering, ui-animation, apple-de
   sin entradas escalonadas y esqueletos sin ola. Se relee en `onResume`.
 - Avisos de error: sacudida de 280 ms (keyframes 80/160/220 ms, amplitud decreciente) + vibración de rechazo.
 
+## 2aa. PASO 27 — Duplicados, búsqueda más rápida, mini lector (2026-10-24, versión 0.13)
+- Mini lector solo en Inicio e Historial (tapaba la barra de selección de Actualizaciones y Más); entra/sale plegándose.
+- Búsqueda en todas las fuentes (`rememberResultadosGlobales`): 12 a la vez, 12 s máx. por fuente, `CacheBusquedas` en
+  memoria (10 min). Migrar: el paso 1 ya busca en todas las fuentes a la vez (filas como Novedades).
+- `Duplicados` (ui/Duplicado.kt): al añadir un manga con el mismo título que uno de la biblioteca en otra fuente,
+  ventanita animada (escala desde 0,94 + fundido; sale más rápido) con las dos portadas y «Ver el que tengo»,
+  «Migrar aquí (con tu progreso)», «Añadir igualmente» y «Cancelar». Desde la ficha y al mantener pulsada una portada.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

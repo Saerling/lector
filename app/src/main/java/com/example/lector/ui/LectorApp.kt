@@ -1,5 +1,7 @@
 package com.example.lector.ui
 
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -520,7 +522,13 @@ fun Inicio(
                 Modifier.navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 8.dp)
             ) {
                 // El botón de reanudar abre la ficha del último manga leído (no el capítulo).
-                if (tab != LectorTab.Library) {
+                // Solo donde tiene sentido seguir leyendo (Inicio e Historial): en Biblioteca, Explorar, Actualizaciones y
+                // Más tapaba contenido y la barra de selección. Entra y sale plegándose, sin saltos.
+                AnimatedVisibility(
+                    visible = tab == LectorTab.Home || tab == LectorTab.History,
+                    enter = expandVertically(tween(260, easing = EnfasisEasing), expandFrom = Alignment.Bottom) + fadeIn(tween(200, 60)),
+                    exit = shrinkVertically(tween(220, easing = EnfasisEasing), shrinkTowards = Alignment.Bottom) + fadeOut(tween(140)),
+                ) { Column {
                     if (ultimoLinea != null && (ultimo == null || ultimoLinea.leido >= ultimo.leido)) {
                         val e = ultimoLinea
                         // Cargar la extensión tarda: se pide en segundo plano y, mientras, se usa lo que ya haya en caché.
@@ -540,12 +548,20 @@ fun Inicio(
                         MiniReader(ultimo, almacen, onClick = { abrirDetalle(ultimo) })
                         Spacer(Modifier.height(8.dp))
                     }
-                }
+                } }
                 FloatingNavBar(tab, onSelect = onTab)
             }
         }
 
         // Avance de una copia de seguridad (píldora pequeña arriba) y su informe al terminar.
+        // «Ya lo tienes»: al añadir un manga que ya está en la biblioteca desde otra fuente.
+        DialogoDuplicado(ext, almacen, alRecargar) { c ->
+            if (ruta == Ruta.Ficha && mangaSel != null) {
+                // Desde una ficha: se abre encima, y «atrás» vuelve a la que estabas mirando.
+                fichasAnteriores.add((fuenteId ?: 0L) to mangaSel!!)
+                fuenteId = c.fuenteId; mangaSel = MangaFuente(c.urlManga.orEmpty(), c.titulo, c.portadaUrl); reanudar = null
+            } else abrirDetalle(c)
+        }
         IslaCopia(Modifier.align(Alignment.TopCenter))
         InformeCopia()
 

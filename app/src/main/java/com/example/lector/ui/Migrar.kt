@@ -78,24 +78,46 @@ fun MigrarScreen(
 
     val f = destino
     if (f == null) {
-        // Paso 1: elegir la fuente a la que se migra.
-        PaginaAjustes("Migrar a otra fuente", onBack) {
-            LText(
-                "Elige la fuente a la que quieres pasar «${comic.titulo}». Se conservan tus categorías y los capítulos leídos.",
-                LectorType.Body, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), color = LectorColors.Muted,
-            )
-            val opciones = ext.fuentes.filter { it.id != origen.id }
-            if (opciones.isEmpty()) {
-                LText(
-                    "No hay otras fuentes instaladas y de confianza.",
-                    LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted,
-                )
+        // Paso 1: se busca el título en TODAS tus fuentes a la vez (como Komikku) y se elige el resultado directamente.
+        var enviada by remember { mutableStateOf(comic.titulo) }
+        var soloConResultados by remember { mutableStateOf(true) }
+        val fuentes = remember(ext.fuentes, ext.idiomas, ext.mostrarNsfw) {
+            ext.fuentes.filter { it.id != origen.id && (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas }
+                .sortedWith(compareBy({ it.id.toString() !in ext.fijadas }, { it.nombre.lowercase() }))
+        }
+        val globales = rememberResultadosGlobales(fuentes, enviada)
+        val claves = remember(almacen.version) { almacen.clavesEnLinea() }
+        PaginaAjustes("Migrar «${comic.titulo}»", onBack) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { CampoBusqueda(consulta, { consulta = it }, "Título") }
+                Spacer(Modifier.width(10.dp))
+                PillButton("Buscar", Icons.Rounded.Search, { enviada = consulta.trim() })
             }
-            opciones.forEach { o ->
-                FilaAjuste(null, o.nombre, "${bandera(o.lang)} ${nombreIdioma(o.lang)}") {
-                    destino = o
-                    buscar(o, consulta)
-                }
+            Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+                ChipSel("Solo con resultados", soloConResultados) { soloConResultados = !soloConResultados }
+            }
+            val hechas = globales.values.count { it !is EstadoBusqueda.Cargando }
+            val conAlgo = globales.values.count { it is EstadoBusqueda.Hecho && it.mangas.isNotEmpty() }
+            LText(
+                when {
+                    fuentes.isEmpty() -> "No hay otras fuentes instaladas y de confianza."
+                    hechas < fuentes.size -> "Buscando… $hechas de ${fuentes.size} fuentes · aparece en $conAlgo"
+                    else -> "Aparece en $conAlgo de ${fuentes.size} fuentes. Toca el que quieras."
+                },
+                LectorType.Label, Modifier.padding(horizontal = 24.dp, vertical = 6.dp), color = LectorColors.Muted,
+            )
+            fuentes.forEach { o ->
+                val e = globales[o.id] ?: EstadoBusqueda.Cargando
+                if (soloConResultados && (e !is EstadoBusqueda.Hecho || e.mangas.isEmpty())) return@forEach
+                FilaResultados(
+                    o, e, claves, destacar = comic.titulo,
+                    onManga = { m ->
+                        destino = o
+                        resultados.clear(); (e as? EstadoBusqueda.Hecho)?.let { resultados.addAll(it.mangas) }
+                        elegido = m
+                    },
+                    onLargo = {},
+                )
             }
         }
         return

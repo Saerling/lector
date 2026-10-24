@@ -269,14 +269,8 @@ fun FichaMangaScreen(
     )
 
     // Corazón "En biblioteca": añade (descargando la portada) o quita el manga.
-    fun alternarBiblioteca() {
+    fun anadirABiblioteca() {
         if (f == null || motor == null || guardando) return
-        if (enBiblioteca != null) {
-            almacen.quitarEnLinea(f.id, manga.url)
-            alRecargar()
-            Avisos.mostrar("Quitado de la biblioteca")
-            return
-        }
         guardando = true
         scope.launch {
             val titulo = fi?.detalle?.titulo ?: manga.titulo
@@ -306,6 +300,18 @@ fun FichaMangaScreen(
             // Como en Komikku: al añadir, pregunta las categorías (si hay).
             if (almacen.categorias().isNotEmpty()) dialogoCats = true
         }
+    }
+
+    fun alternarBiblioteca() {
+        if (f == null || motor == null || guardando) return
+        if (enBiblioteca != null) {
+            almacen.quitarEnLinea(f.id, manga.url)
+            alRecargar()
+            Avisos.mostrar("Quitado de la biblioteca")
+            return
+        }
+        // ¿Ya está en la biblioteca desde otra fuente? Entonces se pregunta antes (ver, migrar o añadir igualmente).
+        Duplicados.comprobar(almacen, f, manga, fi?.detalle?.titulo ?: manga.titulo) { anadirABiblioteca() }
     }
 
     if (f == null || motor == null) {

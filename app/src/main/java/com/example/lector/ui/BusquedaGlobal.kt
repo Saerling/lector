@@ -105,13 +105,20 @@ internal fun rememberResultadosGlobales(fuentes: List<FuenteUI>, consulta: Strin
     LaunchedEffect(consulta, fuentes) {
         resultados.clear()
         if (consulta.isBlank() || motor == null) return@LaunchedEffect
-        val limite = Semaphore(5)
-        fuentes.forEach { f -> resultados[f.id] = EstadoBusqueda.Cargando }
-        fuentes.forEach { f ->
+        val q = consulta.trim()
+        // 12 a la vez (son webs distintas), 12 s como mucho por fuente (las lentas o con Cloudflare no frenan a las
+        // demás) y lo ya buscado sale al instante de la memoria.
+        val limite = Semaphore(12)
+        fuentes.forEach { f -> resultados[f.id] = CacheBusquedas.leer(f.id, q)?.let { EstadoBusqueda.Hecho(it) } ?: EstadoBusqueda.Cargando }
+        fuentes.filter { resultados[it.id] is EstadoBusqueda.Cargando }.forEach { f ->
             launch {
                 limite.withPermit {
                     resultados[f.id] = try {
-                        EstadoBusqueda.Hecho(motor.buscar(f, consulta.trim(), 1).mangas.distinctBy { it.url })
+                        val r = kotlinx.coroutines.withTimeout(12_000) { motor.buscar(f, q, 1).mangas.distinctBy { it.url } }
+                        CacheBusquedas.guardar(f.id, q, r)
+                        EstadoBusqueda.Hecho(r)
+                    } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                        EstadoBusqueda.Fallo("Tardó demasiado")
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -196,12 +203,29 @@ fun EnBiblioteca(modifier: Modifier = Modifier) {
 /** Mantener pulsada una portada en Explorar: la añade a la biblioteca (o la quita si ya estaba), como en Komikku. */
 fun alternarEnBiblioteca(ctx: android.content.Context, almacen: Almacen, f: FuenteUI, m: MangaFuente) {
     val ya = almacen.comicEnLinea(f.id, m.url)
-    Tacto.confirmar()
     if (ya != null) {
+        Tacto.confirmar()
         almacen.eliminar(ya.id)
         Avisos.mostrar("Quitado de la biblioteca")
-    } else {
+    } else Duplicados.comprobar(almacen, f, m) {
+        Tacto.confirmar()
         almacen.anadirEnLinea(f.id, m.url, m.titulo, m.portadaUrl, null, 0, 0)
         Avisos.mostrar("Añadido a la biblioteca")
+    }
+}
+
+/** Resultados de búsqueda recientes en memoria (fuente + texto), 10 minutos: repetir una búsqueda es instantáneo. */
+internal object CacheBusquedas {
+    private class Entrada(val cuando: Long, val mangas: List<MangaFuente>)
+    private val datos = object : LinkedHashMap<String, Entrada>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Entrada>?) = size > 2000
+    }
+
+    fun leer(fuente: Long, q: String): List<MangaFuente>? = synchronized(datos) {
+        datos["$fuente|${q.lowercase()}"]?.takeIf { System.currentTimeMillis() - it.cuando < 10 * 60_000 }?.mangas
+    }
+
+    fun guardar(fuente: Long, q: String, m: List<MangaFuente>) = synchronized(datos) {
+        datos["$fuente|${q.lowercase()}"] = Entrada(System.currentTimeMillis(), m)
     }
 }
