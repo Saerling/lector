@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import com.example.lector.TareaCopia
@@ -567,7 +568,42 @@ fun AjSeguridadScreen(almacen: Almacen, onBack: () -> Unit) {
 @Composable
 fun AjAvanzadoScreen(almacen: Almacen, onBack: () -> Unit) {
     val ctx = LocalContext.current
+    var informe by remember { mutableStateOf<String?>(null) }
+    val ext = remember { com.example.lector.ext.ExtManager.obtener(ctx) }
+    val scope = rememberCoroutineScope()
+    fun escanear() {
+        ext.refrescarInstaladas()
+        scope.launch {
+            kotlinx.coroutines.delay(2500) // que termine de leer y cargar las extensiones
+            informe = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ext.informe() }
+        }
+    }
+    informe?.let { texto ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { informe = null },
+            title = { androidx.compose.material3.Text("Diagnóstico de extensiones") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    LText(texto, LectorType.Label)
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("Diagnóstico Shiori", texto))
+                    Avisos.mostrar("Informe copiado: pégalo en el chat")
+                }) { androidx.compose.material3.Text("Copiar") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { escanear() }) { androidx.compose.material3.Text("Volver a escanear") } },
+        )
+    }
     PaginaAjustes("Avanzado", onBack) {
+        TituloSeccion("Extensiones")
+        FilaAjuste(Icons.Rounded.Refresh, "Diagnóstico de extensiones", "Escanea las extensiones instaladas y dice por qué falta alguna. Se puede copiar para enviarlo.") {
+            Avisos.mostrar("Escaneando extensiones…")
+            escanear()
+        }
+        Divisor()
         TituloSeccion("Red")
         LText("DNS sobre HTTPS (para las fuentes)", LectorType.Body.copy(fontSize = 15.sp), Modifier.padding(start = 24.dp, top = 4.dp))
         FilaChips(listOf("Desactivado", "Cloudflare", "Google", "AdGuard", "Quad9"), almacen.doh.coerceIn(0, 4)) {

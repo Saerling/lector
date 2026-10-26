@@ -573,6 +573,33 @@ class ExtManager private constructor(private val app: Context) {
         }
     }
 
+    /**
+     * Diagnóstico para enviar: todo paquete instalado que parezca una extensión (aunque no la reconozcamos) con su
+     * versión, librería, confianza, si cargó y cuántas fuentes da.
+     */
+    @Suppress("DEPRECATION")
+    fun informe(): String = buildString {
+        val pm = app.packageManager
+        val todos = runCatching { pm.getInstalledPackages(PackageManager.GET_CONFIGURATIONS) }.getOrDefault(emptyList())
+        val candidatos = todos.filter { CargadorExt.esExtension(it) || it.packageName.contains("tachiyomi") || it.packageName.contains("mihon") }
+        appendLine("Shiori ${runCatching { pm.getPackageInfo(app.packageName, 0).versionName }.getOrNull()} · Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+        appendLine("Paquetes instalados vistos: ${todos.size} · parecen extensiones: ${candidatos.size} · reconocidas: ${instaladas.size} · fuentes: ${fuentes.size}")
+        appendLine("Listados: ${repos.count { it.activo }} activos, ${disponibles.size} extensiones disponibles")
+        candidatos.sortedBy { it.packageName }.forEach { p ->
+            val e = instaladas.firstOrNull { it.pkg == p.packageName }
+            val estado = when {
+                !CargadorExt.esExtension(p) -> "NO DECLARA la característica tachiyomi.extension"
+                e == null -> "no se pudo leer"
+                e.errorCarga != null -> "NO SOPORTADA: ${e.errorCarga}"
+                !e.confiable -> "sin confianza"
+                erroresCarga[e.pkg] != null -> "ERROR AL CARGAR: ${erroresCarga[e.pkg]}"
+                fuentesCargadas[e.pkg] == null -> "cargando…"
+                else -> "ok, ${fuentesCargadas[e.pkg]?.size} fuentes"
+            }
+            appendLine("- ${e?.nombre ?: p.packageName} (${p.packageName}) v${p.versionName} lib ${e?.libVersion ?: "?"}: $estado")
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun leerInstaladas() {
         val pm = app.packageManager

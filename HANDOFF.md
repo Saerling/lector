@@ -571,6 +571,14 @@ movimiento continuo que funde y transforma, rebote elástico y ritmo que sigue l
   inicio (Agujero negro / Rápida / Ninguna) y Luz al tocar. Apariencia las enseña con previsualizaciones.
 - Arranque: más ágil (40 + 200 + 560 ms) y la app emerge (escala 1,08 → 1) con `ArranqueRevelado`; «Ver animación».
 
+## 2ad. PASO 30 — Extensiones 1.5 y diagnóstico (2026-10-25, versión 0.16)
+- Bug: `CargadorExt.LIBS_SOPORTADAS` era `listOf(1.4, 1.6)` (valores exactos): las extensiones con librería 1.5 se
+  marcaban «no soportadas» y no salían. Ahora rango 1.2..1.69 (como Komikku).
+- Re-escaneo de extensiones en cada `onResume`.
+- Ajustes → Avanzado → «Diagnóstico de extensiones»: `ExtManager.informe()` lista todo paquete que parezca extensión
+  con su estado (no declara la característica, no soportada y por qué, sin confianza, error al cargar, nº de
+  fuentes); se puede copiar para enviarlo.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

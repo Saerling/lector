@@ -27,7 +27,9 @@ object CargadorExt {
     private const val META_AVISO = "tachiyomix.contentWarning"
 
     /** Igual que SUPPORTED_LIB_VERSIONS de Komikku. */
-    val LIBS_SOPORTADAS = listOf(1.4, 1.6)
+    // Rango, no valores sueltos: antes solo valían 1.4 y 1.6 EXACTOS y las extensiones 1.5 (muchas) no salían.
+    // Como Komikku: de 1.2 a 1.6 (las que no carguen dan su error en el diagnóstico).
+    val LIBS_SOPORTADAS = 1.2..1.69
 
     @Suppress("DEPRECATION")
     val FLAGS: Int = PackageManager.GET_CONFIGURATIONS or
@@ -69,7 +71,7 @@ object CargadorExt {
         val motivo = when {
             versionName.isEmpty() -> "La extensión no declara su versión"
             lib == null || lib !in LIBS_SOPORTADAS ->
-                "Versión de librería $lib no soportada (se admiten ${LIBS_SOPORTADAS.joinToString()})"
+                "Versión de librería $lib no soportada (se admiten de 1.2 a 1.6)"
             huellas.isEmpty() -> "La extensión no está firmada"
             else -> null
         }

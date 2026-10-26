@@ -77,6 +77,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         com.example.lector.ui.MovimientoReducido.actualizar()
+        // Cada vez que se abre o se vuelve a la app: se vuelven a escanear las extensiones instaladas.
+        com.example.lector.ext.ExtManager.obtener(applicationContext).refrescarInstaladas()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
