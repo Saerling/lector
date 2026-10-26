@@ -62,7 +62,52 @@ class OrigenFuente(
 
     override suspend fun bytes(indice: Int): ByteArray {
         local()?.let { f -> runCatching { OrigenArchivo(f).bytes(indice) }.getOrNull()?.let { return it } }
-        return motor.imagenPagina(fuente, cap, indice)
+        // Lo ya descargado se guarda en disco: volver a una página no la vuelve a pedir a la red.
+        CacheBytes.leer(id, indice)?.let { return it }
+        return motor.imagenPagina(fuente, cap, indice).also { CacheBytes.guardar(id, indice, it) }
+    }
+
+    /** ¿Hay que traer las páginas de la red? (no si está descargado). */
+    val enRed: Boolean get() = local() == null
+}
+
+/**
+ * Bytes de las páginas leídas en línea, en la caché del móvil (Android la puede vaciar si falta espacio). Una carpeta
+ * por capítulo; si pasa de 400 MB se borran los capítulos más viejos.
+ */
+object CacheBytes {
+    private var raiz: File? = null
+    private var escrituras = 0
+
+    fun iniciar(ctx: android.content.Context) { if (raiz == null) raiz = File(ctx.cacheDir, "paginas").apply { mkdirs() } }
+
+    private fun carpeta(id: String): File? = raiz?.let {
+        val h = java.security.MessageDigest.getInstance("SHA-1").digest(id.toByteArray()).joinToString("") { b -> "%02x".format(b) }.take(20)
+        File(it, h)
+    }
+
+    fun leer(id: String, i: Int): ByteArray? = carpeta(id)?.let { File(it, "$i") }?.takeIf { it.length() > 0 }?.let { f ->
+        runCatching { f.readBytes() }.getOrNull()?.also { f.parentFile?.setLastModified(System.currentTimeMillis()) }
+    }
+
+    fun guardar(id: String, i: Int, b: ByteArray) {
+        val c = carpeta(id) ?: return
+        runCatching {
+            c.mkdirs()
+            val tmp = File(c, "$i.tmp"); tmp.writeBytes(b); tmp.renameTo(File(c, "$i"))
+            c.setLastModified(System.currentTimeMillis())
+        }
+        if (++escrituras % 40 == 0) recortar()
+    }
+
+    @Synchronized private fun recortar(max: Long = 400L * 1024 * 1024) {
+        val dirs = raiz?.listFiles()?.filter { it.isDirectory }?.sortedBy { it.lastModified() } ?: return
+        var total = dirs.sumOf { d -> d.listFiles()?.sumOf { it.length() } ?: 0L }
+        for (d in dirs) {
+            if (total <= max) break
+            total -= d.listFiles()?.sumOf { it.length() } ?: 0L
+            d.deleteRecursively()
+        }
     }
 }
 

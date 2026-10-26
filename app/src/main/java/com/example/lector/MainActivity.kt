@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
         com.example.lector.ui.MovimientoReducido.actualizar()
         com.example.lector.ui.Tacto.iniciar(window.decorView)
         com.example.lector.ui.Aspecto.iniciar(applicationContext)
+        com.example.lector.ui.CacheBytes.iniciar(applicationContext)
         if (savedInstanceState == null) fallo = Fallos.recoger(applicationContext)
         almacen = Almacen.obtener(applicationContext)
         aplicarBarras(oscuro = almacen.modoTema != ModoTema.CLARO)

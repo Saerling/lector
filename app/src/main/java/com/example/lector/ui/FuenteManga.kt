@@ -616,8 +616,11 @@ fun FichaMangaScreen(
                         ColorMarca,
                     ) { ext.alternarMarcado(f.id, c.url) }
                     FilaDeslizable(if (enSeleccion) null else accionLeido, if (enSeleccion) null else accionMarca, Modifier.entrada(pos)) {
+                        // Leídos: toda la fila se apaga (se nota en claro y en oscuro) y su número pasa a un visto.
+                        val apagado by animateFloatAsState(if (leido && !seleccionado) 0.42f else 1f, tween(260), label = "leido")
                         Row(
                             Modifier.fillMaxWidth()
+                                .graphicsLayer { alpha = apagado }
                                 .background(if (seleccionado) acento.copy(alpha = 0.16f) else Color.Transparent)
                                 .resaltable(
                                     onLongClick = { seleccion = if (seleccionado) seleccion - c.url else seleccion + c.url },
@@ -630,10 +633,10 @@ fun FichaMangaScreen(
                         ) {
                             Box(
                                 Modifier.size(64.dp).clip(SuaveShape(20.dp))
-                                    .background(acento.copy(alpha = if (seleccionado) 0.5f else if (leido) 0.10f else 0.24f)),
+                                    .background(if (leido && !seleccionado) LectorColors.Muted.copy(alpha = 0.16f) else acento.copy(alpha = if (seleccionado) 0.5f else 0.28f)),
                                 Alignment.Center,
                             ) {
-                                if (seleccionado) Icon(Icons.Rounded.Check, null, tint = LectorColors.Text)
+                                if (seleccionado || leido) Icon(Icons.Rounded.Check, if (leido) "Leído" else null, tint = LectorColors.Text)
                                 else LText(
                                     numero, LectorType.Display.copy(fontSize = if (numero.length > 3) 15.sp else 21.sp),
                                     color = if (leido) LectorColors.Muted else LectorColors.Text, maxLines = 1,

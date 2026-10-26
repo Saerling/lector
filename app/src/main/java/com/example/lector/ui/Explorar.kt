@@ -332,6 +332,10 @@ private fun NovedadesTab(
                 onRefresh = { Tacto.umbral(); refrescando = true; NovedadesGuardadas.recargar() },
                 modifier = Modifier.fillMaxSize(),
             ) {
+                // Lo que ya está en tu biblioteca se marca (portada apagada + insignia), como en Komikku.
+                val ctxB = androidx.compose.ui.platform.LocalContext.current
+                val almB = remember { com.example.lector.Almacen.obtener(ctxB) }
+                val enBiblio = remember(almB.version) { almB.clavesEnLinea() }
                 // Cada fuente y, justo debajo, las búsquedas guardadas suyas que pusiste en Novedades.
                 val filas = remember(lista, ext.novedadesBusq, ext.busquedasVersion) {
                     val porFuente = ext.novedadesBusq.mapNotNull { k ->
@@ -345,7 +349,7 @@ private fun NovedadesTab(
                 }
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 190.dp)) {
                     items(filas, key = { (f, b) -> if (b == null) "f${f.id}" else "b${f.id}|${b.nombre}" }) { (f, b) ->
-                        NovedadesFuente(f, motor, onManga, onFuente, b, ext.busquedas(f.id).takeIf { b == null }.orEmpty())
+                        NovedadesFuente(f, motor, onManga, onFuente, b, ext.busquedas(f.id).takeIf { b == null }.orEmpty(), enBiblio)
                     }
                 }
             }
@@ -359,6 +363,7 @@ private fun NovedadesFuente(
     onManga: (FuenteUI, MangaFuente) -> Unit, onFuente: (FuenteUI) -> Unit,
     busqueda: ExtManager.BusquedaGuardada? = null,
     guardadas: List<ExtManager.BusquedaGuardada> = emptyList(),
+    enBiblioteca: Set<String> = emptySet(),
 ) {
     val gen = NovedadesGuardadas.generacion
     // Clave propia para cada búsqueda guardada (comparte la caché de la sesión con las fuentes).
@@ -409,11 +414,15 @@ private fun NovedadesFuente(
             else -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(lst, key = { it.url }) { m ->
                     Column(Modifier.width(124.dp).press3D().pressable { onManga(f, m) }) {
+                        val esta = "${f.id}|${m.url}" in enBiblioteca
+                        Box {
                         ImagenRemota(
                             m.portadaUrl,
-                            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)),
+                            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)).graphicsLayer { alpha = if (esta) 0.38f else 1f },
                             motor.cabeceras(f), fuenteId = f.id
                         )
+                        if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
+                        }
                         Spacer(Modifier.height(6.dp))
                         LText(m.titulo, LectorType.Body, maxLines = 3)
                     }

@@ -139,13 +139,16 @@ private fun Hero(featured: Comic, all: List<Comic>, almacen: Almacen, onOpen: (C
                 ComicCover(s, almacen, Modifier.fillMaxSize(), SuaveShape(0.dp))
                 Box(
                     Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(0.40f to Color.Transparent, 1f to Color.Black)
+                        // Se funde con el fondo de la app (claro u oscuro), no con negro fijo.
+                        Brush.verticalGradient(
+                            0.35f to Color.Transparent, 0.72f to LectorColors.Bg.copy(alpha = 0.72f), 1f to LectorColors.Bg,
+                        )
                     )
                 )
                 Column(Modifier.align(Alignment.BottomStart).padding(24.dp)) {
-                    LText("Continuar", LectorType.Label, color = Color(0xB3FFFFFF))
+                    LText("Continuar", LectorType.Label, color = LectorColors.Muted)
                     LText(s.titulo, LectorType.Hero, maxLines = 2)
-                    LText(s.textoPagina(), LectorType.Label, color = Color(0xB3FFFFFF))
+                    LText(s.textoPagina(), LectorType.Label, color = LectorColors.Muted)
                     Spacer(Modifier.height(14.dp))
                     PillButton("Leer", Icons.Rounded.PlayArrow, { onRead(s) })
                 }

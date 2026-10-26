@@ -590,6 +590,14 @@ movimiento continuo que funde y transforma, rebote elástico y ritmo que sigue l
 - Rendimiento: `instaladas`/`fuentes` con `derivedStateOf` (antes se recalculaban en cada lectura); `FondoVivo`
   con `withFrameMillis` (se para en segundo plano); `CacheBusquedas` 400 entradas.
 
+## 2af. PASO 32 — Tema en lector e Inicio, leídos, biblioteca en Novedades, capítulo completo (versión 0.18)
+- Inicio: el degradado del destacado se funde con `LectorColors.Bg` (antes negro fijo, horrible en claro).
+- Capítulos leídos: fila al 42 % (animado) y visto en vez del número; no leídos con acento más fuerte.
+- Novedades: lo que está en la biblioteca sale apagado con la insignia «En biblioteca».
+- Lector: barras con `LectorColors` (claro/oscuro) y el estilo de superficie (`TintaBarra`, `SubBarra`).
+- `CacheBytes` (VisorPaginas.kt): bytes de cada página en `cache/paginas/<sha1>/<n>` (400 MB, por antigüedad);
+  al abrir un capítulo en línea se bajan TODAS sus páginas (3 a la vez); volver a una página ya no usa la red.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

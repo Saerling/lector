@@ -346,6 +346,17 @@ fun Visor(
         }
     }
 
+    // El capítulo COMPLETO se descarga al abrirlo (a disco, sin decodificar: casi no gasta memoria), 3 a la vez.
+    LaunchedEffect(cap.clave, total) {
+        val n = total ?: return@LaunchedEffect
+        val origen = cap.origen as? OrigenFuente ?: return@LaunchedEffect
+        if (!origen.enRed) return@LaunchedEffect
+        val cupo = kotlinx.coroutines.sync.Semaphore(3)
+        kotlinx.coroutines.coroutineScope {
+            for (p in 0 until n) launch(Dispatchers.IO) { cupo.acquire(); try { runCatching { origen.bytes(p) } } finally { cupo.release() } }
+        }
+    }
+
     // Precarga de las páginas siguientes (y del total del capítulo siguiente al acercarse al final).
     LaunchedEffect(cap.clave, paginaReal, total, anchoDecodificar, recortar) {
         val n = total ?: return@LaunchedEffect
@@ -580,8 +591,8 @@ fun Visor(
                 BotonRedondo(Icons.Rounded.ArrowBack, "Atrás") { onBack() }
                 Spacer(Modifier.width(6.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(titulo, style = LectorType.Section.copy(fontSize = 18.sp), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(cap.nombre, style = LectorType.Label, color = Color(0xFFB0B0B8), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(titulo, style = LectorType.Section.copy(fontSize = 18.sp), color = TintaBarra, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(cap.nombre, style = LectorType.Label, color = SubBarra, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 acciones.alternarMarca?.let { alternar ->
                     val marcado = acciones.estaMarcado?.invoke(ci) == true
@@ -618,7 +629,7 @@ fun Visor(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         val tot = n ?: 0
-                        Text("${if (tot > 0) paginaReal + 1 else 0}", style = LectorType.Label, color = Color.White, modifier = girar.widthIn(min = 24.dp), textAlign = TextAlign.Center)
+                        Text("${if (tot > 0) paginaReal + 1 else 0}", style = LectorType.Label, color = TintaBarra, modifier = girar.widthIn(min = 24.dp), textAlign = TextAlign.Center)
                         if (tot > 1) {
                             var arrastre by remember { mutableStateOf<Float?>(null) }
                             Slider(
@@ -627,14 +638,14 @@ fun Visor(
                                 onValueChangeFinished = { arrastre = null },
                                 valueRange = 0f..(tot - 1).toFloat(),
                                 colors = SliderDefaults.colors(
-                                    thumbColor = Color.White,
+                                    thumbColor = TintaBarra,
                                     activeTrackColor = MaterialTheme.colorScheme.primary,
                                     inactiveTrackColor = Color(0x33FFFFFF),
                                 ),
                                 modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
                             )
                         } else Spacer(Modifier.weight(1f))
-                        Text("$tot", style = LectorType.Label, color = Color.White, modifier = girar.widthIn(min = 24.dp), textAlign = TextAlign.Center)
+                        Text("$tot", style = LectorType.Label, color = TintaBarra, modifier = girar.widthIn(min = 24.dp), textAlign = TextAlign.Center)
                     }
                     Spacer(Modifier.width(8.dp))
                     BotonCapitulo(Icons.Rounded.KeyboardArrowRight, "Capítulo siguiente", haySiguiente, girar) { irCapitulo(ci + 1, false) }
@@ -720,20 +731,25 @@ private fun claveItem(i: ItemVisor?, pos: Int): Any = when (i) {
     null -> "x$pos"
 }
 
-// Las barras del lector siguen el estilo de superficie de Apariencia (oscuras siempre: se lee sobre negro).
+// Las barras del lector siguen el tema (claro/oscuro) y el estilo de superficie de Apariencia, como el resto de la app.
 private val ColorBarra: Color
     get() = when (Aspecto.superficie) {
-        Superficie.SOLIDO -> Color(0xFF1A1A1C)
-        Superficie.LIQUIDO -> Color(0x991A1A1C)
-        Superficie.CRISTAL -> Color(0xE61A1A1C)
+        Superficie.SOLIDO -> LectorColors.Cristal
+        Superficie.LIQUIDO -> LectorColors.Cristal.copy(alpha = 0.62f)
+        Superficie.CRISTAL -> LectorColors.Cristal.copy(alpha = 0.92f)
     }
 private val BordeBarra: Color
-    get() = if (Aspecto.superficie == Superficie.LIQUIDO) Color(0x55FFFFFF) else Color(0x26FFFFFF)
+    get() = when {
+        Aspecto.superficie == Superficie.LIQUIDO -> Color.White.copy(alpha = if (TemaActual.oscuro) 0.33f else 0.8f)
+        else -> LectorColors.Linea
+    }
+private val TintaBarra: Color get() = LectorColors.Text
+private val SubBarra: Color get() = LectorColors.Muted
 
 @Composable
 private fun BotonRedondo(icono: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
     Box(Modifier.size(44.dp).pressable(onClick).clip(CircleShape), Alignment.Center) {
-        Icon(icono, desc, tint = Color.White)
+        Icon(icono, desc, tint = TintaBarra)
     }
 }
 
@@ -743,9 +759,9 @@ private fun BotonOscuro(texto: String, icono: androidx.compose.ui.graphics.vecto
         Modifier.pressable(onClick).clip(CircleShape).background(Color(0x33FFFFFF)).padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icono, null, tint = Color.White, modifier = Modifier.size(18.dp))
+        Icon(icono, null, tint = TintaBarra, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text(texto, color = Color.White, style = LectorType.Body)
+        Text(texto, color = TintaBarra, style = LectorType.Body)
     }
 }
 
@@ -757,14 +773,14 @@ private fun BotonCapitulo(
         Modifier.size(50.dp).then(if (activo) Modifier.pressable(onClick) else Modifier)
             .clip(CircleShape).background(ColorBarra),
         Alignment.Center,
-    ) { Icon(icono, desc, tint = if (activo) Color.White else Color(0x669A9AA0), modifier = extra) }
+    ) { Icon(icono, desc, tint = if (activo) TintaBarra else Color(0x669A9AA0), modifier = extra) }
 }
 
 @Composable
 private fun AccionVisor(icono: androidx.compose.ui.graphics.vector.ImageVector, texto: String, onClick: () -> Unit) {
     Column(Modifier.pressable(onClick).padding(horizontal = 8.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icono, texto, tint = Color.White)
-        Text(texto, style = LectorType.Label.copy(fontSize = 11.sp), maxLines = 1, color = Color(0xFFB0B0B8))
+        Icon(icono, texto, tint = TintaBarra)
+        Text(texto, style = LectorType.Label.copy(fontSize = 11.sp), maxLines = 1, color = SubBarra)
     }
 }
 
