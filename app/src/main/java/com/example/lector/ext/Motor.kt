@@ -76,6 +76,8 @@ interface MotorFuentes {
      * null si no se puede.
      */
     suspend fun bytesImagen(fuenteId: Long, url: String): ByteArray? = null
+    /** Mangas parecidos según la propia fuente (si lo ofrece); vacío si no. */
+    suspend fun relacionados(fuente: FuenteUI, manga: MangaFuente): List<MangaFuente> = emptyList()
 
     /** Cliente HTTP general de la app (cookies compartidas con el WebView, Cloudflare, DNS sobre HTTPS). */
     fun clienteGeneral(): okhttp3.OkHttpClient? = null

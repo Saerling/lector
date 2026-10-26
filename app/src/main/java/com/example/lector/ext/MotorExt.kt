@@ -216,6 +216,20 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         src.client.newCall(pedido).execute().use { r -> if (r.isSuccessful) r.body.bytes() else null }
     }
 
+    override suspend fun relacionados(fuente: FuenteUI, manga: MangaFuente): List<MangaFuente> = withContext(Dispatchers.IO) {
+        val s = fuenteReal(fuente)
+        val res = java.util.Collections.synchronizedList(ArrayList<MangaFuente>())
+        // Como Komikku: lo que dé la extensión (y su búsqueda por palabras clave), como mucho 15 s.
+        kotlinx.coroutines.withTimeoutOrNull(15_000) {
+            runCatching {
+                s.getRelatedMangaList(sManga(fuente, manga), {}) { (_, lista), _ ->
+                    lista.forEach { res += MangaFuente(it.url, it.title, it.thumbnail_url, it.memo.aTexto()) }
+                }
+            }
+        }
+        res.toList().filter { it.url != manga.url }.distinctBy { it.url }.take(20)
+    }
+
     override fun clienteGeneral(): okhttp3.OkHttpClient? =
         runCatching { uy.kohesive.injekt.Injekt.get<NetworkHelper>().client }.getOrNull()
 

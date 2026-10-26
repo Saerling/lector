@@ -579,6 +579,17 @@ movimiento continuo que funde y transforma, rebote elástico y ritmo que sigue l
   con su estado (no declara la característica, no soportada y por qué, sin confianza, error al cargar, nº de
   fuentes); se puede copiar para enviarlo.
 
+## 2ae. PASO 31 — Estado, WebView en el lector, búsquedas en Novedades, parecidos y rendimiento (versión 0.17)
+- Pestañas con `rememberSaveableStateHolder`: al cambiar no se pierde desplazamiento ni estado.
+- Lector: «Auto» → «WebView» del capítulo actual (`AccionesVisor.cabecerasWeb`; al volver recarga). Barras del
+  lector según `Aspecto.superficie`.
+- Novedades: búsquedas guardadas como filas propias (`ExtManager.novedadesBusq`, elegibles en el diálogo) y chips
+  de las guardadas en cada fuente (`BusquedaPendiente` → abre la extensión ya buscada).
+- Ficha: «Parecidos en <fuente>» siempre (`MotorFuentes.relacionados` = `Source.getRelatedMangaList`, 15 s; si no
+  hay, búsqueda por el primer género), además de las recomendaciones de AniList.
+- Rendimiento: `instaladas`/`fuentes` con `derivedStateOf` (antes se recalculaban en cada lectura); `FondoVivo`
+  con `withFrameMillis` (se para en segundo plano); `CacheBusquedas` 400 entradas.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

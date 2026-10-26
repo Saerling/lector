@@ -288,6 +288,12 @@ private fun FilaFuente(f: FuenteUI, ext: ExtManager, onFuente: (FuenteUI) -> Uni
  * Lo cargado en Novedades: se pide una vez por sesión de la app y se reutiliza al cambiar de pestaña o de pantalla.
  * Vuelve a pedirse al deslizar hacia abajo ([recargar]) o al abrir la app de nuevo ([olvidar], desde MainActivity).
  */
+/** Búsqueda que se aplicará al abrir la extensión desde un chip de Novedades. */
+object BusquedaPendiente {
+    var consulta: String? = null
+    fun tomar(): String? = consulta.also { consulta = null }
+}
+
 object NovedadesGuardadas {
     // id de la fuente → (generación en la que se cargó, mangas)
     val datos = androidx.compose.runtime.mutableStateMapOf<Long, Pair<Int, List<MangaFuente>>>()
@@ -326,8 +332,21 @@ private fun NovedadesTab(
                 onRefresh = { Tacto.umbral(); refrescando = true; NovedadesGuardadas.recargar() },
                 modifier = Modifier.fillMaxSize(),
             ) {
+                // Cada fuente y, justo debajo, las búsquedas guardadas suyas que pusiste en Novedades.
+                val filas = remember(lista, ext.novedadesBusq, ext.busquedasVersion) {
+                    val porFuente = ext.novedadesBusq.mapNotNull { k ->
+                        val id = k.substringBefore('\t').toLongOrNull() ?: return@mapNotNull null
+                        val b = ext.busquedas(id).firstOrNull { it.nombre == k.substringAfter('\t') } ?: return@mapNotNull null
+                        id to b
+                    }.groupBy({ it.first }, { it.second })
+                    val conFuente = ext.fuentes.associateBy { it.id }
+                    lista.flatMap { f -> listOf(f to null) + porFuente[f.id].orEmpty().map { f to it } } +
+                        porFuente.filterKeys { id -> lista.none { it.id == id } }.flatMap { (id, bs) -> conFuente[id]?.let { f -> bs.map { f to it } }.orEmpty() }
+                }
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 190.dp)) {
-                    items(lista, key = { it.id }) { NovedadesFuente(it, motor, onManga, onFuente) }
+                    items(filas, key = { (f, b) -> if (b == null) "f${f.id}" else "b${f.id}|${b.nombre}" }) { (f, b) ->
+                        NovedadesFuente(f, motor, onManga, onFuente, b, ext.busquedas(f.id).takeIf { b == null }.orEmpty())
+                    }
                 }
             }
         }
@@ -338,21 +357,25 @@ private fun NovedadesTab(
 private fun NovedadesFuente(
     f: FuenteUI, motor: MotorFuentes,
     onManga: (FuenteUI, MangaFuente) -> Unit, onFuente: (FuenteUI) -> Unit,
+    busqueda: ExtManager.BusquedaGuardada? = null,
+    guardadas: List<ExtManager.BusquedaGuardada> = emptyList(),
 ) {
     val gen = NovedadesGuardadas.generacion
-    val estado = NovedadesGuardadas.datos[f.id]?.second
+    // Clave propia para cada búsqueda guardada (comparte la caché de la sesión con las fuentes).
+    val clave = if (busqueda == null) f.id else f.id * 31 + busqueda.nombre.hashCode()
+    val estado = NovedadesGuardadas.datos[clave]?.second
     var fallo by remember(f.id) { mutableStateOf<String?>(null) }
     var intento by remember(f.id) { mutableStateOf(0) }
-    LaunchedEffect(f.id, intento, gen) {
+    LaunchedEffect(clave, intento, gen) {
         // Ya cargadas en esta sesión (y sin pedir recargar): no se vuelven a pedir.
-        if (NovedadesGuardadas.datos[f.id]?.first == gen) return@LaunchedEffect
+        if (NovedadesGuardadas.datos[clave]?.first == gen) return@LaunchedEffect
         fallo = null
         // Si la fuente no tiene "recientes", se usan los populares.
-        runCatching { runCatching { motor.recientes(f, 1) }.getOrElse { motor.populares(f, 1) }.mangas.distinctBy { it.url }.take(15) }
-            .onSuccess { NovedadesGuardadas.datos[f.id] = gen to it; NovedadesGuardadas.fallos.remove(f.id) }
+        runCatching { (if (busqueda != null) motor.buscar(f, busqueda.consulta, 1) else runCatching { motor.recientes(f, 1) }.getOrElse { motor.populares(f, 1) }).mangas.distinctBy { it.url }.take(15) }
+            .onSuccess { NovedadesGuardadas.datos[clave] = gen to it; NovedadesGuardadas.fallos.remove(clave) }
             .onFailure {
                 if (it is kotlinx.coroutines.CancellationException) throw it
-                NovedadesGuardadas.fallos[f.id] = gen
+                NovedadesGuardadas.fallos[clave] = gen
                 // Si ya había algo cargado, se sigue enseñando; el fallo solo se ve si no hay nada.
                 if (estado == null) fallo = it.message ?: "No se pudieron cargar las novedades"
                 else Avisos.mostrar("${f.nombre}: no se pudieron actualizar las novedades")
@@ -365,9 +388,16 @@ private fun NovedadesFuente(
         ) {
             Column(Modifier.weight(1f)) {
                 LText(f.nombre, LectorType.Section.copy(fontSize = 22.sp), maxLines = 1)
-                LText(nombreIdioma(f.lang), LectorType.Body.copy(fontSize = 15.sp), color = LectorColors.Muted)
+                LText(if (busqueda != null) "Búsqueda: ${busqueda.nombre}" else nombreIdioma(f.lang), LectorType.Body.copy(fontSize = 15.sp), color = LectorColors.Muted)
             }
             Icon(Icons.Rounded.KeyboardArrowRight, null, tint = LectorColors.Text, modifier = Modifier.size(32.dp))
+        }
+        // Las búsquedas guardadas de esta extensión, como al entrar en ella: tocar una la abre ya buscada.
+        if (guardadas.isNotEmpty()) LazyRow(
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(guardadas, key = { it.nombre }) { b -> ChipSel(b.nombre, false) { BusquedaPendiente.consulta = b.consulta; onFuente(f) } }
         }
         val lst = estado
         when {
@@ -475,6 +505,17 @@ private fun DialogoNovedades(ext: ExtManager, onCerrar: () -> Unit) {
                                 IconoExt(f.pkg, null, Modifier.size(40.dp))
                                 Spacer(Modifier.width(12.dp))
                                 Text("${f.nombre} (${bandera(f.lang)})", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            // Sus búsquedas guardadas también pueden ir a Novedades, cada una como su propia fila.
+                            ext.busquedas(f.id).forEach { b ->
+                                val k = "${f.id}\t${b.nombre}"
+                                Row(
+                                    Modifier.fillMaxWidth().clickable { ext.alternarNovedadBusqueda(f.id, b.nombre) }.padding(start = 40.dp, top = 2.dp, bottom = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Checkbox(checked = k in ext.novedadesBusq, onCheckedChange = { ext.alternarNovedadBusqueda(f.id, b.nombre) })
+                                    Text("Búsqueda: ${b.nombre}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
                         }
                     }

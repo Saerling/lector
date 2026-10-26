@@ -301,6 +301,7 @@ fun Inicio(
 
     Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
       // Todo lo que queda bajo la barra flotante: se graba para el cristal esmerilado de la barra y el mini lector.
+      val estadoPestanas = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
       Box(Modifier.fillMaxSize().raizCristal(CristalApp)) {
         // Fondo vivo (Apariencia → Fondo): detrás de las pestañas, y el cristal de la barra lo desenfoca.
         FondoVivo(Aspecto.fondo, Modifier.fillMaxSize(), acento = androidx.compose.material3.MaterialTheme.colorScheme.primary)
@@ -323,12 +324,13 @@ fun Inicio(
                 )
             }
         ) { t ->
-            when (t) {
+            // Cada pestaña guarda su estado (desplazamiento, búsquedas, pestaña interna) al cambiar: nada se reinicia.
+            estadoPestanas.SaveableStateProvider(t.name) { when (t) {
                 LectorTab.Home -> HomeScreen(visibles, almacen, onOpen = abrirDetalle, onRead = leerComic, onAdd = alAnadir)
                 LectorTab.Search -> ExplorarScreen(
                     ext = ext,
                     onRuta = { ruta = it },
-                    onFuente = { fuenteId = it.id; desdeNovedades = false; ruta = Ruta.FuenteDetalle },
+                    onFuente = { fuenteId = it.id; desdeNovedades = false; generoBuscar = BusquedaPendiente.tomar(); ruta = Ruta.FuenteDetalle },
                     onExt = { extPkg = it.pkg; ruta = Ruta.ExtDetalle },
                     onManga = { f, m -> fuenteId = f.id; mangaSel = m; desdeNovedades = true; vueltaFicha = null; reanudar = null; ruta = Ruta.Ficha },
                     almacen = almacen,
@@ -376,7 +378,7 @@ fun Inicio(
                     onAdd = alAnadir,
                     onAddFolder = alAnadirCarpeta,
                 )
-            }
+            } }
         }
 
         // Páginas que se deslizan encima (detalle de cómic, Más → Categorías, Ajustes, etc.).

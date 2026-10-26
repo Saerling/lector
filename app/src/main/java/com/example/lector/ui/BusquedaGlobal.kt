@@ -218,7 +218,7 @@ fun alternarEnBiblioteca(ctx: android.content.Context, almacen: Almacen, f: Fuen
 internal object CacheBusquedas {
     private class Entrada(val cuando: Long, val mangas: List<MangaFuente>)
     private val datos = object : LinkedHashMap<String, Entrada>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Entrada>?) = size > 2000
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Entrada>?) = size > 400
     }
 
     fun leer(fuente: Long, q: String): List<MangaFuente>? = synchronized(datos) {

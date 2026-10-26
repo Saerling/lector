@@ -182,6 +182,7 @@ fun FichaMangaScreen(
     var seguimiento by remember { mutableStateOf(false) }
     var recomendaciones by remember { mutableStateOf<List<ResultadoAnilist>?>(null) }
     var abriendoRec by remember { mutableStateOf<Int?>(null) }
+    var parecidos by remember { mutableStateOf<List<MangaFuente>?>(null) }
 
     LaunchedEffect(fuenteId, manga.url, recarga) {
         if (f == null || motor == null) return@LaunchedEffect
@@ -245,6 +246,17 @@ fun FichaMangaScreen(
     val estadoPub = if (editado && comic!!.estado != 0) comic.estado else fi?.detalle?.estado
     val descripcion = if (editado) comic!!.descripcion else fi?.detalle?.descripcion
     val generos = if (editado) comic!!.generos else fi?.detalle?.generos.orEmpty()
+
+    // Parecidos de la fuente: los relacionados de la extensión o, si no da, una búsqueda por su primer género.
+    LaunchedEffect(fi != null) {
+        if (fi == null || parecidos != null || f == null || motor == null) return@LaunchedEffect
+        val rel = runCatching { motor.relacionados(f, manga) }.getOrDefault(emptyList())
+        parecidos = rel.ifEmpty {
+            val g = fi.detalle.generos.firstOrNull()
+            if (g == null) emptyList()
+            else runCatching { motor.buscar(f, g, 1).mangas.filter { it.url != manga.url }.distinctBy { it.url }.take(15) }.getOrDefault(emptyList())
+        }
+    }
 
     // Recomendaciones (AniList) del título.
     LaunchedEffect(tituloFicha, fi != null) {
@@ -484,6 +496,27 @@ fun FichaMangaScreen(
                             }
                             if (urlWeb != null) ChipSel("Compartir", false) { compartirTexto(ctx, "$tituloFicha\n$urlWeb") }
                             ChipSel("Buscar en otras fuentes", false) { alBuscarGlobal(tituloFicha) }
+                        }
+                    }
+                }
+                // Parecidos de la propia fuente: SIEMPRE hay un apartado (lo que dé la extensión o, si no, su mismo género).
+                item {
+                    val lista = parecidos
+                    Column(Modifier.padding(top = 16.dp)) {
+                        LText("Parecidos en ${f.nombre}", LectorType.Section.copy(fontSize = 18.sp), Modifier.padding(horizontal = 24.dp))
+                        Spacer(Modifier.height(8.dp))
+                        when {
+                            lista == null -> BonesPortadas()
+                            lista.isEmpty() -> LText("Esta fuente no da parecidos para este manga.", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
+                            else -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(lista, key = { it.url }) { m ->
+                                    Column(Modifier.width(96.dp).press3D().pressable { alAbrirOtro(f, m) }) {
+                                        ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), motor.cabeceras(f), fuenteId = f.id)
+                                        Spacer(Modifier.height(6.dp))
+                                        LText(m.titulo, LectorType.Label, maxLines = 2)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1126,6 +1159,7 @@ fun LeerOnlineScreen(
             alternarMarca = { ext.alternarMarcado(f.id, enOrden[it].url) },
             usarComoPortada = usarComoPortada,
             esLeido = { ext.esLeido(f.id, enOrden[it].url) },
+            cabecerasWeb = motor.cabeceras(f),
         ),
         onBack = onBack,
     )

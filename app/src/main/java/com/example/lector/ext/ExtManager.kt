@@ -189,8 +189,13 @@ class ExtManager private constructor(private val app: Context) {
      * el resto necesita pulsar «Confiar». Hay actualización si el listado con LA MISMA firma ofrece una versión
      * mayor o una versión de librería mayor (ExtensionManager.updateExists).
      */
-    val instaladas: List<ExtInstalada>
-        get() {
+    // Calculadas una vez y en caché hasta que cambie algo de lo que dependen (antes se recalculaban en cada lectura,
+    // decenas de veces por recomposición: mucho procesador con muchas extensiones).
+    val instaladas: List<ExtInstalada> get() = instaladasDerivadas.value
+    private val instaladasDerivadas = androidx.compose.runtime.derivedStateOf { calcularInstaladas() }
+
+    private fun calcularInstaladas(): List<ExtInstalada>
+        {
             @Suppress("UNUSED_VARIABLE") val v = confiadasVersion
             val clavesListados = repos.map { it.claveFirma }.filter { it.isNotBlank() }
             return instaladasRaw.map { e ->
@@ -215,8 +220,11 @@ class ExtManager private constructor(private val app: Context) {
         }
 
     /** Fuentes de las extensiones instaladas y de confianza (las reales si ya se cargaron; si no, las del listado). */
-    val fuentes: List<FuenteUI>
-        get() = instaladas.filter { it.confiable && it.errorCarga == null }.flatMap { e ->
+    val fuentes: List<FuenteUI> get() = fuentesDerivadas.value
+    private val fuentesDerivadas = androidx.compose.runtime.derivedStateOf { calcularFuentes() }
+
+    private fun calcularFuentes(): List<FuenteUI> =
+        instaladas.filter { it.confiable && it.errorCarga == null }.flatMap { e ->
             val lista = fuentesCargadas[e.pkg]?.takeIf { it.isNotEmpty() }
                 ?: disponibles.firstOrNull { it.pkg == e.pkg }?.fuentes.orEmpty()
             val base = lista.ifEmpty {
@@ -720,6 +728,16 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     fun alternarNovedad(id: Long) = fijarNovedades(if (id in novedades) novedades - id else novedades + id)
+
+    /** Búsquedas guardadas puestas en Novedades: «idFuente␉nombre». */
+    var novedadesBusq by mutableStateOf(prefs.getString("novedades_busq", "").orEmpty().split('\n').filter { it.contains('\t') })
+        private set
+
+    fun alternarNovedadBusqueda(fuenteId: Long, nombre: String) {
+        val k = "$fuenteId\t$nombre"
+        novedadesBusq = if (k in novedadesBusq) novedadesBusq - k else novedadesBusq + k
+        prefs.edit().putString("novedades_busq", novedadesBusq.joinToString("\n")).apply()
+    }
 
     /**
      * Importa de golpe capítulos leídos, marcados y páginas (claves «fuente|url»), con una escritura de cada cosa.

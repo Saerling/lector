@@ -61,7 +61,8 @@ fun FondoVivo(modo: FondoApp, modifier: Modifier = Modifier, fijo: Boolean = fal
     val t = remember { mutableFloatStateOf(0.3f) }
     LaunchedEffect(fijo) {
         if (fijo || MovimientoReducido.activo) return@LaunchedEffect
-        while (true) { kotlinx.coroutines.delay(66); t.floatValue += 0.066f / 40f }
+        // Va con el reloj de fotogramas: con la app en segundo plano o la pantalla apagada se detiene (no gasta batería).
+        while (true) { androidx.compose.runtime.withFrameMillis { }; kotlinx.coroutines.delay(66); t.floatValue += 0.066f / 40f }
     }
     val oscuro = TemaActual.oscuro
     Canvas(modifier) { dibujarAurora(modo, t.floatValue, oscuro, acento) }

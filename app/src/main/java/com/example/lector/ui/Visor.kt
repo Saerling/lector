@@ -116,6 +116,8 @@ class AccionesVisor(
     /** Usar una página como portada de la serie (solo si está en la biblioteca). */
     val usarComoPortada: (suspend (ByteArray) -> Unit)? = null,
     val esLeido: ((Int) -> Boolean)? = null,
+    /** Cabeceras de la fuente para abrir el capítulo en el WebView (Cloudflare, captchas). */
+    val cabecerasWeb: Map<String, String> = emptyMap(),
 )
 
 private data class RefPagina(val indice: Int, val mitad: Int)
@@ -230,6 +232,7 @@ fun Visor(
     var hoja by remember { mutableStateOf(false) }
     var dialogoCaps by remember { mutableStateOf(false) }
     var auto by remember { mutableStateOf(false) }
+    var webCap by remember { mutableStateOf<String?>(null) }
     var menuPagina by remember { mutableStateOf<Int?>(null) }
     var tocando by remember { mutableStateOf(false) }
 
@@ -643,7 +646,11 @@ fun Visor(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
                     if (capitulos.size > 1) AccionVisor(Icons.Rounded.List, "Capítulos") { dialogoCaps = true }
-                    AccionVisor(Icons.Rounded.PlayArrow, if (auto) "Parar" else "Auto") { auto = !auto; if (auto) barras = false }
+                    // WebView del capítulo que estás leyendo (en lugar de la reproducción automática).
+                    if (acciones.urlWeb != null) AccionVisor(Icons.Rounded.ArrowForward, "WebView") {
+                        val u = acciones.urlWeb.invoke(ci)
+                        if (u == null) Avisos.mostrar("Este capítulo no tiene dirección web") else webCap = u
+                    }
                     AccionVisor(Icons.Rounded.Refresh, "Recargar") { CacheVisor.vaciar(); recarga++ }
                     AccionVisor(Icons.Rounded.Build, "Modo") { hoja = true }
                     AccionVisor(Icons.Rounded.Settings, "Ajustes") { hoja = true }
@@ -651,6 +658,9 @@ fun Visor(
             }
         }
     }
+
+    // Al volver del WebView se recargan las páginas (por si se pasó un captcha o Cloudflare).
+    webCap?.let { u -> WebViewScreen(u, titulo, acciones.cabecerasWeb) { webCap = null; CacheVisor.vaciar(); recarga++ } }
 
     if (hoja) {
         HojaLector({ hoja = false }) {
@@ -710,8 +720,15 @@ private fun claveItem(i: ItemVisor?, pos: Int): Any = when (i) {
     null -> "x$pos"
 }
 
-private val ColorBarra = Color(0xE61A1A1C)
-private val BordeBarra = Color(0x26FFFFFF)
+// Las barras del lector siguen el estilo de superficie de Apariencia (oscuras siempre: se lee sobre negro).
+private val ColorBarra: Color
+    get() = when (Aspecto.superficie) {
+        Superficie.SOLIDO -> Color(0xFF1A1A1C)
+        Superficie.LIQUIDO -> Color(0x991A1A1C)
+        Superficie.CRISTAL -> Color(0xE61A1A1C)
+    }
+private val BordeBarra: Color
+    get() = if (Aspecto.superficie == Superficie.LIQUIDO) Color(0x55FFFFFF) else Color(0x26FFFFFF)
 
 @Composable
 private fun BotonRedondo(icono: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
