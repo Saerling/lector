@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,7 +65,12 @@ fun ArranqueOverlay(alTerminar: () -> Unit) {
     val inspirar = remember { Animatable(1f) }
     val caer = remember { Animatable(0f) }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val desvanecer = remember { Animatable(0f) }
+    BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer {
+        alpha = 1f - desvanecer.value
+        val e = 1f + 0.12f * desvanecer.value
+        scaleX = e; scaleY = e
+    }) {
         val ancho = constraints.maxWidth.toFloat()
         val alto = constraints.maxHeight.toFloat()
         val lado = with(densidad) { 288.dp.toPx() }
@@ -72,11 +79,16 @@ fun ArranqueOverlay(alTerminar: () -> Unit) {
         val escalaFinal = (kotlin.math.hypot(ancho, alto) / 2f) / radioHorizonte * 1.04f
 
         LaunchedEffect(Unit) {
-            // Con «Quitar animaciones»: directamente a la app.
-            if (MovimientoReducido.activo) { alTerminar(); return@LaunchedEffect }
-            delay(90)
-            inspirar.animateTo(0.94f, tween(260, easing = EnfasisEasing))
-            caer.animateTo(1f, tween(640, easing = Caida))
+            // Con «Quitar animaciones» o «Ninguna»: directamente a la app.
+            if (MovimientoReducido.activo || Aspecto.arranque == AnimArranque.NINGUNA) { ArranqueRevelado.valor = 1f; alTerminar(); return@LaunchedEffect }
+            if (Aspecto.arranque == AnimArranque.RAPIDA) {
+                // Rápida: el logo crece un poco y todo se funde en 280 ms.
+                desvanecer.animateTo(1f, tween(280, easing = EnfasisEasing)) { ArranqueRevelado.valor = value }
+                alTerminar(); return@LaunchedEffect
+            }
+            delay(40)
+            inspirar.animateTo(0.95f, tween(200, easing = EnfasisEasing))
+            caer.animateTo(1f, tween(560, easing = Caida)) { ArranqueRevelado.valor = value }
             alTerminar()
         }
 
@@ -102,4 +114,13 @@ fun ArranqueOverlay(alTerminar: () -> Unit) {
             conFondo = false,
         )
     }
+}
+
+/**
+ * Cuánto se ha abierto el agujero (0 → 1). La app de debajo lo usa para «emerger»: empieza un poco más grande y se
+ * asienta mientras se revela, así el paso del agujero a la app tiene profundidad en vez de ser un corte.
+ */
+object ArranqueRevelado {
+    var valor by androidx.compose.runtime.mutableFloatStateOf(0f)
+    var repetir by androidx.compose.runtime.mutableIntStateOf(0)
 }

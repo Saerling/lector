@@ -302,6 +302,8 @@ fun Inicio(
     Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
       // Todo lo que queda bajo la barra flotante: se graba para el cristal esmerilado de la barra y el mini lector.
       Box(Modifier.fillMaxSize().raizCristal(CristalApp)) {
+        // Fondo vivo (Apariencia → Fondo): detrás de las pestañas, y el cristal de la barra lo desenfoca.
+        FondoVivo(Aspecto.fondo, Modifier.fillMaxSize(), acento = androidx.compose.material3.MaterialTheme.colorScheme.primary)
         AnimatedContent(
             targetState = tab, label = "tabs",
             modifier = Modifier.graphicsLayer {

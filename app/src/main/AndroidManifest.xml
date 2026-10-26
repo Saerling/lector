@@ -4,6 +4,10 @@
 
     <!-- Necesario para el seguimiento con AniList. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Carpeta de la app elegida por el usuario (descargas y copias), como en Komikku. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
 
     <!-- Extensiones: instalar/desinstalar APK y ver qué extensiones hay instaladas. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

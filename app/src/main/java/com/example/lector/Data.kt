@@ -141,7 +141,13 @@ class Almacen private constructor(private val contexto: Context) {
     private val prefs = contexto.getSharedPreferences("lector", Context.MODE_PRIVATE)
     private val carpetaComics = File(contexto.filesDir, "comics").apply { mkdirs() }
     private val carpetaPortadas = File(contexto.filesDir, "portadas").apply { mkdirs() }
-    private val carpetaDescargas = File(contexto.filesDir, "descargas").apply { mkdirs() }
+    // Interna o la carpeta que elijas (CarpetaApp); se relee al cambiarla.
+    @Volatile private var carpetaDescargas = CarpetaApp.descargas(contexto)
+
+    fun recargarCarpeta() {
+        carpetaDescargas = CarpetaApp.descargas(contexto)
+        synchronized(this) { descargados = null }
+    }
     /** Capítulos conocidos de cada manga: un archivo por manga (antes estaban en las preferencias). */
     private val conocidos = CapitulosConocidos(contexto.filesDir)
 

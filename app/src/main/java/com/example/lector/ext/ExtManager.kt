@@ -222,7 +222,12 @@ class ExtManager private constructor(private val app: Context) {
             val base = lista.ifEmpty {
                 listOf(FuenteInfo(e.pkg.hashCode().toLong(), e.nombre, e.lang, "", e.pkg))
             }
-            base.map { FuenteUI(it.id, it.nombre.ifBlank { e.nombre }, it.lang.ifBlank { e.lang }, e.nsfw, e.pkg, it.baseUrl) }
+            base.map {
+                // Los listados sin id de fuente (clásicos, o mientras carga la extensión) dan 0: sin un id propio, el
+                // filtro de repetidas de abajo dejaba UNA sola de todas esas extensiones.
+                val id = if (it.id != 0L) it.id else "${e.pkg}|${it.nombre}|${it.lang}".hashCode().toLong()
+                FuenteUI(id, it.nombre.ifBlank { e.nombre }, it.lang.ifBlank { e.lang }, e.nsfw, e.pkg, it.baseUrl)
+            }
         }
             // Hay extensiones que traen las mismas fuentes que otra (p. ej. «Nyora-Sources» y «Nyora-Sources 18+»): con
             // las dos instaladas cada fuente salía dos veces y las listas con el id como clave se cerraban. Una por id.

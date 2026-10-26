@@ -80,7 +80,7 @@ object CopiaSeguridad {
 
     /** Carpeta por defecto de las copias automáticas (Android/data/<app>/files/copias). */
     fun carpetaInterna(ctx: Context): File =
-        File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "copias").apply { mkdirs() }
+        CarpetaApp.copias(ctx) ?: File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "copias").apply { mkdirs() }
 
     /**
      * Copia automática: la guarda en la carpeta elegida (si hay) o en la interna, y borra las más viejas para

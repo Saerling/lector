@@ -561,6 +561,16 @@ movimiento continuo que funde y transforma, rebote elástico y ritmo que sigue l
 - Indicador de la barra: si se cambia de pestaña en < 450 ms, muelles más rígidos (ritmo del gesto).
 - Mini lector: brota de la barra (escala desde abajo + plegado) y se funde en ella al salir.
 
+## 2ac. PASO 29 — Extensiones que desaparecían, carpeta de la app y Apariencia (2026-10-25, versión 0.15)
+- Bug: `ExtManager.fuentes` hacía `distinctBy { id }` y las fuentes sin id del listado (clásicos, o antes de cargar
+  la extensión) tenían id 0 → solo quedaba una. Ahora id 0 → hash estable de pkg|nombre|idioma.
+- `CarpetaApp`: carpeta elegida (selector del sistema → ruta real; permiso «todos los archivos» en Android 11+) con
+  `descargas/` y `copias/`. `Almacen.recargarCarpeta()`; al cambiar se mueven las descargas. Datos y almacenamiento.
+- `Aspecto` (ui/Aspecto.kt, prefs «aspecto»): Superficie (Cristal / Liquid glass / Sólido, en `FondoCristal` y
+  `lineaCristal`), Fondo (`FondoVivo`: aurora a 15 fps detrás de las pestañas, dentro de `raizCristal`), Animación de
+  inicio (Agujero negro / Rápida / Ninguna) y Luz al tocar. Apariencia las enseña con previsualizaciones.
+- Arranque: más ágil (40 + 200 + 560 ms) y la app emerge (escala 1,08 → 1) con `ArranqueRevelado`; «Ver animación».
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

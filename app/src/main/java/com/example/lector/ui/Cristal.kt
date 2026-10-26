@@ -117,21 +117,43 @@ fun FondoCristal(
     grano: Boolean = true,
 ) {
     val pos = remember { Posicion() }
-    val margen = if (hayDesenfoque) ceil(radio).toInt() else 0
+    // Estilo elegido en Apariencia: cristal (por defecto), liquid glass (más transparente, más desenfoque y un brillo
+    // de superficie) o sólido (sin desenfoque).
+    val estilo = Aspecto.superficie
+    val desenfoca = hayDesenfoque && estilo != Superficie.SOLIDO
+    val radioReal = if (estilo == Superficie.LIQUIDO) radio * 1.3f else radio
+    val tinteReal = when (estilo) {
+        Superficie.SOLIDO -> LectorColors.Cristal
+        Superficie.LIQUIDO -> tinte.copy(alpha = tinte.alpha * 0.55f)
+        Superficie.CRISTAL -> tinte
+    }
+    val margen = if (desenfoca) ceil(radioReal).toInt() else 0
     Box(modifier.clipToBounds()) {
         Box(
             Modifier.fillMaxSize()
                 .then(if (margen > 0) Modifier.sangrado(margen) else Modifier)
                 .onGloballyPositioned { pos.valor = it.positionInWindow() }
                 .graphicsLayer {
-                    if (hayDesenfoque && radio > 0.5f) renderEffect = BlurEffect(radio, radio, TileMode.Clamp)
+                    if (desenfoca && radioReal > 0.5f) renderEffect = BlurEffect(radioReal, radioReal, TileMode.Clamp)
                     clip = true
                 }
                 .drawWithContent {
                     if (base != null) drawRect(base)
-                    if (hayDesenfoque && estado != null) dibujarFondo(estado, pos.valor)
-                    drawRect(tinte)
+                    if (desenfoca && estado != null) dibujarFondo(estado, pos.valor)
+                    drawRect(tinteReal)
                 },
+        )
+        // Liquid glass: brillo de superficie arriba y un reflejo tenue abajo, como una gota de cristal.
+        if (estilo == Superficie.LIQUIDO) Box(
+            Modifier.fillMaxSize().drawWithContent {
+                drawRect(
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.13f else 0.35f),
+                        0.45f to Color.Transparent,
+                        1f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.05f else 0.12f),
+                    ),
+                )
+            },
         )
         if (grano) Box(Modifier.fillMaxSize().drawWithContent { drawRect(GranoBrush, alpha = 0.035f) })
     }
@@ -180,6 +202,19 @@ fun CristalProgresivo(
 fun DrawScope.lineaCristal(radioEsquina: Float, alpha: Float = 1f) {
     val ancho = 2f
     val m = ancho / 2f
+    if (Aspecto.superficie == Superficie.LIQUIDO) {
+        // Borde de luz: más brillante arriba (donde «da» la luz) y casi nada abajo.
+        drawRoundRect(
+            Brush.verticalGradient(
+                0f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.30f else 0.75f),
+                0.5f to Color.White.copy(alpha = 0.06f),
+                1f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.14f else 0.4f),
+            ),
+            topLeft = Offset(m, m), size = Size(size.width - ancho, size.height - ancho),
+            cornerRadius = CornerRadius((radioEsquina - m).coerceAtLeast(0f)), style = Stroke(ancho * 1.25f), alpha = alpha,
+        )
+        return
+    }
     drawRoundRect(
         color = if (TemaActual.oscuro) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.08f),
         topLeft = Offset(m, m),

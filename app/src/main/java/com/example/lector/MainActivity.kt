@@ -84,6 +84,7 @@ class MainActivity : ComponentActivity() {
         Fallos.instalar(applicationContext)
         com.example.lector.ui.MovimientoReducido.actualizar()
         com.example.lector.ui.Tacto.iniciar(window.decorView)
+        com.example.lector.ui.Aspecto.iniciar(applicationContext)
         if (savedInstanceState == null) fallo = Fallos.recoger(applicationContext)
         almacen = Almacen.obtener(applicationContext)
         aplicarBarras(oscuro = almacen.modoTema != ModoTema.CLARO)
@@ -205,6 +206,10 @@ fun App(
 ) {
     // La animación de arranque solo se ve al abrir la app (no al girar la pantalla).
     var arranque by rememberSaveable { mutableStateOf(true) }
+    // «Ver animación» en Apariencia la repite.
+    androidx.compose.runtime.LaunchedEffect(com.example.lector.ui.ArranqueRevelado.repetir) {
+        if (com.example.lector.ui.ArranqueRevelado.repetir > 0) { com.example.lector.ui.ArranqueRevelado.valor = 0f; arranque = true }
+    }
     val sistemaOscuro = isSystemInDarkTheme()
     val oscuro = when (almacen.modoTema) {
         ModoTema.SISTEMA -> sistemaOscuro
@@ -229,6 +234,11 @@ fun App(
             )
             Box(
                 Modifier.fillMaxSize().graphicsLayer {
+                    // Al arrancar, la app emerge del agujero: de 1,08 a 1 mientras se revela.
+                    if (arranque) {
+                        val e = 1.08f - 0.08f * com.example.lector.ui.ArranqueRevelado.valor
+                        scaleX = e; scaleY = e
+                    }
                     if (alejar > 0f) {
                         val e = 1f - 0.08f * alejar
                         scaleX = e; scaleY = e

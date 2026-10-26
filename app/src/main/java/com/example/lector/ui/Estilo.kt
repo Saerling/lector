@@ -289,7 +289,7 @@ private class PulsacionNode(
             }
         }
         drawContent()
-        val l = luz.value
+        val l = if (Aspecto.luzTactil) luz.value else 0f
         if (l > 0f) {
             // Luz radial recortada a la forma del elemento (píldora, portada o fila), sin salirse a los vecinos.
             val menor = minOf(size.width, size.height)

@@ -361,7 +361,7 @@ fun Modifier.luzTactil(): Modifier {
         }
         .drawWithContent {
             drawContent()
-            val l = luz.value
+            val l = if (Aspecto.luzTactil) luz.value else 0f
             if (l > 0f) drawCircle(
                 Brush.radialGradient(
                     0f to Color.White.copy(alpha = 0.22f * l), 0.5f to Color.White.copy(alpha = 0.06f * l), 1f to Color.Transparent,

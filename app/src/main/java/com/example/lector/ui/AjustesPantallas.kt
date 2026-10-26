@@ -1,5 +1,7 @@
 package com.example.lector.ui
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
 import com.example.lector.TareaCopia
 import android.app.KeyguardManager
 import android.content.Context
@@ -112,6 +114,52 @@ fun AparienciaScreen(almacen: Almacen, onBack: () -> Unit) {
         }
         if (Build.VERSION.SDK_INT >= 31) {
             LText("«Sistema» usa los colores de tu fondo de pantalla.", LectorType.Label, Modifier.padding(24.dp, 12.dp), color = LectorColors.Muted)
+        }
+        Divisor()
+        TituloSeccion("Superficies")
+        FilaVistas {
+            Superficie.entries.forEach { s ->
+                TarjetaVista(s.nombre, Aspecto.superficie == s, acento, { Aspecto.elegir(s) }) { VistaSuperficie(s, acento) }
+            }
+        }
+        LText(
+            "Cómo se ven la barra, el mini lector y los avisos. «Liquid glass» deja ver más el fondo y le da brillo de cristal.",
+            LectorType.Label, Modifier.padding(24.dp, 10.dp), color = LectorColors.Muted,
+        )
+        Divisor()
+        TituloSeccion("Fondo")
+        FilaVistas {
+            FondoApp.entries.forEach { f ->
+                TarjetaVista(f.nombre, Aspecto.fondo == f, acento, { Aspecto.elegir(f) }) {
+                    Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
+                        FondoVivo(f, Modifier.fillMaxSize(), fijo = true, acento = acento)
+                        VistaBarra(Aspecto.superficie, Modifier.align(Alignment.BottomCenter))
+                    }
+                }
+            }
+        }
+        Divisor()
+        TituloSeccion("Animación de inicio")
+        FilaVistas {
+            AnimArranque.entries.forEach { a ->
+                TarjetaVista(a.nombre, Aspecto.arranque == a, acento, { Aspecto.elegir(a) }) {
+                    Box(Modifier.fillMaxSize().background(if (a == AnimArranque.NINGUNA) LectorColors.Bg else Color.Black), Alignment.Center) {
+                        when (a) {
+                            AnimArranque.AGUJERO -> LogoApp(Modifier.size(70.dp), conFondo = false)
+                            AnimArranque.RAPIDA -> LogoApp(Modifier.size(46.dp).graphicsLayer { alpha = 0.55f }, conFondo = false)
+                            AnimArranque.NINGUNA -> VistaBarra(Aspecto.superficie, Modifier.align(Alignment.BottomCenter))
+                        }
+                    }
+                }
+            }
+        }
+        Box(Modifier.padding(horizontal = 24.dp, vertical = 10.dp)) {
+            PillButton("Ver animación", Icons.Rounded.Refresh, { ArranqueRevelado.repetir++ })
+        }
+        Divisor()
+        TituloSeccion("Respuesta")
+        FilaSwitch("Luz al tocar", "Un brillo suave sigue a tu dedo en botones, portadas y la barra (Living Flow).", Aspecto.luzTactil) {
+            Aspecto.elegirLuz(it)
         }
         Divisor()
         TituloSeccion("Información del cómic")
@@ -345,6 +393,20 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
     var resultado by remember { mutableStateOf<String?>(null) }
     var version by remember { mutableIntStateOf(0) }
 
+    // Carpeta de la app (descargas y copias), como «Ubicación de almacenamiento» de Komikku.
+    var rutaCarpeta by remember { mutableStateOf(com.example.lector.CarpetaApp.ruta(contexto)) }
+    val elegirCarpetaApp = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        val ruta = uri?.let { com.example.lector.CarpetaApp.rutaDeArbol(it) } ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val movidas = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.example.lector.CarpetaApp.cambiar(contexto, ruta).also { almacen.recargarCarpeta() }
+            }
+            rutaCarpeta = ruta
+            Tacto.confirmar()
+            Avisos.mostrar(if (movidas > 0) "Carpeta lista: $movidas descargas movidas" else "Carpeta lista")
+        }
+    }
+
     // Crear y restaurar van en segundo plano con avance (píldora arriba + notificación) e informe al terminar.
     fun ocupado() = Avisos.mostrar("Ya hay una copia en marcha: espera a que termine")
     val crear = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -392,6 +454,23 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
 
     val tamImagenes = remember(version) { Formatter.formatShortFileSize(contexto, Imagenes.tamanoDisco()) }
     PaginaAjustes("Datos y almacenamiento", onBack) {
+        TituloSeccion("Carpeta de la app")
+        val permiso = com.example.lector.CarpetaApp.hayPermiso(contexto)
+        FilaAjuste(
+            Icons.Rounded.Add,
+            if (rutaCarpeta == null) "Elegir carpeta" else rutaCarpeta!!.substringAfterLast('/').ifBlank { rutaCarpeta!! },
+            when {
+                rutaCarpeta == null -> "Ahora se guarda dentro de la app (no se ve). Elige o crea una carpeta para las descargas y las copias."
+                !permiso -> "Falta el permiso de acceso a archivos: toca para darlo"
+                else -> "$rutaCarpeta · dentro: descargas y copias"
+            },
+        ) {
+            if (!com.example.lector.CarpetaApp.hayPermiso(contexto)) {
+                Avisos.mostrar("Activa «Permitir acceso para gestionar todos los archivos» y vuelve")
+                com.example.lector.CarpetaApp.pedirPermiso(contexto)
+            } else elegirCarpetaApp.launch(null)
+        }
+        Divisor()
         TituloSeccion("Copia de seguridad")
         LText(
             "Guarda tu biblioteca (también la de Explorar), categorías, progreso, historial, capítulos leídos y marcados, " +
@@ -572,5 +651,62 @@ private fun Dato2(etiqueta: String, valor: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp)) {
         LText(etiqueta, LectorType.Body, Modifier.width(110.dp), color = LectorColors.Muted)
         LText(valor, LectorType.Body, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun FilaVistas(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp), content = content,
+    )
+}
+
+/** Tarjeta de previsualización (mini pantalla) con su nombre; el borde se ilumina si está elegida. */
+@Composable
+private fun TarjetaVista(nombre: String, elegida: Boolean, acento: Color, onClick: () -> Unit, vista: @Composable () -> Unit) {
+    val forma = SuaveShape(24.dp)
+    val borde by androidx.compose.animation.animateColorAsState(if (elegida) acento else LectorColors.Linea, label = "borde")
+    Column(Modifier.width(112.dp).pressable(onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.fillMaxWidth().height(170.dp).clip(forma).border(if (elegida) 3.dp else 2.dp, borde, forma)) { vista() }
+        Spacer(Modifier.height(8.dp))
+        LText(nombre, LectorType.Label, color = if (elegida) LectorColors.Text else LectorColors.Muted, maxLines = 1)
+    }
+}
+
+/** Mini pantalla con fondo de color y la barra flotante dibujada con ese estilo de superficie. */
+@Composable
+private fun VistaSuperficie(s: Superficie, acento: Color) {
+    Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
+        FondoVivo(FondoApp.COLOR, Modifier.fillMaxSize(), fijo = true, acento = acento)
+        // «Contenido» detrás de la barra: unas portadas.
+        Row(Modifier.align(Alignment.Center).padding(bottom = 30.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(3) { i -> Box(Modifier.size(26.dp, 38.dp).clip(SuaveShape(6.dp)).background(acento.copy(alpha = 0.35f + i * 0.2f))) }
+        }
+        VistaBarra(s, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+@Composable
+private fun VistaBarra(s: Superficie, modifier: Modifier = Modifier) {
+    val forma = CircleShape
+    val oscuro = TemaActual.oscuro
+    Box(
+        modifier.padding(10.dp).fillMaxWidth().height(26.dp).clip(forma)
+            .background(
+                when (s) {
+                    Superficie.SOLIDO -> LectorColors.Cristal
+                    Superficie.CRISTAL -> LectorColors.Cristal.copy(alpha = 0.78f)
+                    Superficie.LIQUIDO -> LectorColors.Cristal.copy(alpha = 0.40f)
+                },
+            )
+            .then(
+                if (s == Superficie.LIQUIDO) Modifier.background(
+                    Brush.verticalGradient(0f to Color.White.copy(alpha = if (oscuro) 0.16f else 0.4f), 0.5f to Color.Transparent),
+                ).border(1.dp, Brush.verticalGradient(0f to Color.White.copy(alpha = 0.45f), 1f to Color.White.copy(alpha = 0.08f)), forma)
+                else Modifier.border(1.dp, LectorColors.Linea, forma),
+            ),
+    ) {
+        Box(Modifier.padding(4.dp).size(28.dp, 18.dp).clip(forma).background(LectorColors.Iluminada))
     }
 }
