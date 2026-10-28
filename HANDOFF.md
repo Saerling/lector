@@ -619,6 +619,15 @@ movimiento continuo que funde y transforma, rebote elástico y ritmo que sigue l
   página fallida no para el resto; al final se empaqueta el .cbz y se borra la carpeta.
 - «Fuentes a la vez» (antes «Descargas a la vez»): un capítulo por fuente, como `parallelSourceLimit` de Komikku.
 
+## 2aj. PASO 36 — Funciones de Komikku que faltaban (versiones 0.22–0.25)
+- 0.22 grupos de traducción ocultos (`ExtManager.gruposOcultos`). 0.23 lectura continua (Visor: transición → capítulo
+  siguiente/anterior solo) y «Abrir en Shiori» (SEND text/plain → `abrir-url:`; fuentes de ese dominio, si no búsqueda
+  global). 0.24 vista previa de páginas (8 miniaturas, `miniatura()`) y ahorro de datos (wsrv.nl, pref «ahorro_datos»).
+- 0.25 `Seguidores.kt`: MAL (OAuth PKCE con Client ID del usuario, vuelta lector://mal), Kitsu (password grant),
+  MangaUpdates (sesión); `Seguidores.avanzar` al terminar capítulo. UI: Ajustes → Seguimiento (`CuentasSeguimiento`)
+  y chip «MAL · Kitsu · MU» en la ficha (`DialogoServicios`). Fusión: `ExtManager.fusionar/unidas/principalDe`
+  (pref «fusiones»); las unidas se ocultan en la biblioteca; chips «Fuentes combinadas» en la ficha.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

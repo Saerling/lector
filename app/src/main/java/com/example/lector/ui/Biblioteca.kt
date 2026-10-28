@@ -133,8 +133,9 @@ fun BibliotecaScreen(
 
     // ---- Qué se ve ----
     val ocultas = categorias.filter { it.oculta }.map { it.id }.toSet()
-    val visibles = remember(comics, asignaciones, ocultas, mostrarOcultas) {
-        comics.filter { c -> mostrarOcultas || asignaciones[c.id].orEmpty().none { it in ocultas } }
+    val fusionadas = remember(ext.fusionVersion) { ext.fusionadas() }
+    val visibles = remember(comics, asignaciones, ocultas, mostrarOcultas, fusionadas) {
+        comics.filter { c -> (mostrarOcultas || asignaciones[c.id].orEmpty().none { it in ocultas }) && "${c.fuenteId}|${c.urlManga}" !in fusionadas }
     }
     val q = remember(consulta) { ConsultaBiblioteca(consulta) }
     val filtrados = remember(

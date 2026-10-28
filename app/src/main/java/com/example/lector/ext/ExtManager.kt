@@ -641,6 +641,25 @@ class ExtManager private constructor(private val app: Context) {
     // ---- Instalar / desinstalar ----
     private val colaInstalacion = kotlinx.coroutines.sync.Mutex()
 
+    // Entradas fusionadas (Komikku/SY «merge»): «fuente|url» principal → las de otras fuentes unidas a ella. Las unidas
+    // no se ven en la biblioteca; la ficha de la principal deja cambiar entre todas.
+    var fusionVersion by mutableStateOf(0); private set
+    private fun fusionJson(): JSONObject { @Suppress("UNUSED_VARIABLE") val v = fusionVersion; return runCatching { JSONObject(prefs.getString("fusiones", "{}")!!) }.getOrDefault(JSONObject()) }
+    fun unidas(principal: String): List<String> = fusionJson().optJSONArray(principal)?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
+    fun principalDe(clave: String): String? = fusionJson().let { o -> o.keys().asSequence().firstOrNull { k -> unidas(k).contains(clave) } }
+    fun fusionadas(): Set<String> = fusionJson().let { o -> o.keys().asSequence().flatMap { k -> unidas(k).asSequence() }.toSet() }
+    fun fusionar(principal: String, otra: String) {
+        val o = fusionJson()
+        o.put(principal, JSONArray((unidas(principal) + otra).distinct()))
+        prefs.edit().putString("fusiones", o.toString()).apply(); fusionVersion++
+    }
+    fun separar(principal: String, otra: String) {
+        val o = fusionJson()
+        val resto = unidas(principal) - otra
+        if (resto.isEmpty()) o.remove(principal) else o.put(principal, JSONArray(resto))
+        prefs.edit().putString("fusiones", o.toString()).apply(); fusionVersion++
+    }
+
     // Grupos de traducción ocultos en un manga (Komikku: «Excluded scanlators»), por «fuente|url».
     var gruposVersion by mutableStateOf(0); private set
     fun gruposOcultos(fuenteId: Long, url: String): Set<String> {

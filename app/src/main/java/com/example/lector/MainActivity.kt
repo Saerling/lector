@@ -169,6 +169,16 @@ class MainActivity : ComponentActivity() {
             intent.action = null
         }
         val datos = intent?.data ?: return
+        // Vuelta de MyAnimeList tras autorizar: lector://mal?code=…
+        if (datos.scheme == "lector" && datos.host == "mal") {
+            val codigo = datos.getQueryParameter("code") ?: return
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                runCatching { Seguidores.mal.completar(applicationContext, codigo) }
+                    .onSuccess { com.example.lector.ui.Avisos.mostrar("MyAnimeList conectado") }
+                    .onFailure { com.example.lector.ui.Avisos.mostrar("No se pudo conectar MyAnimeList: ${it.message}") }
+            }
+            return
+        }
         if (datos.scheme != "lector" || datos.host != "anilist") return
         val token = datos.fragment
             ?.split("&")

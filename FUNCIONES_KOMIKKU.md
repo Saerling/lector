@@ -11,7 +11,7 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Leer online desde fuentes (extensiones) | ✅ | Listados, instalar, confiar, ajustes y filtros de cada fuente. |
 | Leer descargado / archivos locales | ✅ | Capítulos descargados, .cbz/.zip y carpetas. |
 | Visor configurable | ✅ | Paginado ← / →, vertical, webtoon, continuo; zonas de toque; zoom; recorte de bordes; páginas dobles; filtros de color; modo por serie. |
-| Seguimiento | 🟡 | Solo AniList (con recomendaciones). Faltan MAL, Kitsu, MangaUpdates… |
+| Seguimiento | ✅ | AniList + MyAnimeList (Client ID propio), Kitsu y MangaUpdates (0.25). |
 | Categorías | ✅ | Con ocultas, editar, asignar al añadir. |
 | Temas claro / oscuro | ✅ | Sistema, oscuro puro, oscuro, claro + acento. |
 | Actualizar biblioteca programado | ✅ | WorkManager con intervalo, Wi‑Fi / cargando, notificaciones, errores. |
@@ -48,7 +48,7 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Bloqueo de la app, pantalla segura, DNS sobre HTTPS | ✅ | |
 | Aviso de actualizaciones de extensiones | ✅ | |
 | Feed multi‑fuente | ✅ | Novedades con fuentes y búsquedas guardadas. |
-| Combinar varias entradas (merge) | ❌ | |
+| Combinar varias entradas (merge) | ✅ | Una entrada en la biblioteca, chips por fuente en la ficha (0.25). |
 | Portada panorámica | ❌ | |
 | Sincronización en la nube | ❌ | |
 | Extensiones privadas | ❌ | |
@@ -57,3 +57,4 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Abrir enlaces de la web en la app | ✅ | Compartir enlace → fuentes de esa web → ficha o búsqueda global (0.23). |
 | Ahorro de datos | ✅ | wsrv.nl (WebP 1080 px), Avanzado → Red (0.24). |
 | Vista previa de páginas | ✅ | 8 miniaturas del primer capítulo, bajo pedido (0.24). |
+| Lectura continua entre capítulos | ✅ | Paginado y tira, hacia delante y hacia atrás (0.23). |

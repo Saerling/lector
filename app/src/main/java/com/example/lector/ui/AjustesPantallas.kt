@@ -298,6 +298,9 @@ fun AjSeguimientoScreen(almacen: Almacen, onBack: () -> Unit) {
     val contexto = LocalContext.current
     var clientId by remember { mutableStateOf(almacen.anilistClientId) }
     PaginaAjustes("Seguimiento", onBack) {
+        TituloSeccion("Otros servicios")
+        CuentasSeguimiento()
+        Divisor()
         TituloSeccion("AniList")
         if (almacen.anilistToken != null) {
             FilaAjuste(Icons.Rounded.Person, "Conectado como ${almacen.anilistUsuario ?: "…"}", "AniList") {}

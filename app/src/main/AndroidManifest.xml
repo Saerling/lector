@@ -45,6 +45,12 @@
                     android:scheme="lector"
                     android:host="anilist" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="lector" android:host="mal" />
+            </intent-filter>
             <!-- Compartir el enlace de un manga desde el navegador: se abre en Shiori (como «buscar por URL» de Mihon). -->
             <intent-filter android:label="Abrir en Shiori">
                 <action android:name="android.intent.action.SEND" />

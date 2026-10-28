@@ -182,6 +182,8 @@ fun FichaMangaScreen(
     var seguimiento by remember { mutableStateOf(false) }
     var recomendaciones by remember { mutableStateOf<List<ResultadoAnilist>?>(null) }
     var abriendoRec by remember { mutableStateOf<Int?>(null) }
+    var otrosSeguimientos by remember { mutableStateOf(false) }
+    var combinando by remember { mutableStateOf(false) }
     var parecidos by remember { mutableStateOf<List<MangaFuente>?>(null) }
     // Vista previa de páginas (como TachiyomiSY/Komikku): miniaturas del primer capítulo, al pedirlas.
     var vistaPrevia by remember { mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null) }
@@ -496,11 +498,39 @@ fun FichaMangaScreen(
                             if (comic != null) {
                                 val vinculado = remember(almacen.version) { almacen.seguimientoDe(comic.id) != null }
                                 ChipSel(if (vinculado) "AniList ✓" else "Seguimiento", vinculado) { seguimiento = true }
+                                ChipSel("MAL · Kitsu · MU", false) { otrosSeguimientos = true }
                                 ChipSel("Editar información", editado) { editarInfo = true }
                                 ChipSel("Migrar", false) { migrando = true }
                             }
                             if (urlWeb != null) ChipSel("Compartir", false) { compartirTexto(ctx, "$tituloFicha\n$urlWeb") }
                             ChipSel("Buscar en otras fuentes", false) { alBuscarGlobal(tituloFicha) }
+                            if (enBiblioteca != null) ChipSel("Combinar", false) { combinando = true }
+                        }
+                    }
+                }
+                // Entrada fusionada: chips con cada fuente unida (tocar = verla; mantener = separarla).
+                item {
+                    @Suppress("UNUSED_VARIABLE") val fv = ext.fusionVersion
+                    val esta = "${f.id}|${manga.url}"
+                    val principal = ext.principalDe(esta) ?: esta
+                    val grupo = listOf(principal) + ext.unidas(principal)
+                    if (grupo.size > 1) {
+                        Column(Modifier.padding(top = 12.dp)) {
+                            LText("Fuentes combinadas", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
+                            Spacer(Modifier.height(6.dp))
+                            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                grupo.forEach { k ->
+                                    val fid = k.substringBefore('|').toLongOrNull() ?: return@forEach
+                                    val url = k.substringAfter('|')
+                                    val fu = ext.fuentes.firstOrNull { it.id == fid }
+                                    ChipSel(fu?.nombre ?: "Fuente no instalada", k == esta, onLongClick = {
+                                        if (k != principal) { ext.separar(principal, k); Avisos.mostrar("Separada: vuelve a la biblioteca") }
+                                    }) {
+                                        val c = almacen.comicEnLinea(fid, url)
+                                        if (k != esta && fu != null) alAbrirOtro(fu, MangaFuente(url, c?.titulo ?: tituloFicha, c?.portadaUrl))
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -904,6 +934,31 @@ fun FichaMangaScreen(
     }
 
     if (seguimiento && comic != null) DialogoSeguimientoComic(comic, almacen) { seguimiento = false }
+    if (otrosSeguimientos && comic != null) DialogoServicios(comic.id, tituloFicha) { otrosSeguimientos = false }
+    // Combinar con otra entrada de la biblioteca (de otra fuente): primero las de título parecido.
+    if (combinando && f != null) {
+        val esta = "${f.id}|${manga.url}"
+        val principal = ext.principalDe(esta) ?: esta
+        var q by remember { mutableStateOf("") }
+        val clave = tituloComparable(tituloFicha)
+        val candidatas = remember(almacen.version, q) {
+            almacen.cargar().filter { it.enLinea && "${it.fuenteId}|${it.urlManga}" != principal && "${it.fuenteId}|${it.urlManga}" !in ext.unidas(principal) }
+                .filter { q.isBlank() || it.titulo.contains(q, true) }
+                .sortedByDescending { tituloComparable(it.titulo).let { t -> t == clave || t.contains(clave) || clave.contains(t) } }
+                .take(40)
+        }
+        DialogoShiori("Combinar «$tituloFicha» con…", { combinando = false }) {
+            Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) { CampoBusqueda(q, { q = it }, "Buscar en tu biblioteca") }
+            candidatas.forEach { c ->
+                val nombre = ext.fuentes.firstOrNull { it.id == c.fuenteId }?.nombre ?: "otra fuente"
+                OpcionPildora("${c.titulo} · $nombre", false) {
+                    ext.fusionar(principal, "${c.fuenteId}|${c.urlManga}")
+                    Tacto.confirmar(); Avisos.mostrar("Combinadas: en la biblioteca queda una sola entrada")
+                    combinando = false
+                }
+            }
+        }
+    }
 
     if (editarInfo && comic != null) DialogoEditarInfo(
         comic = comic, almacen = almacen,
@@ -1203,6 +1258,11 @@ fun LeerOnlineScreen(
             }
             // Seguimiento (AniList): sube el número del capítulo terminado.
             val cid = comic?.id
+            // MyAnimeList, Kitsu y MangaUpdates: cada uno vinculado recibe el capítulo terminado.
+            if (cid != null) {
+                val n2 = if (c.numero > 0) c.numero.toInt() else capitulos.count { ext.esLeido(f.id, it.url) }
+                scope.launch { com.example.lector.Seguidores.avanzar(ctx, cid, n2) }
+            }
             if (cid != null && alm.seguimientoDe(cid) != null) {
                 val numero = if (c.numero > 0) c.numero.toInt() else capitulos.count { ext.esLeido(f.id, it.url) }
                 scope.launch { withContext(Dispatchers.IO) { alm.avanzarSeguimiento(cid, numero) } }
