@@ -641,6 +641,18 @@ class ExtManager private constructor(private val app: Context) {
     // ---- Instalar / desinstalar ----
     private val colaInstalacion = kotlinx.coroutines.sync.Mutex()
 
+    // Grupos de traducción ocultos en un manga (Komikku: «Excluded scanlators»), por «fuente|url».
+    var gruposVersion by mutableStateOf(0); private set
+    fun gruposOcultos(fuenteId: Long, url: String): Set<String> {
+        @Suppress("UNUSED_VARIABLE") val v = gruposVersion
+        return prefs.getStringSet("excl_$fuenteId|$url", emptySet()).orEmpty()
+    }
+    fun alternarGrupo(fuenteId: Long, url: String, grupo: String) {
+        val a = gruposOcultos(fuenteId, url)
+        prefs.edit().putStringSet("excl_$fuenteId|$url", if (grupo in a) a - grupo else a + grupo).apply()
+        gruposVersion++
+    }
+
     // Páginas de la fuente que se piden de una vez al cargar su catálogo o una búsqueda (como «Maximum posts to load»).
     var ppcVersion by mutableStateOf(0); private set
     fun paginasPorCarga(fuenteId: Long): Int { @Suppress("UNUSED_VARIABLE") val v = ppcVersion; return prefs.getInt("ppc_$fuenteId", 1) }

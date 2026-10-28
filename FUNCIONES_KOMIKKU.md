@@ -29,13 +29,13 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 ## Funciones propias de Komikku / TachiyomiSY
 | Función | Estado | Notas |
 |---|---|---|
-| Recomendaciones | 🟡 | De AniList en la ficha (no las de la fuente). |
+| Recomendaciones | ✅ | AniList + «Parecidos» de la fuente (getRelatedMangaList o por género). |
 | Categorías ocultas / dinámicas (agrupar por fuente, estado) | ✅ | |
 | Color según la portada | ✅ | |
 | Selección múltiple en biblioteca / ficha / actualizaciones | ✅ | |
 | Insignias (sin leer, descargas, idioma, local) | ✅ | |
 | Actualizaciones agrupadas por manga | ✅ | |
-| Búsquedas guardadas | 🟡 | Solo el texto, sin filtros. |
+| Búsquedas guardadas | ✅ | Texto y filtros; también como filas de Novedades. |
 | Búsqueda global | ✅ | |
 | Migración de fuente | ✅ | Desde la ficha, la biblioteca o Explorar → Migrar. No mueve descargas. |
 | Mantener pulsado = añadir / quitar de la biblioteca | ✅ | Navegar fuente y búsqueda global. |
@@ -47,8 +47,13 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Buscador de biblioteca con operadores | ✅ | |
 | Bloqueo de la app, pantalla segura, DNS sobre HTTPS | ✅ | |
 | Aviso de actualizaciones de extensiones | ✅ | |
-| Feed multi‑fuente | ❌ | |
+| Feed multi‑fuente | ✅ | Novedades con fuentes y búsquedas guardadas. |
 | Combinar varias entradas (merge) | ❌ | |
 | Portada panorámica | ❌ | |
 | Sincronización en la nube | ❌ | |
 | Extensiones privadas | ❌ | |
+| Grupos de traducción ocultos | ✅ | Por manga, en Filtros de capítulos (0.22). |
+| Descargador | ✅ | Por páginas, reanudable, un capítulo por fuente, reintentos (0.21). |
+| Abrir enlaces de la web en la app (deep links) | ❌ | |
+| Ahorro de datos (imágenes comprimidas) | ❌ | |
+| Vista previa de páginas en la ficha | ❌ | |

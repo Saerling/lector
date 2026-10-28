@@ -362,9 +362,11 @@ fun FichaMangaScreen(
     val leidosAhora = ext.leidos
     val marcadosAhora = ext.marcados
     val versionDesc = Descargas.version.value + almacen.version
-    val visibles = remember(fi, leidosAhora, marcadosAhora, versionDesc, ext.capNoLeidos, ext.capDescargados, ext.capMarcados, ext.capOrden, ext.capDescendente) {
+    val ocultos = ext.gruposOcultos(f.id, manga.url)
+    val visibles = remember(fi, leidosAhora, marcadosAhora, versionDesc, ext.capNoLeidos, ext.capDescargados, ext.capMarcados, ext.capOrden, ext.capDescendente, ocultos) {
         val base = fi?.capitulos?.withIndex()?.toList().orEmpty()
         val filtrados = base.filter { iv ->
+            (iv.value.scanlator == null || iv.value.scanlator !in ocultos) &&
             ext.capNoLeidos.deja(!ext.esLeido(f.id, iv.value.url)) &&
                 ext.capDescargados.deja(almacen.estaDescargado(f.id, iv.value.url)) &&
                 ext.capMarcados.deja(ext.esMarcado(f.id, iv.value.url))
@@ -376,7 +378,7 @@ fun FichaMangaScreen(
             else -> if (desc) filtrados else filtrados.asReversed()
         }
     }
-    val filtrosCap = listOf(ext.capNoLeidos, ext.capDescargados, ext.capMarcados).count { it != com.example.lector.Tri.IGNORAR }
+    val filtrosCap = listOf(ext.capNoLeidos, ext.capDescargados, ext.capMarcados).count { it != com.example.lector.Tri.IGNORAR } + (if (ocultos.isNotEmpty()) 1 else 0)
 
     // Cuánto se ha desplazado la cabecera (se lee al dibujar, sin recomponer).
     val scrollPx: () -> Float = { if (lista.firstVisibleItemIndex == 0) lista.firstVisibleItemScrollOffset.toFloat() else 99999f }
@@ -836,6 +838,15 @@ fun FichaMangaScreen(
                         FilaTri("No leídos", ext.capNoLeidos) { ext.capNoLeidos = it }
                         FilaTri("Descargados", ext.capDescargados) { ext.capDescargados = it }
                         FilaTri("Marcados", ext.capMarcados) { ext.capMarcados = it }
+                        // Grupos de traducción (como Komikku): toca uno para ocultar sus capítulos en este manga.
+                        val grupos = fi?.capitulos?.mapNotNull { it.scanlator }?.distinct()?.sorted().orEmpty()
+                        if (grupos.size > 1) {
+                            TituloSeccion("Grupos de traducción")
+                            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                grupos.forEach { g -> ChipSel(g, g !in ocultos) { ext.alternarGrupo(f.id, manga.url, g) } }
+                            }
+                            LText("Encendido = se muestra. Apaga un grupo para ocultar sus capítulos.", LectorType.Label, Modifier.padding(horizontal = 24.dp, vertical = 6.dp), color = LectorColors.Muted)
+                        }
                     }
                     1 -> (0..2).forEach { o ->
                         FilaOrden(nombreOrdenCap(o), ext.capOrden == o, !ext.capDescendente) {
