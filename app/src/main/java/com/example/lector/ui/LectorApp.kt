@@ -380,6 +380,7 @@ fun Inicio(
                                 a.capUrl to ext.paginaDe(a.fuenteId, a.capUrl),
                             )
                         },
+                        alAbrirManga = { a -> abrirEnLinea(a.fuenteId, a.urlManga, a.titulo, a.portadaUrl, null) },
                     )
                 }
                 LectorTab.History -> Box(Modifier.statusBarsPadding().padding(bottom = 76.dp)) {

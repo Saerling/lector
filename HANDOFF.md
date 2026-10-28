@@ -687,3 +687,8 @@ Reglas:
 ## 6. Contenido de `referencias/`
 Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extensiones instaladas), `…005829` (Novedades),
 `…005833` (Añadir listado de extensiones), `…005846` (Fuentes con "Usado recientemente" y "Ancladas").
+
+## 2ak. PASO 37 (0.26)
+- Visor: lectura continua sin botón. Tira: pasa de capítulo en cuanto asoma la transición mientras desplazas (o al tope), hacia delante y hacia atrás. Paginado: la transición solo destella (120 ms) y salta. Quitado el botón «Siguiente/Anterior capítulo».
+- Actualizaciones: tocar la portada abre la ficha del manga (alAbrirManga); el resto de la fila sigue abriendo el capítulo.
+- ExtManager: la página guardada se conserva aunque el capítulo esté leído (paginaDe/guardarPagina/marcarLeido(s)/carga), así al reabrirlo sigue donde se dejó, también al final.

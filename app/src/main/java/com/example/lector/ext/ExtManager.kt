@@ -802,17 +802,14 @@ class ExtManager private constructor(private val app: Context) {
             guardarMarcados()
         }
         var cambio = false
-        paginasCap.keys.toList().forEach { k -> if (leidoTexto(k)) { paginasCap.remove(k); cambio = true } }
-        paginas.forEach { (k, v) -> if (v > 0 && !leidoTexto(k) && paginasCap[k] != v) { paginasCap[k] = v; cambio = true } }
+        paginas.forEach { (k, v) -> if (v > 0 && paginasCap[k] != v) { paginasCap[k] = v; cambio = true } }
         if (cambio) guardarPaginasCap()
     }
 
     /** Marca varios capítulos como leídos de una vez (una sola escritura). */
     fun marcarLeidos(fuenteId: Long, urls: Collection<String>) {
         if (urls.isEmpty()) return
-        var cambioPaginas = false
-        urls.forEach { u -> if (paginasCap.remove("$fuenteId|$u") != null) cambioPaginas = true; leidosH.add(claveCap(fuenteId, u)) }
-        if (cambioPaginas) guardarPaginasCap()
+        urls.forEach { u -> leidosH.add(claveCap(fuenteId, u)) }
         guardarLeidos()
     }
 
@@ -901,7 +898,7 @@ class ExtManager private constructor(private val app: Context) {
         }
         versionLeidos++
         marcados = marcados + conjunto(o.optJSONArray("marcados"))
-        o.optJSONObject("paginas_cap")?.let { j -> j.keys().forEach { k -> if (!leidoTexto(k)) paginasCap[k] = j.optInt(k) } }
+        o.optJSONObject("paginas_cap")?.let { j -> j.keys().forEach { k -> paginasCap[k] = j.optInt(k) } }
         fijadas = fijadas + conjunto(o.optJSONArray("fijadas"))
         confiadas += conjunto(o.optJSONArray("confiadas"))
         o.optJSONArray("novedades")?.let { a -> fijarNovedades(novedades + (0 until a.length()).map { a.getLong(it) }) }
@@ -928,19 +925,18 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     fun marcarLeido(fuenteId: Long, url: String) {
-        val k = "$fuenteId|$url"
-        if (paginasCap.remove(k) != null) guardarPaginasCap() // terminado: ya no hay "página por la que vas"
+        // Se conserva la página aunque esté terminado: al reabrirlo sigue donde lo dejaste (también al final).
         if (!leidosH.add(claveCap(fuenteId, url))) return
         guardarLeidos()
     }
 
     /** Página por la que ibas en un capítulo (0 si no lo empezaste o ya está leído). */
     fun paginaDe(fuenteId: Long, url: String): Int =
-        if (esLeido(fuenteId, url)) 0 else paginasCap["$fuenteId|$url"] ?: 0
+        paginasCap["$fuenteId|$url"] ?: 0
 
     fun guardarPagina(fuenteId: Long, url: String, pagina: Int) {
         val k = "$fuenteId|$url"
-        if (esLeido(fuenteId, url) || pagina <= 0 || paginasCap[k] == pagina) return
+        if (pagina <= 0 || paginasCap[k] == pagina) return
         paginasCap[k] = pagina
         guardarPaginasCap()
     }

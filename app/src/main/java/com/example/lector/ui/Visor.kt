@@ -328,7 +328,7 @@ fun Visor(
     LaunchedEffect(actual, total) {
         val a = actual
         if (total == null || a !is ItemVisor.Transicion || !paginado) return@LaunchedEffect
-        delay(if (almacen.mostrarTransiciones) 650 else 400)
+        delay(120) // sin parada: se ve solo un destello del «Siguiente: …»
         if (a.siguiente && haySiguiente) irCapitulo(ci + 1, false)
         else if (!a.siguiente && hayAnterior) irCapitulo(ci - 1, true)
     }
@@ -340,7 +340,9 @@ fun Visor(
                 val info = lista.layoutInfo
                 val fin = info.visibleItemsInfo.firstOrNull { it.index == items.lastIndex } ?: return@snapshotFlow false
                 val alto = info.viewportEndOffset - info.viewportStartOffset
-                fin.offset < info.viewportStartOffset + alto * 0.45f
+                // Como en Komikku: la tira sigue sola. Basta con que asome la transición mientras desplazas hacia abajo
+                // (antes tenía que subir al 45 % de la pantalla, y al final de la tira no podía).
+                lista.isScrollInProgress && (fin.offset < info.viewportStartOffset + alto * 0.85f || !lista.canScrollForward)
             }.distinctUntilChanged().collect { dentro ->
                 if (dentro && haySiguiente && almacen.pasarCapituloSolo) irCapitulo(ci + 1, false)
             }
@@ -353,7 +355,9 @@ fun Visor(
                 val info = lista.layoutInfo
                 val ini = info.visibleItemsInfo.firstOrNull { it.index == 0 } ?: return@snapshotFlow false
                 val alto = info.viewportEndOffset - info.viewportStartOffset
-                items.firstOrNull() is ItemVisor.Transicion && ini.offset + ini.size > info.viewportStartOffset + alto * 0.55f
+                // Hacia atrás igual: al asomar la transición del principio desplazando hacia arriba.
+                items.firstOrNull() is ItemVisor.Transicion && lista.isScrollInProgress &&
+                    (ini.offset + ini.size > info.viewportStartOffset + alto * 0.15f || !lista.canScrollBackward)
             }.distinctUntilChanged().collect { dentro ->
                 if (dentro && almacen.pasarCapituloSolo) irCapitulo(ci - 1, true)
             }
@@ -1064,8 +1068,6 @@ private fun Tira(
                             Spacer(Modifier.height(12.dp))
                             if (otro != null) {
                                 Text(if (it.siguiente) "Siguiente: $otro" else "Anterior: $otro", color = Color.White, style = LectorType.Section, textAlign = TextAlign.Center)
-                                Spacer(Modifier.height(16.dp))
-                                BotonOscuro(if (it.siguiente) "Siguiente capítulo" else "Capítulo anterior", if (it.siguiente) Icons.Rounded.ArrowForward else Icons.Rounded.ArrowBack) { onIr(it.siguiente) }
                             } else {
                                 Text(if (it.siguiente) "No hay más capítulos" else "Es el primer capítulo", color = Color.White, style = LectorType.Body)
                             }

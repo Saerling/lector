@@ -3,6 +3,7 @@ package com.example.lector.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -80,10 +81,12 @@ fun ActualizacionesScreen(
     almacen: Almacen,
     ext: ExtManager,
     alAbrir: (ActualizacionCap) -> Unit,
+    alAbrirManga: (ActualizacionCap) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val ctx = LocalContext.current
     val lista = almacen.actualizaciones
+    abrirMangaAct = alAbrirManga
     var seleccion by remember { mutableStateOf(emptySet<String>()) }
     var abiertos by remember { mutableStateOf(emptySet<String>()) }
     var menu by remember { mutableStateOf(false) }
@@ -320,8 +323,12 @@ fun ActualizacionesScreen(
     }
 }
 
+private var abrirMangaAct: (ActualizacionCap) -> Unit = {}
+
 @Composable
-private fun PortadaActualizacion(a: ActualizacionCap, comic: Comic?, almacen: Almacen, modifier: Modifier) {
+private fun PortadaActualizacion(a: ActualizacionCap, comic: Comic?, almacen: Almacen, modifier0: Modifier) {
+    // Tocar la portada abre el manga (su ficha), no el capítulo.
+    val modifier = modifier0.clip(SuaveShape(8.dp)).clickable { abrirMangaAct(a) }
     if (comic != null) ComicCover(comic, almacen, modifier, SuaveShape(8.dp))
     else ImagenRemota(a.portadaUrl, modifier.clip(SuaveShape(8.dp)), rememberCabeceras(a.fuenteId), fuenteId = a.fuenteId)
 }
