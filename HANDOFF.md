@@ -608,6 +608,11 @@ movimiento continuo que funde y transforma, rebote elástico y ritmo que sigue l
 - «Páginas por carga» por fuente (hoja Vista del catálogo; `paginasPorCarga`).
 - Ajustes de fuente: `DialogoShiori` + `OpcionPildora` (en lugar de AlertDialog) e `Interruptor`.
 
+## 2ah. PASO 34 — «HTTP error 429» en descargas (versión 0.20)
+- Cola: un solo capítulo a la vez por fuente (las simultáneas se reparten entre fuentes).
+- `MotorExt.imagenPagina`: máx. 2 peticiones a la vez por fuente (`semaforo`) y `conReintentos` (429/503 → esperas
+  2-4-8-16-30 s); grupos de 2 páginas en `descargarCbz`.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

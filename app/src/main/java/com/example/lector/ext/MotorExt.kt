@@ -1,5 +1,6 @@
 package com.example.lector.ext
 
+import kotlinx.coroutines.sync.withPermit
 import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
@@ -155,10 +156,35 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
     override suspend fun imagenPagina(fuente: FuenteUI, capitulo: CapituloFuente, indice: Int): ByteArray =
         withContext(Dispatchers.IO) {
             val src = fuenteReal(fuente) as? HttpSource ?: error("${fuente.nombre} no es una fuente web")
-            val pagina = paginasDe(fuente, capitulo).getOrNull(indice) ?: error("Página $indice fuera de rango")
-            if (pagina.imageUrl.isNullOrEmpty()) pagina.imageUrl = src.getImageUrl(pagina)
-            src.getImage(pagina).use { it.body.bytes() }
+            val pagina = conReintentos { paginasDe(fuente, capitulo) }.getOrNull(indice) ?: error("Página $indice fuera de rango")
+            // Como mucho 2 peticiones a la vez a la misma web (descargas + lectura): así no salta el «429».
+            semaforo(fuente.id).withPermit {
+                conReintentos {
+                    if (pagina.imageUrl.isNullOrEmpty()) pagina.imageUrl = src.getImageUrl(pagina)
+                    src.getImage(pagina).use { it.body.bytes() }
+                }
+            }
         }
+
+    private val semaforos = ConcurrentHashMap<Long, kotlinx.coroutines.sync.Semaphore>()
+    private fun semaforo(id: Long) = semaforos.getOrPut(id) { kotlinx.coroutines.sync.Semaphore(2) }
+
+    /**
+     * «HTTP error 429» (demasiadas peticiones) o 503: la web pide esperar. Se reintenta solo con esperas crecientes
+     * (2, 4, 8, 16, 30 s, con algo de azar) en vez de dar el capítulo por fallido.
+     */
+    private suspend fun <T> conReintentos(bloque: suspend () -> T): T {
+        var espera = 2000L
+        repeat(5) {
+            try { return bloque() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+                val m = e.message.orEmpty()
+                if (!m.contains("429") && !m.contains("503")) throw e
+                kotlinx.coroutines.delay(espera + (0..800).random())
+                espera = (espera * 2).coerceAtMost(30_000)
+            }
+        }
+        return bloque()
+    }
 
     override suspend fun descargarCbz(
         fuente: FuenteUI, capitulo: CapituloFuente, destino: File, progreso: (Int, Int) -> Unit,
@@ -172,7 +198,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
                 var i = 0
                 while (i < total) {
                     ensureActive() // permite cancelar la descarga entre grupos de páginas
-                    val grupo = (i until minOf(i + 3, total)).toList()
+                    val grupo = (i until minOf(i + 2, total)).toList()
                     // Se piden 3 páginas a la vez (antes era una por una) y se escriben en orden.
                     val datos = coroutineScope { grupo.map { n -> async { imagenPagina(fuente, capitulo, n) } }.awaitAll() }
                     for ((k, bytes) in datos.withIndex()) {

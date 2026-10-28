@@ -203,7 +203,13 @@ object Descargas {
                 if (pausado) break
                 val motor = Motor.actual ?: break
                 val maximo = alm.descParalelas.coerceIn(1, 4)
-                val siguientes = cola.toList().filter { !trabajos.containsKey(it.clave) && it.clave !in errores }.take((maximo - trabajos.size).coerceAtLeast(0))
+                // Un solo capítulo a la vez por fuente (varios de la misma web a la vez provocan «HTTP error 429»);
+                // las descargas simultáneas se reparten entre fuentes distintas.
+                val ocupadas = trabajos.keys.mapTo(HashSet()) { it.substringBefore('|') }
+                val siguientes = cola.toList()
+                    .filter { !trabajos.containsKey(it.clave) && it.clave !in errores }
+                    .filter { ocupadas.add(it.fuenteId.toString()) }
+                    .take((maximo - trabajos.size).coerceAtLeast(0))
                 if (siguientes.isEmpty() && trabajos.isEmpty()) break
                 for (t in siguientes) {
                     progreso[t.clave] = 0f
