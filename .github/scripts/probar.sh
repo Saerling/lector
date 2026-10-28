@@ -93,7 +93,7 @@ adb shell am force-stop com.example.lector; adb logcat -c
 # «|autorec»: la app abre sola la primera recomendación (la ficha tiene animaciones y uiautomator no puede leerla).
 adb shell am start -n com.example.lector/.MainActivity --es destino "probar:eu.kanade.tachiyomi.extension.es.anzmanga\|autorec"
 sleep 45
-volcar rec0.xml; tocar rec0.xml "One Piece" >/dev/null
+volcar rec0.xml; tocar rec0.xml "One Punch-Man" >/dev/null
 for i in $(seq 1 24); do adb logcat -d | grep -q "recomendación «" && break; sleep 5; done
 sleep 20
 adb exec-out screencap -p > "captura-$ETIQUETA-recomendada.png"
@@ -103,8 +103,8 @@ adb exec-out screencap -p > "captura-$ETIQUETA-tras-atras.png"
 {
   echo "===== Recomendaciones ====="
   adb logcat -d | grep -E "recomendaciones de|recomendación «|ficha abierta|ficha «" | sed 's/.*LectorPrueba: //'
-  n=$(adb logcat -d | grep -c "ficha abierta: AnzManga · One Piece")
-  [ "$n" -ge 2 ] && echo "VUELVE A LA FICHA DE ANTES (One Piece abierta $n veces)" || echo "NO VOLVIÓ A LA FICHA DE ANTES ($n)"
+  n=$(adb logcat -d | grep -c "ficha abierta: AnzManga · One Punch-Man")
+  [ "$n" -ge 2 ] && echo "VUELVE A LA FICHA DE ANTES (One Punch-Man abierta $n veces)" || echo "NO VOLVIÓ A LA FICHA DE ANTES ($n)"
   adb logcat -d | grep -A20 "FATAL EXCEPTION" | head -20
   adb shell pidof com.example.lector >/dev/null && echo "La app sigue abierta" || echo "LA APP NO ESTÁ ABIERTA"
 } >> fallos.txt
