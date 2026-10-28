@@ -45,13 +45,14 @@ import eu.kanade.tachiyomi.source.model.FilterList
  * `state`, y la misma lista editada es la que se manda a la búsqueda. Lo que no se porta: las búsquedas guardadas.
  */
 @Composable
-fun PanelFiltros(filtros: FilterList, onReset: () -> Unit, onFiltrar: () -> Unit, onCerrar: () -> Unit) {
+fun PanelFiltros(filtros: FilterList, onReset: () -> Unit, onFiltrar: () -> Unit, onCerrar: () -> Unit, onMasReciente: (() -> Unit)? = null) {
     // Los filtros no son estado de Compose: este contador obliga a repintar las filas tras cada cambio.
     var tick by remember { mutableIntStateOf(0) }
     Dialog(onDismissRequest = onCerrar, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { onReset(); tick++ }) { Text("Restablecer") }
+                if (onMasReciente != null) TextButton(onClick = onMasReciente) { Text("Más reciente") }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onCerrar) { Text("Cancelar") }
                 Spacer(Modifier.width(4.dp))
@@ -186,4 +187,64 @@ private fun Plegable(titulo: String, contenido: @Composable () -> Unit) {
         Text(if (abierto) "▲" else "▼")
     }
     if (abierto) contenido()
+}
+
+/**
+ * Filtros de una fuente ↔ texto (para las búsquedas guardadas, como Komikku): se guarda el estado de cada filtro por
+ * su posición y se vuelve a poner sobre una lista nueva de la misma fuente (si cambió, lo que no encaje se ignora).
+ */
+object FiltrosTexto {
+    fun guardar(l: FilterList): String = org.json.JSONArray().also { a -> l.forEach { a.put(estado(it)) } }.toString()
+
+    private fun estado(f: Filter<*>): Any = when (f) {
+        is Filter.Select<*> -> f.state
+        is Filter.Text -> f.state
+        is Filter.CheckBox -> f.state
+        is Filter.TriState -> f.state
+        is Filter.Sort -> f.state?.let { org.json.JSONArray().put(it.index).put(it.ascending) } ?: org.json.JSONObject.NULL
+        is Filter.Group<*> -> org.json.JSONArray().also { a -> f.state.forEach { h -> a.put((h as? Filter<*>)?.let { estado(it) } ?: org.json.JSONObject.NULL) } }
+        else -> org.json.JSONObject.NULL
+    }
+
+    fun aplicar(l: FilterList, texto: String): FilterList {
+        val a = runCatching { org.json.JSONArray(texto) }.getOrNull() ?: return l
+        l.forEachIndexed { i, f -> if (i < a.length()) poner(f, a.opt(i)) }
+        return l
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun poner(f: Filter<*>, v: Any?) {
+        runCatching {
+            when (f) {
+                is Filter.Select<*> -> (v as? Int)?.takeIf { it in f.values.indices }?.let { f.state = it }
+                is Filter.Text -> (v as? String)?.let { f.state = it }
+                is Filter.CheckBox -> (v as? Boolean)?.let { f.state = it }
+                is Filter.TriState -> (v as? Int)?.let { f.state = it }
+                is Filter.Sort -> (v as? org.json.JSONArray)?.let { f.state = Filter.Sort.Selection(it.getInt(0), it.getBoolean(1)) }
+                is Filter.Group<*> -> (v as? org.json.JSONArray)?.let { a ->
+                    f.state.forEachIndexed { i, h -> if (i < a.length()) (h as? Filter<*>)?.let { poner(it, a.opt(i)) } }
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    /**
+     * «Más reciente»: pone el orden de la fuente en su opción de fecha/actualización (descendente). false si la
+     * fuente no tiene un orden así (entonces se usa su sección de recientes).
+     */
+    fun ponerMasReciente(l: FilterList): Boolean {
+        val clave = Regex("(?i)recien|reciente|latest|update|actualiz|new|nuev|fecha|date|añadid|added|last")
+        for (f in l) {
+            if (f is Filter.Sort) {
+                val i = f.values.indexOfFirst { clave.containsMatchIn(it) }
+                if (i >= 0) { f.state = Filter.Sort.Selection(i, false); return true }
+            }
+            if (f is Filter.Select<*> && Regex("(?i)orden|sort|order").containsMatchIn(f.name)) {
+                val i = f.values.indexOfFirst { clave.containsMatchIn(it.toString()) }
+                if (i >= 0) { f.state = i; return true }
+            }
+        }
+        return false
+    }
 }

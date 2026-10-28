@@ -598,6 +598,16 @@ movimiento continuo que funde y transforma, rebote elástico y ritmo que sigue l
 - `CacheBytes` (VisorPaginas.kt): bytes de cada página en `cache/paginas/<sha1>/<n>` (400 MB, por antigüedad);
   al abrir un capítulo en línea se bajan TODAS sus páginas (3 a la vez); volver a una página ya no usa la red.
 
+## 2ag. PASO 33 — Búsquedas con filtros, «Más reciente», instalación en cola, ajustes de fuente (versión 0.19)
+- `FiltrosTexto` (FiltrosFuente.kt): FilterList ↔ JSON por posición; `BusquedaGuardada.filtros` se guarda ya. Guardar
+  búsqueda (también solo filtros) con «Mostrar en Novedades»; Novedades y los chips la aplican con filtros
+  (`BusquedaPendiente.guardada`).
+- «Más reciente» (chip del catálogo y botón del panel de filtros): `ponerMasReciente` elige la opción de fecha /
+  actualización del orden de la fuente; si no hay, modo Recientes.
+- Extensiones: instalación en cola (`colaInstalacion`, Android confirma de una en una) y «Actualizar todas».
+- «Páginas por carga» por fuente (hoja Vista del catálogo; `paginasPorCarga`).
+- Ajustes de fuente: `DialogoShiori` + `OpcionPildora` (en lugar de AlertDialog) e `Interruptor`.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

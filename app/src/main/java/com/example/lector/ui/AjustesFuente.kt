@@ -1,5 +1,13 @@
 package com.example.lector.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -138,14 +146,10 @@ private fun FilaInterruptorPref(p: TwoStatePreference, alCambiar: () -> Unit) {
             }
         }
         Spacer(Modifier.width(8.dp))
-        Switch(
-            checked = p.isChecked,
-            enabled = activa,
-            onCheckedChange = { nuevo ->
-                if (p.callChangeListener(nuevo)) p.isChecked = nuevo
-                alCambiar()
-            },
-        )
+        Interruptor(p.isChecked, if (activa) { nuevo ->
+            if (p.callChangeListener(nuevo)) p.isChecked = nuevo
+            alCambiar()
+        } else null)
     }
 }
 
@@ -156,24 +160,17 @@ private fun FilaTextoPref(p: EditTextPreference, alCambiar: () -> Unit) {
     FilaPref(p, p.summary?.toString()) { abierto = true }
     if (abierto) {
         var texto by remember { mutableStateOf(p.text.orEmpty()) }
-        AlertDialog(
-            onDismissRequest = { abierto = false },
-            title = { Text(p.dialogTitle?.toString()?.takeIf { it.isNotBlank() } ?: titulo) },
-            text = {
-                Column {
-                    p.dialogMessage?.toString()?.takeIf { it.isNotBlank() }?.let { Text(it, Modifier.padding(bottom = 8.dp)) }
-                    OutlinedTextField(value = texto, onValueChange = { texto = it }, modifier = Modifier.fillMaxWidth())
-                }
+        DialogoShiori(
+            p.dialogTitle?.toString()?.takeIf { it.isNotBlank() } ?: titulo, { abierto = false },
+            aceptar = "Aceptar" to {
+                if (p.callChangeListener(texto)) p.text = texto
+                abierto = false
+                alCambiar()
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (p.callChangeListener(texto)) p.text = texto
-                    abierto = false
-                    alCambiar()
-                }) { Text("Aceptar") }
-            },
-            dismissButton = { TextButton(onClick = { abierto = false }) { Text("Cancelar") } },
-        )
+        ) {
+            p.dialogMessage?.toString()?.takeIf { it.isNotBlank() }?.let { LText(it, LectorType.Label, Modifier.padding(start = 10.dp, bottom = 8.dp), color = LectorColors.Muted) }
+            Box(Modifier.padding(horizontal = 10.dp)) { CampoBusqueda(texto, { texto = it }, titulo) }
+        }
     }
 }
 
@@ -185,26 +182,17 @@ private fun FilaListaPref(p: ListPreference, alCambiar: () -> Unit) {
     if (abierto) {
         val entradas = p.entries?.map { it.toString() }.orEmpty()
         val valores = p.entryValues?.map { it.toString() }.orEmpty()
-        AlertDialog(
-            onDismissRequest = { abierto = false },
-            title = { Text(p.dialogTitle?.toString()?.takeIf { it.isNotBlank() } ?: titulo) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    entradas.forEachIndexed { i, etiqueta ->
-                        val valor = valores.getOrNull(i) ?: return@forEachIndexed
-                        Box(Modifier.padding(vertical = 8.dp)) {
-                            FilaOpcion(etiqueta, valor == p.value) {
-                                if (p.callChangeListener(valor)) p.value = valor
-                                abierto = false
-                                alCambiar()
-                            }
-                        }
-                    }
+        DialogoShiori(p.dialogTitle?.toString()?.takeIf { it.isNotBlank() } ?: titulo, { abierto = false }) {
+            entradas.forEachIndexed { i, etiqueta ->
+                val valor = valores.getOrNull(i) ?: return@forEachIndexed
+                OpcionPildora(etiqueta, valor == p.value) {
+                    Tacto.tic()
+                    if (p.callChangeListener(valor)) p.value = valor
+                    abierto = false
+                    alCambiar()
                 }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { abierto = false }) { Text("Cancelar") } },
-        )
+            }
+        }
     }
 }
 
@@ -217,34 +205,79 @@ private fun FilaMultiplePref(p: MultiSelectListPreference, alCambiar: () -> Unit
         val entradas = p.entries?.map { it.toString() }.orEmpty()
         val valores = p.entryValues?.map { it.toString() }.orEmpty()
         var marcadas by remember { mutableStateOf(p.values.toSet()) }
-        AlertDialog(
-            onDismissRequest = { abierto = false },
-            title = { Text(p.dialogTitle?.toString()?.takeIf { it.isNotBlank() } ?: titulo) },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    entradas.forEachIndexed { i, etiqueta ->
-                        val valor = valores.getOrNull(i) ?: return@forEachIndexed
-                        Row(
-                            Modifier.fillMaxWidth().clickable {
-                                marcadas = if (valor in marcadas) marcadas - valor else marcadas + valor
-                            }.padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(checked = valor in marcadas, onCheckedChange = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(etiqueta)
-                        }
+        DialogoShiori(
+            p.dialogTitle?.toString()?.takeIf { it.isNotBlank() } ?: titulo, { abierto = false },
+            aceptar = "Aceptar" to {
+                if (p.callChangeListener(marcadas)) p.values = marcadas
+                abierto = false
+                alCambiar()
+            },
+        ) {
+            entradas.forEachIndexed { i, etiqueta ->
+                val valor = valores.getOrNull(i) ?: return@forEachIndexed
+                OpcionPildora(etiqueta, valor in marcadas) {
+                    Tacto.tic()
+                    marcadas = if (valor in marcadas) marcadas - valor else marcadas + valor
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Diálogo con el estilo de Shiori (tarjeta de cristal redondeada, título grande, opciones en píldora y botones
+ * píldora), con entrada animada: crece desde 0,94 y se funde. Sustituye a los diálogos de Android.
+ */
+@Composable
+fun DialogoShiori(
+    titulo: String,
+    onCerrar: () -> Unit,
+    aceptar: Pair<String, () -> Unit>? = null,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onCerrar, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        val visible = remember { androidx.compose.animation.core.MutableTransitionState(false) }.apply { targetState = true }
+        androidx.compose.animation.AnimatedVisibility(
+            visibleState = visible,
+            enter = androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(240, easing = EnfasisEasing), initialScale = 0.94f) +
+                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180)),
+        ) {
+            Column(
+                Modifier.padding(20.dp).fillMaxWidth().clip(SuaveShape(30.dp)).background(LectorColors.Card)
+                    .border(1.dp, LectorColors.Linea, SuaveShape(30.dp)).padding(vertical = 22.dp),
+            ) {
+                LText(titulo, LectorType.Section, Modifier.padding(horizontal = 24.dp))
+                Spacer(Modifier.height(12.dp))
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp), content = content)
+                Spacer(Modifier.height(14.dp))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.pressable(onCerrar).padding(horizontal = 16.dp, vertical = 10.dp)) { LText("Cancelar", LectorType.Body, color = LectorColors.Muted) }
+                    if (aceptar != null) {
+                        Spacer(Modifier.width(8.dp))
+                        PillButton(aceptar.first, androidx.compose.material.icons.Icons.Rounded.Check, aceptar.second)
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (p.callChangeListener(marcadas)) p.values = marcadas
-                    abierto = false
-                    alCambiar()
-                }) { Text("Aceptar") }
-            },
-            dismissButton = { TextButton(onClick = { abierto = false }) { Text("Cancelar") } },
-        )
+            }
+        }
+    }
+}
+
+/** Opción de una lista dentro de [DialogoShiori]: píldora que se ilumina con el acento si está elegida. */
+@Composable
+fun OpcionPildora(texto: String, elegida: Boolean, onClick: () -> Unit) {
+    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    val fondo by androidx.compose.animation.animateColorAsState(if (elegida) acento.copy(alpha = 0.22f) else Color.Transparent, label = "op")
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(SuaveShape(22.dp)).background(fondo).pressable(onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(20.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                .border(2.dp, if (elegida) acento else LectorColors.Muted, androidx.compose.foundation.shape.CircleShape),
+            Alignment.Center,
+        ) { if (elegida) Box(Modifier.size(10.dp).clip(androidx.compose.foundation.shape.CircleShape).background(acento)) }
+        Spacer(Modifier.width(14.dp))
+        LText(texto, LectorType.Body, color = LectorColors.Text)
     }
 }

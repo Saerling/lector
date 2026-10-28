@@ -387,6 +387,27 @@ private fun NavegarFuente(
         alConsumirGenero()
     }
 
+    // Repite una búsqueda guardada con sus filtros (los de esa fuente, puestos como estaban al guardarla).
+    fun aplicarGuardada(b: ExtManager.BusquedaGuardada) {
+        scope.launch {
+            val nuevos = b.filtros?.let { t -> runCatching { motor.filtros(f) }.getOrNull()?.let { FiltrosTexto.aplicar(it, t) } }
+            if (nuevos != null) filtros = nuevos
+            aplicados = nuevos
+            consulta = b.consulta; enviada = b.consulta; modo = 2; recarga++
+        }
+    }
+    // «Más reciente»: el orden de la fuente puesto en fecha/actualización; si no tiene, su sección de recientes.
+    fun masReciente() {
+        scope.launch {
+            val nuevos = runCatching { motor.filtros(f) }.getOrNull()
+            if (nuevos != null && FiltrosTexto.ponerMasReciente(nuevos)) {
+                filtros = nuevos; aplicados = nuevos; enviada = consulta.trim(); modo = 2; recarga++
+            } else modo = 1
+        }
+    }
+    // Abierta desde un chip de Novedades: se aplica esa búsqueda guardada.
+    LaunchedEffect(f.id) { BusquedaPendiente.guardada?.let { BusquedaPendiente.guardada = null; aplicarGuardada(it) } }
+
     suspend fun pedir(p: Int): PaginaMangas = when (modo) {
         0 -> motor.populares(f, p)
         1 -> motor.recientes(f, p)
@@ -399,6 +420,13 @@ private fun NavegarFuente(
         try {
             val r = pedir(1)
             lista.addAll(r.mangas.distinctBy { m -> m.url }); hay = r.haySiguiente
+            // «Páginas por carga» de esta fuente: se piden las siguientes seguidas.
+            repeat(ext.paginasPorCarga(f.id) - 1) {
+                if (!hay) return@repeat
+                val s2 = pedir(pagina + 1)
+                val ya = lista.mapTo(HashSet()) { v -> v.url }
+                lista.addAll(s2.mangas.filter { n -> ya.add(n.url) }); hay = s2.haySiguiente; pagina += 1
+            }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e // se cambió de pestaña o de búsqueda: no es un error
         } catch (e: Throwable) {
@@ -443,6 +471,7 @@ private fun NavegarFuente(
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ChipSel("Populares", modo == 0) { modo = 0 }
             ChipSel("Recientes", modo == 1) { modo = 1 }
+            ChipSel("Más reciente", false) { masReciente() }
             if (filtros != null) ChipSel(if (aplicados != null) "Filtros ✓" else "Filtros", aplicados != null) { panel = true }
             // Filtro / Ordenar / Mostrar del catálogo (como la hoja de la biblioteca).
             val activos = almacen.explorarEnBiblioteca != com.example.lector.Tri.IGNORAR || almacen.explorarOrden != 0 || almacen.explorarDescendente
@@ -450,7 +479,7 @@ private fun NavegarFuente(
         }
         // Búsquedas guardadas (TachiyomiSY/Komikku): tocar = repetirla · mantener pulsado = borrarla.
         val guardadas = ext.busquedas(f.id)
-        if (guardadas.isNotEmpty() || (modo == 2 && enviada.isNotBlank())) {
+        if (guardadas.isNotEmpty() || (modo == 2 && (enviada.isNotBlank() || aplicados != null))) {
             Row(
                 Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -458,9 +487,9 @@ private fun NavegarFuente(
                 guardadas.forEach { b ->
                     ChipSel("★ ${b.nombre}", enviada == b.consulta && modo == 2, onLongClick = {
                         ext.borrarBusqueda(f.id, b.nombre); Avisos.mostrar("Búsqueda «${b.nombre}» borrada")
-                    }) { consulta = b.consulta; enviada = b.consulta; aplicados = null; modo = 2; recarga++ }
+                    }) { aplicarGuardada(b) }
                 }
-                if (modo == 2 && enviada.isNotBlank() && guardadas.none { it.consulta == enviada }) {
+                if (modo == 2 && (enviada.isNotBlank() || aplicados != null)) {
                     ChipSel("+ Guardar búsqueda", false) { guardar = true }
                 }
             }
@@ -482,16 +511,28 @@ private fun NavegarFuente(
                 }
             }
         }
-        if (hojaVista) HojaVistaCatalogo(almacen, filtros != null, alFiltrosFuente = { hojaVista = false; panel = true }) { hojaVista = false }
+        if (hojaVista) HojaVistaCatalogo(almacen, filtros != null, alFiltrosFuente = { hojaVista = false; panel = true }, ext = ext, fuenteId = f.id) { hojaVista = false }
         if (guardar) {
-            var nombre by remember { mutableStateOf(enviada) }
+            var nombre by remember { mutableStateOf(enviada.ifBlank { "Filtros" }) }
+            var enNovedades by remember { mutableStateOf(true) }
             AlertDialog(
                 onDismissRequest = { guardar = false },
                 title = { Text("Guardar búsqueda") },
-                text = { OutlinedTextField(nombre, { nombre = it }, label = { Text("Nombre") }, singleLine = true) },
+                text = {
+                    Column {
+                        OutlinedTextField(nombre, { nombre = it }, label = { Text("Nombre") }, singleLine = true)
+                        LText(if (aplicados != null) "Se guarda con los filtros puestos." else "Se guarda el texto buscado.", LectorType.Label, Modifier.padding(top = 8.dp), color = LectorColors.Muted)
+                        FilaSwitch("Mostrar en Novedades", "Como una fila propia en Explorar → Novedades", enNovedades) { enNovedades = it }
+                    }
+                },
                 confirmButton = {
                     TextButton(onClick = {
-                        if (nombre.isNotBlank()) ext.guardarBusqueda(f.id, ExtManager.BusquedaGuardada(nombre.trim(), enviada, null))
+                        if (nombre.isNotBlank()) {
+                            ext.guardarBusqueda(f.id, ExtManager.BusquedaGuardada(nombre.trim(), enviada, aplicados?.let { FiltrosTexto.guardar(it) }))
+                            val k = "${f.id}\t${nombre.trim()}"
+                            if (enNovedades != (k in ext.novedadesBusq)) ext.alternarNovedadBusqueda(f.id, nombre.trim())
+                            Tacto.confirmar(); Avisos.mostrar(if (enNovedades) "Guardada y añadida a Novedades" else "Búsqueda guardada")
+                        }
                         guardar = false
                     }) { Text("Guardar") }
                 },
@@ -500,7 +541,7 @@ private fun NavegarFuente(
         }
         if (panel) filtros?.let { lista0 ->
             PanelFiltros(
-                lista0,
+                lista0, onMasReciente = { panel = false; masReciente() },
                 onReset = { scope.launch { runCatching { motor.filtros(f) }.getOrNull()?.let { filtros = it } } },
                 onFiltrar = { aplicados = lista0; enviada = consulta.trim(); modo = 2; recarga++ },
                 onCerrar = { panel = false },
@@ -520,12 +561,15 @@ private fun NavegarFuente(
             if (cargando || !hay || lista.isEmpty()) return
             cargando = true
             try {
-                val r = pedir(pagina + 1)
-                // Las fuentes a veces repiten un manga (en la misma página o en la siguiente): se descarta,
-                // porque dos elementos con la misma clave cierran la app.
-                val ya = lista.mapTo(HashSet()) { v -> v.url }
-                lista.addAll(r.mangas.filter { n -> ya.add(n.url) })
-                hay = r.haySiguiente; pagina += 1
+                repeat(ext.paginasPorCarga(f.id)) {
+                    if (!hay) return@repeat
+                    val r = pedir(pagina + 1)
+                    // Las fuentes a veces repiten un manga (en la misma página o en la siguiente): se descarta,
+                    // porque dos elementos con la misma clave cierran la app.
+                    val ya = lista.mapTo(HashSet()) { v -> v.url }
+                    lista.addAll(r.mangas.filter { n -> ya.add(n.url) })
+                    hay = r.haySiguiente; pagina += 1
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e // la pantalla se cerró a mitad: no es un error que haya que enseñar
             } catch (e: Throwable) {
@@ -609,7 +653,7 @@ private fun NavegarFuente(
 
 /** Hoja Filtro / Ordenar / Mostrar del catálogo de una fuente (los ajustes se guardan para todas las fuentes). */
 @Composable
-private fun HojaVistaCatalogo(almacen: com.example.lector.Almacen, hayFiltrosFuente: Boolean, alFiltrosFuente: () -> Unit, alCerrar: () -> Unit) {
+private fun HojaVistaCatalogo(almacen: com.example.lector.Almacen, hayFiltrosFuente: Boolean, alFiltrosFuente: () -> Unit, ext: ExtManager? = null, fuenteId: Long = 0, alCerrar: () -> Unit) {
     var pestana by remember { mutableIntStateOf(0) }
     HojaLector(alCerrar) {
         PestanasPildora(listOf("Filtro", "Ordenar", "Mostrar"), pestana, { pestana = it })
@@ -648,6 +692,12 @@ private fun HojaVistaCatalogo(almacen: com.example.lector.Almacen, hayFiltrosFue
                         FilaChips(listOf("Auto", "2", "3", "4", "5", "6"), cols.indexOf(almacen.explorarColumnas).coerceAtLeast(0)) {
                             almacen.explorarColumnas = cols[it]
                         }
+                    }
+                    if (ext != null) {
+                        TituloSeccion("Páginas por carga (esta fuente)")
+                        val ops = listOf(1, 2, 3, 5, 10)
+                        FilaChips(ops.map { "$it" }, ops.indexOf(ext.paginasPorCarga(fuenteId)).coerceAtLeast(0)) { ext.fijarPaginasPorCarga(fuenteId, ops[it]) }
+                        LText("Cuántas páginas de la web se cargan de una vez. Más = más mangas por carga, pero más lento y más datos.", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
                     }
                 }
             }

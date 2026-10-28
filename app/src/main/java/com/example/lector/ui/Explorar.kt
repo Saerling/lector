@@ -291,6 +291,7 @@ private fun FilaFuente(f: FuenteUI, ext: ExtManager, onFuente: (FuenteUI) -> Uni
 /** Búsqueda que se aplicará al abrir la extensión desde un chip de Novedades. */
 object BusquedaPendiente {
     var consulta: String? = null
+    var guardada: ExtManager.BusquedaGuardada? = null
     fun tomar(): String? = consulta.also { consulta = null }
 }
 
@@ -376,7 +377,10 @@ private fun NovedadesFuente(
         if (NovedadesGuardadas.datos[clave]?.first == gen) return@LaunchedEffect
         fallo = null
         // Si la fuente no tiene "recientes", se usan los populares.
-        runCatching { (if (busqueda != null) motor.buscar(f, busqueda.consulta, 1) else runCatching { motor.recientes(f, 1) }.getOrElse { motor.populares(f, 1) }).mangas.distinctBy { it.url }.take(15) }
+        runCatching { (if (busqueda != null) motor.buscar(
+            f, busqueda.consulta, 1,
+            busqueda.filtros?.let { t -> runCatching { motor.filtros(f) }.getOrNull()?.let { FiltrosTexto.aplicar(it, t) } },
+        ) else runCatching { motor.recientes(f, 1) }.getOrElse { motor.populares(f, 1) }).mangas.distinctBy { it.url }.take(15) }
             .onSuccess { NovedadesGuardadas.datos[clave] = gen to it; NovedadesGuardadas.fallos.remove(clave) }
             .onFailure {
                 if (it is kotlinx.coroutines.CancellationException) throw it
@@ -402,7 +406,7 @@ private fun NovedadesFuente(
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(guardadas, key = { it.nombre }) { b -> ChipSel(b.nombre, false) { BusquedaPendiente.consulta = b.consulta; onFuente(f) } }
+            items(guardadas, key = { it.nombre }) { b -> ChipSel(b.nombre, false) { BusquedaPendiente.guardada = b; onFuente(f) } }
         }
         val lst = estado
         when {
@@ -607,7 +611,14 @@ private fun ExtensionesTab(
             }
             // contentType = nombre de la sección: es lo que enseña la burbuja de la barra de desplazamiento.
             if (pendientes.isNotEmpty()) {
-                item(contentType = "Actualizaciones") { TituloSeccion("Actualizaciones pendientes (${pendientes.size})") }
+                item(contentType = "Actualizaciones") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { TituloSeccion("Actualizaciones pendientes (${pendientes.size})") }
+                        if (pendientes.size > 1) Box(Modifier.padding(end = 20.dp, top = 10.dp)) {
+                            PillButton("Actualizar todas", Icons.Rounded.Refresh, { Tacto.confirmar(); ext.actualizarTodas() })
+                        }
+                    }
+                }
                 items(pendientes, contentType = { "Actualizaciones" }) { FilaInstalada(it, ext, onDetalle, onConfiar) }
             }
             if (alDia.isNotEmpty()) {

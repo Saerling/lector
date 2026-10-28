@@ -1,5 +1,6 @@
 package com.example.lector.ext
 
+import kotlinx.coroutines.sync.withLock
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -638,6 +639,16 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     // ---- Instalar / desinstalar ----
+    private val colaInstalacion = kotlinx.coroutines.sync.Mutex()
+
+    // Páginas de la fuente que se piden de una vez al cargar su catálogo o una búsqueda (como «Maximum posts to load»).
+    var ppcVersion by mutableStateOf(0); private set
+    fun paginasPorCarga(fuenteId: Long): Int { @Suppress("UNUSED_VARIABLE") val v = ppcVersion; return prefs.getInt("ppc_$fuenteId", 1) }
+    fun fijarPaginasPorCarga(fuenteId: Long, n: Int) { prefs.edit().putInt("ppc_$fuenteId", n).apply(); ppcVersion++ }
+
+    /** Actualiza todas las extensiones con versión nueva (se descargan a la vez y se instalan una tras otra). */
+    fun actualizarTodas() = instaladas.mapNotNull { it.actualizacion }.forEach { instalar(it) }
+
     fun instalar(e: ExtDisponible) {
         if (e.apkUrl.isBlank()) return
         val actual = progreso[e.pkg]?.fase
@@ -658,7 +669,14 @@ class ExtManager private constructor(private val app: Context) {
                 val apk = File(File(app.cacheDir, "ext").apply { mkdirs() }, "${e.pkg}.apk")
                 ExtRepos.descargarA(e.apkUrl, apk) { progreso[e.pkg] = Progreso(Fase.DESCARGANDO, it) }
                 progreso[e.pkg] = Progreso(Fase.INSTALANDO)
-                abrirSesion(e.pkg, apk)
+                // Android confirma las instalaciones de una en una: si se lanzan varias juntas, las demás se cancelan.
+                // Las descargas van en paralelo; la instalación, en cola (espera a que termine la anterior).
+                colaInstalacion.withLock {
+                    abrirSesion(e.pkg, apk)
+                    kotlinx.coroutines.withTimeoutOrNull(180_000) {
+                        while (progreso[e.pkg]?.fase == Fase.INSTALANDO) kotlinx.coroutines.delay(300)
+                    }
+                }
             } catch (t: Throwable) {
                 progreso[e.pkg] = Progreso(Fase.ERROR, error = t.message ?: "Error al descargar")
             }
