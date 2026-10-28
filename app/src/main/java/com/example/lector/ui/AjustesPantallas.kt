@@ -254,8 +254,12 @@ fun AjDescargasScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> Un
         FilaAjuste(Iconos.Descargar, "Cola de descargas", "${com.example.lector.Descargas.cola.size} pendientes") { onRuta(Ruta.Descargas) }
         Divisor()
         FilaSwitch("Solo con Wi‑Fi", "Las descargas esperan a tener Wi‑Fi", almacen.descSoloWifi) { almacen.descSoloWifi = it }
-        TituloSeccion("Descargas a la vez")
+        TituloSeccion("Fuentes a la vez")
         FilaChips(listOf("1", "2", "3", "4"), (almacen.descParalelas - 1).coerceIn(0, 3)) { almacen.descParalelas = it + 1 }
+        LText(
+            "Como en Komikku: de cada fuente se baja un capítulo cada vez (3 páginas a la vez), para que la web no bloquee. Si una página falla, al reintentar solo se bajan las que faltan.",
+            LectorType.Label, Modifier.padding(horizontal = 24.dp, vertical = 4.dp), color = LectorColors.Muted,
+        )
         Divisor()
         TituloSeccion("Al leer")
         FilaSwitch("Borrar al terminar de leer", "Borra el capítulo descargado cuando lo terminas", almacen.borrarAlLeer) { almacen.borrarAlLeer = it }

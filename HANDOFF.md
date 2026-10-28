@@ -613,6 +613,12 @@ movimiento continuo que funde y transforma, rebote elástico y ritmo que sigue l
 - `MotorExt.imagenPagina`: máx. 2 peticiones a la vez por fuente (`semaforo`) y `conReintentos` (429/503 → esperas
   2-4-8-16-30 s); grupos de 2 páginas en `descargarCbz`.
 
+## 2ai. PASO 35 — Descargador al estilo Komikku (versión 0.21)
+- `descargarCbz`: páginas a archivos en `<destino>.partes/` (3 a la vez); las ya hechas se saltan (reintento solo de
+  lo que falta); se reutiliza `CacheBytes` del lector; `reintentar3` (2/4/8 s) + `conReintentos` (429/503); una
+  página fallida no para el resto; al final se empaqueta el .cbz y se borra la carpeta.
+- «Fuentes a la vez» (antes «Descargas a la vez»): un capítulo por fuente, como `parallelSourceLimit` de Komikku.
+
 ## 3. PRÓXIMOS PASOS
 **Actuales (tras el PASO 15):**
 1. Instalar el APK de la rama `claude/komikku` y probar: visor (todos los modos), descargas en segundo plano,

@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -186,40 +187,82 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         return bloque()
     }
 
+    /**
+     * Descarga como Komikku: cada página se guarda en su archivo al llegar (carpeta «.partes» junto al destino), 3 a la
+     * vez; una página que falla no detiene a las demás, y si alguna falla la carpeta se conserva, así al reintentar
+     * solo se bajan las que faltan. Las páginas ya cargadas al leer se copian de la caché, sin red. Cada página se
+     * reintenta 3 veces (2, 4 y 8 s), y más si la web responde «429». Al final se empaqueta el .cbz.
+     */
     override suspend fun descargarCbz(
         fuente: FuenteUI, capitulo: CapituloFuente, destino: File, progreso: (Int, Int) -> Unit,
-    ) = withContext(Dispatchers.IO) {
-        val total = paginasDe(fuente, capitulo).size
+    ): Unit = withContext(Dispatchers.IO) {
+        val total = conReintentos { paginasDe(fuente, capitulo) }.size
         require(total > 0) { "El capítulo no tiene páginas" }
-        val tmp = File(destino.parentFile, destino.name + ".tmp")
-        try {
-            ZipOutputStream(tmp.outputStream().buffered()).use { zip ->
-                zip.setLevel(java.util.zip.Deflater.NO_COMPRESSION) // las imágenes ya vienen comprimidas
-                var i = 0
-                while (i < total) {
-                    ensureActive() // permite cancelar la descarga entre grupos de páginas
-                    val grupo = (i until minOf(i + 2, total)).toList()
-                    // Se piden 3 páginas a la vez (antes era una por una) y se escriben en orden.
-                    val datos = coroutineScope { grupo.map { n -> async { imagenPagina(fuente, capitulo, n) } }.awaitAll() }
-                    for ((k, bytes) in datos.withIndex()) {
+        val partes = File(destino.parentFile, destino.name + ".partes").apply { mkdirs() }
+        fun hecha(n: Int) = partes.listFiles()?.any { it.name.startsWith("%04d.".format(n + 1)) && !it.name.endsWith(".tmp") } == true
+        val idCap = "s:${fuente.id}|${capitulo.url}"
+        val hechas = java.util.concurrent.atomic.AtomicInteger((0 until total).count { hecha(it) })
+        val fallos = java.util.concurrent.atomic.AtomicInteger(0)
+        var ultimoError: String? = null
+        progreso(hechas.get(), total)
+        val cupo = kotlinx.coroutines.sync.Semaphore(3)
+        coroutineScope {
+            for (n in 0 until total) {
+                if (hecha(n)) continue
+                launch {
+                    cupo.withPermit {
+                        val r = runCatching {
+                            com.example.lector.ui.CacheBytes.leer(idCap, n) ?: reintentar3 { imagenPagina(fuente, capitulo, n) }
+                        }
+                        val bytes = r.getOrNull()
+                        if (bytes == null) {
+                            val e = r.exceptionOrNull()
+                            if (e is kotlinx.coroutines.CancellationException) throw e
+                            fallos.incrementAndGet(); ultimoError = e?.message
+                            return@withPermit
+                        }
                         val ext = when {
                             bytes.size > 4 && bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() -> "png"
                             bytes.size > 12 && bytes[0] == 'R'.code.toByte() && bytes[8] == 'W'.code.toByte() -> "webp"
                             else -> "jpg"
                         }
-                        zip.putNextEntry(ZipEntry("%04d.%s".format(grupo[k] + 1, ext)))
-                        zip.write(bytes)
-                        zip.closeEntry()
-                        progreso(grupo[k] + 1, total)
+                        val f = File(partes, "%04d.%s".format(n + 1, ext))
+                        val tmp = File(partes, f.name + ".tmp")
+                        tmp.writeBytes(bytes)
+                        tmp.renameTo(f)
+                        progreso(hechas.incrementAndGet(), total)
                     }
-                    i += grupo.size
+                }
+            }
+        }
+        if (fallos.get() > 0) {
+            error("Fallaron ${fallos.get()} de $total páginas (${ultimoError ?: "error"}). Al reintentar solo se bajan esas.")
+        }
+        val tmpZip = File(destino.parentFile, destino.name + ".tmp")
+        try {
+            ZipOutputStream(tmpZip.outputStream().buffered()).use { zip ->
+                zip.setLevel(java.util.zip.Deflater.NO_COMPRESSION) // las imágenes ya vienen comprimidas
+                partes.listFiles()?.filter { !it.name.endsWith(".tmp") }?.sortedBy { it.name }?.forEach { f ->
+                    zip.putNextEntry(ZipEntry(f.name)); f.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
                 }
             }
             destino.delete()
-            check(tmp.renameTo(destino)) { "No se pudo guardar el archivo" }
+            check(tmpZip.renameTo(destino)) { "No se pudo guardar el archivo" }
+            partes.deleteRecursively()
         } finally {
-            tmp.delete()
+            tmpZip.delete()
         }
+        Unit
+    }
+
+    /** Como Komikku: 3 reintentos con esperas de 2, 4 y 8 s para cualquier error de red. */
+    private suspend fun <T> reintentar3(bloque: suspend () -> T): T {
+        repeat(3) { intento ->
+            try { return bloque() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) {
+                kotlinx.coroutines.delay((2L shl intento) * 1000)
+            }
+        }
+        return bloque()
     }
 
     override fun urlManga(fuente: FuenteUI, manga: MangaFuente): String? = runCatching {
