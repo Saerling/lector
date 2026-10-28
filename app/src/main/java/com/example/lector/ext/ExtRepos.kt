@@ -94,48 +94,54 @@ object ExtRepos {
         }
     }
 
-    private fun abrir(url: String): HttpURLConnection =
-        (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 15_000
-            readTimeout = 30_000
-            instanceFollowRedirects = true
-            setRequestProperty("User-Agent", UA)
-        }
-
-    fun descargar(url: String): ByteArray {
-        val c = abrir(url)
-        try {
-            if (c.responseCode !in 200..299) throw IllegalStateException("HTTP ${c.responseCode}")
-            return c.inputStream.use { it.readBytes() }
-        } finally {
-            c.disconnect()
-        }
+    private val http by lazy {
+        okhttp3.OkHttpClient.Builder().dns(eu.kanade.tachiyomi.network.DnsRespaldo)
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
     }
 
-    fun descargarA(url: String, destino: File, alProgreso: (Int) -> Unit) {
-        val c = abrir(url)
-        try {
-            if (c.responseCode !in 200..299) throw IllegalStateException("HTTP ${c.responseCode}")
-            val total = c.contentLengthLong
-            c.inputStream.use { ent ->
-                destino.outputStream().use { sal ->
-                    val buf = ByteArray(32 * 1024)
-                    var hecho = 0L
-                    var ultimo = -1
-                    while (true) {
-                        val n = ent.read(buf)
-                        if (n < 0) break
-                        sal.write(buf, 0, n)
-                        hecho += n
-                        if (total > 0) {
-                            val p = (hecho * 100 / total).toInt()
-                            if (p != ultimo) { ultimo = p; alProgreso(p) }
-                        }
+    /** raw.githubusercontent.com/u/r/rama/ruta → espejo de jsDelivr (por si GitHub está bloqueado en tu red). */
+    private fun espejo(url: String): String? {
+        val p = url.removePrefix("https://").removePrefix("http://").split('/')
+        if (p[0] != "raw.githubusercontent.com" || p.size < 5) return null
+        return "https://cdn.jsdelivr.net/gh/${p[1]}/${p[2]}@${p[3]}/" + p.drop(4).joinToString("/")
+    }
+
+    private fun abrir(url: String): okhttp3.Response {
+        fun pedir(u: String) = http.newCall(okhttp3.Request.Builder().url(u).header("User-Agent", UA).build()).execute()
+        val r = try { pedir(url) } catch (e: java.io.IOException) {
+            return pedir(espejo(url) ?: throw e)
+        }
+        if (r.isSuccessful) return r
+        val alt = espejo(url) ?: return r
+        r.close()
+        return pedir(alt)
+    }
+
+    fun descargar(url: String): ByteArray = abrir(url).use { r ->
+        if (!r.isSuccessful) throw IllegalStateException("HTTP ${r.code}")
+        r.body.bytes()
+    }
+
+    fun descargarA(url: String, destino: File, alProgreso: (Int) -> Unit) = abrir(url).use { r ->
+        if (!r.isSuccessful) throw IllegalStateException("HTTP ${r.code}")
+        val total = r.body.contentLength()
+        r.body.byteStream().use { ent ->
+            destino.outputStream().use { sal ->
+                val buf = ByteArray(32 * 1024)
+                var hecho = 0L
+                var ultimo = -1
+                while (true) {
+                    val n = ent.read(buf)
+                    if (n < 0) break
+                    sal.write(buf, 0, n)
+                    hecho += n
+                    if (total > 0) {
+                        val pr = (hecho * 100 / total).toInt()
+                        if (pr != ultimo) { ultimo = pr; alProgreso(pr) }
                     }
                 }
             }
-        } finally {
-            c.disconnect()
         }
     }
 

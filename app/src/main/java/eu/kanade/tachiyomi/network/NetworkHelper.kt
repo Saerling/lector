@@ -35,6 +35,7 @@ open class NetworkHelper(
             PREF_DOH_GOOGLE -> builder.dohGoogle()
             PREF_DOH_ADGUARD -> builder.dohAdGuard()
             PREF_DOH_QUAD9 -> builder.dohQuad9()
+            else -> builder.dns(DnsRespaldo)
         }
         builder.build()
     }
