@@ -54,6 +54,6 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Extensiones privadas | ❌ | |
 | Grupos de traducción ocultos | ✅ | Por manga, en Filtros de capítulos (0.22). |
 | Descargador | ✅ | Por páginas, reanudable, un capítulo por fuente, reintentos (0.21). |
-| Abrir enlaces de la web en la app (deep links) | ❌ | |
+| Abrir enlaces de la web en la app | ✅ | Compartir enlace → fuentes de esa web → ficha o búsqueda global (0.23). |
 | Ahorro de datos (imágenes comprimidas) | ❌ | |
 | Vista previa de páginas en la ficha | ❌ | |

@@ -162,6 +162,12 @@ class MainActivity : ComponentActivity() {
     // Las notificaciones traen el extra "destino" (actualizaciones, descargas, extensiones).
     private fun procesarEnlace(intent: Intent?) {
         intent?.getStringExtra("destino")?.let { destino = it; intent.removeExtra("destino") }
+        // Enlace compartido desde otra app: se busca ese manga por su dirección.
+        if (intent?.action == Intent.ACTION_SEND) {
+            val texto = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+            Regex("https?://\\S+").find(texto)?.value?.let { destino = "abrir-url:$it" }
+            intent.action = null
+        }
         val datos = intent?.data ?: return
         if (datos.scheme != "lector" || datos.host != "anilist") return
         val token = datos.fragment

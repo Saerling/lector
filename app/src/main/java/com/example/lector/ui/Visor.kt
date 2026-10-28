@@ -323,13 +323,14 @@ fun Visor(
         if (paginaReal >= n - 1 && terminados.add(ci)) alTerminarCapitulo(ci)
     }
 
-    // Llegar a la transición final: si no se quieren ver las transiciones, pasa directamente al siguiente.
+    // Lectura continua (como Komikku): al llegar a la página de transición se pasa solo al capítulo siguiente, y al
+    // volver a la del principio, al anterior (por su última página). Se ve un instante el «Siguiente: …».
     LaunchedEffect(actual, total) {
         val a = actual
-        if (total != null && a is ItemVisor.Transicion && a.siguiente && haySiguiente && !almacen.mostrarTransiciones && paginado) {
-            delay(250)
-            irCapitulo(ci + 1, false)
-        }
+        if (total == null || a !is ItemVisor.Transicion || !paginado) return@LaunchedEffect
+        delay(if (almacen.mostrarTransiciones) 650 else 400)
+        if (a.siguiente && haySiguiente) irCapitulo(ci + 1, false)
+        else if (!a.siguiente && hayAnterior) irCapitulo(ci - 1, true)
     }
     // Webtoon: al entrar en la transición final, sigue con el siguiente capítulo (como la tira infinita de Komikku).
     if (!paginado) {
@@ -342,6 +343,19 @@ fun Visor(
                 fin.offset < info.viewportStartOffset + alto * 0.45f
             }.distinctUntilChanged().collect { dentro ->
                 if (dentro && haySiguiente && almacen.pasarCapituloSolo) irCapitulo(ci + 1, false)
+            }
+        }
+        // Y hacia atrás: al subir hasta la transición del principio, se abre el anterior por su final.
+        LaunchedEffect(cap.clave, total) {
+            if (total == null || !hayAnterior) return@LaunchedEffect
+            delay(800) // que no salte al abrir el capítulo
+            snapshotFlow {
+                val info = lista.layoutInfo
+                val ini = info.visibleItemsInfo.firstOrNull { it.index == 0 } ?: return@snapshotFlow false
+                val alto = info.viewportEndOffset - info.viewportStartOffset
+                items.firstOrNull() is ItemVisor.Transicion && ini.offset + ini.size > info.viewportStartOffset + alto * 0.55f
+            }.distinctUntilChanged().collect { dentro ->
+                if (dentro && almacen.pasarCapituloSolo) irCapitulo(ci - 1, true)
             }
         }
     }

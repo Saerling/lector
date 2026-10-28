@@ -203,6 +203,25 @@ fun Inicio(
                         }
                     }
                 }
+                // Enlace compartido: primero las fuentes de esa web (las extensiones reconocen su propia dirección al
+                // buscarla); si alguna lo encuentra, su ficha; si no, búsqueda en todas las fuentes con el enlace.
+                if (destino?.startsWith("abrir-url:") == true) {
+                    val url = destino.removePrefix("abrir-url:")
+                    val motorU = com.example.lector.ext.Motor.actual
+                    Avisos.mostrar("Buscando el manga del enlace…")
+                    val host = runCatching { android.net.Uri.parse(url).host?.removePrefix("www.") }.getOrNull()
+                    val candidatas = ext.fuentes.filter { host != null && it.baseUrl.contains(host, ignoreCase = true) }
+                    var hallado: Pair<com.example.lector.ext.FuenteUI, MangaFuente>? = null
+                    for (fc in candidatas) {
+                        val r = runCatching { motorU?.buscar(fc, url, 1)?.mangas }.getOrNull()
+                        if (!r.isNullOrEmpty()) { hallado = fc to r.first(); break }
+                    }
+                    val h = hallado
+                    if (h != null) {
+                        fuenteId = h.first.id; mangaSel = h.second; desdeNovedades = true; vueltaFicha = null; reanudar = null
+                        ruta = Ruta.Ficha
+                    } else { consultaGlobal = url; ruta = Ruta.BusquedaGlobal }
+                }
                 // Prueba de un listado de extensiones: lo mismo que «Añadir listado», sin guardarlo.
                 if (destino?.startsWith("probar-repo:") == true && depurable) {
                     val entrada = destino.removePrefix("probar-repo:")
