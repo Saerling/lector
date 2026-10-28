@@ -390,6 +390,7 @@ fun Inicio(
                         alAbrirOnline = { e ->
                             abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, e.capUrl to e.pagina)
                         },
+                        alAbrirManga = { e -> abrirEnLinea(e.fuenteId, e.urlManga, e.titulo, e.portadaUrl, null) },
                     )
                 }
                 LectorTab.More -> MasScreen(

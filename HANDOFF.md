@@ -695,3 +695,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2al. PASO 38 (0.27)
 - «Unable to resolve host raw.githubusercontent.com»: DnsRespaldo (sistema → DoH Cloudflare → DoH Google, IPs fijas) en ExtRepos (ahora OkHttp) y en NetworkHelper cuando no se eligió DoH. Si GitHub raw sigue fallando, espejo jsDelivr (cdn.jsdelivr.net/gh/u/r@rama/ruta) para listados y APKs.
+
+## 2am. PASO 39 (0.28)
+- Historial: tocar la portada de una entrada en línea abre la ficha del manga (alAbrirManga), como en Actualizaciones.

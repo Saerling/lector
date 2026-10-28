@@ -1,6 +1,7 @@
 package com.example.lector.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -61,7 +62,9 @@ fun HistorialScreen(
     alAbrir: (Comic) -> Unit,
     alAbrirOnline: (EntradaHistorial) -> Unit,
     modifier: Modifier = Modifier,
+    alAbrirManga: (EntradaHistorial) -> Unit = {},
 ) {
+    abrirMangaHist = alAbrirManga
     var consulta by remember { mutableStateOf("") }
     var buscando by remember { mutableStateOf(false) }
     var quitar by remember { mutableStateOf<ItemHistorial?>(null) }
@@ -165,6 +168,8 @@ fun HistorialScreen(
     }
 }
 
+private var abrirMangaHist: (EntradaHistorial) -> Unit = {}
+
 @Composable
 private fun FilaHistorial(item: ItemHistorial, almacen: Almacen, hora: String, alAbrir: () -> Unit, alQuitar: () -> Unit) {
     Row(
@@ -174,9 +179,12 @@ private fun FilaHistorial(item: ItemHistorial, almacen: Almacen, hora: String, a
         val portada = Modifier.width(52.dp).aspectRatio(2f / 3f)
         when (item) {
             is ItemHistorial.Local -> ComicCover(item.comic, almacen, portada, SuaveShape(10.dp))
-            is ItemHistorial.EnLinea ->
+            is ItemHistorial.EnLinea -> {
+                // Tocar la portada abre el manga (su ficha), no el capítulo.
+                val portada = portada.clip(SuaveShape(10.dp)).clickable { abrirMangaHist(item.entrada) }
                 if (item.comic != null) ComicCover(item.comic, almacen, portada, SuaveShape(10.dp))
                 else ImagenRemota(item.entrada.portadaUrl, portada.clip(SuaveShape(10.dp)), rememberCabeceras(item.entrada.fuenteId), fuenteId = item.entrada.fuenteId)
+            }
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
