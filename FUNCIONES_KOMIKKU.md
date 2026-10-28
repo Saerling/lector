@@ -55,5 +55,5 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Grupos de traducción ocultos | ✅ | Por manga, en Filtros de capítulos (0.22). |
 | Descargador | ✅ | Por páginas, reanudable, un capítulo por fuente, reintentos (0.21). |
 | Abrir enlaces de la web en la app | ✅ | Compartir enlace → fuentes de esa web → ficha o búsqueda global (0.23). |
-| Ahorro de datos (imágenes comprimidas) | ❌ | |
-| Vista previa de páginas en la ficha | ❌ | |
+| Ahorro de datos | ✅ | wsrv.nl (WebP 1080 px), Avanzado → Red (0.24). |
+| Vista previa de páginas | ✅ | 8 miniaturas del primer capítulo, bajo pedido (0.24). |

@@ -183,6 +183,9 @@ fun FichaMangaScreen(
     var recomendaciones by remember { mutableStateOf<List<ResultadoAnilist>?>(null) }
     var abriendoRec by remember { mutableStateOf<Int?>(null) }
     var parecidos by remember { mutableStateOf<List<MangaFuente>?>(null) }
+    // Vista previa de páginas (como TachiyomiSY/Komikku): miniaturas del primer capítulo, al pedirlas.
+    var vistaPrevia by remember { mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null) }
+    var cargandoVista by remember { mutableStateOf(false) }
 
     LaunchedEffect(fuenteId, manga.url, recarga) {
         if (f == null || motor == null) return@LaunchedEffect
@@ -498,6 +501,44 @@ fun FichaMangaScreen(
                             }
                             if (urlWeb != null) ChipSel("Compartir", false) { compartirTexto(ctx, "$tituloFicha\n$urlWeb") }
                             ChipSel("Buscar en otras fuentes", false) { alBuscarGlobal(tituloFicha) }
+                        }
+                    }
+                }
+                // Vista previa de las primeras páginas del primer capítulo (se cargan al pedirlas: no gasta datos sin querer).
+                if (fi.capitulos.isNotEmpty()) item {
+                    Column(Modifier.padding(top = 16.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                            LText("Vista previa", LectorType.Section.copy(fontSize = 18.sp), Modifier.weight(1f))
+                            if (vistaPrevia == null && !cargandoVista) PillButton("Ver páginas", Icons.Rounded.ArrowForward, {
+                                cargandoVista = true
+                                scope.launch {
+                                    val primero = fi.capitulos.last()
+                                    val origen = OrigenFuente(almacen, motor, f, CacheFichas.conMemo(f.id, manga.url, primero))
+                                    vistaPrevia = withContext(Dispatchers.IO) {
+                                        val n = runCatching { origen.total() }.getOrDefault(0).coerceAtMost(8)
+                                        (0 until n).map { i -> runCatching { miniatura(origen.bytes(i)) }.getOrNull() }
+                                    }
+                                    cargandoVista = false
+                                }
+                            })
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        val vp = vistaPrevia
+                        when {
+                            cargandoVista -> BonesPortadas()
+                            vp != null && vp.isEmpty() -> LText("No se pudieron cargar las páginas.", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
+                            vp != null -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                items(vp.size) { i ->
+                                    Box(
+                                        Modifier.width(92.dp).aspectRatio(2f / 3f).clip(SuaveShape(12.dp)).background(LectorColors.CardHigh)
+                                            .press3D().pressable { onLeer(fi.capitulos, fi.capitulos.lastIndex, i) },
+                                        Alignment.Center,
+                                    ) {
+                                        vp[i]?.let { androidx.compose.foundation.Image(it, "Página ${i + 1}", Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop) }
+                                            ?: LText("${i + 1}", LectorType.Label, color = LectorColors.Muted)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1199,4 +1240,14 @@ private suspend fun buscarEnFuente(motor: com.example.lector.ext.MotorFuentes?, 
 object PruebaAuto {
     @Volatile var abrirRecomendacion = false
     @Volatile var probarCapitulo = false
+}
+
+/** Miniatura ligera (unos 300 px de ancho) de una página, para la vista previa. */
+private fun miniatura(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? {
+    val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+    var m = 1
+    while (o.outWidth / (m * 2) >= 300 || o.outHeight / m > 2000) m *= 2
+    val d = android.graphics.BitmapFactory.Options().apply { inSampleSize = m }
+    return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, d)?.asImageBitmap()
 }

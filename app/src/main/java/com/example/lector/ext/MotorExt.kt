@@ -162,10 +162,23 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
             semaforo(fuente.id).withPermit {
                 conReintentos {
                     if (pagina.imageUrl.isNullOrEmpty()) pagina.imageUrl = src.getImageUrl(pagina)
-                    src.getImage(pagina).use { it.body.bytes() }
+                    ahorroDatos(pagina.imageUrl) ?: src.getImage(pagina).use { it.body.bytes() }
                 }
             }
         }
+
+    /**
+     * Ahorro de datos (como el «Data saver» de Komikku con wsrv.nl): la imagen se pide recomprimida en WebP de 1080 px.
+     * Si el servicio no puede traerla (webs que exigen sus cabeceras), null y se pide normal.
+     */
+    private fun ahorroDatos(url: String?): ByteArray? {
+        if (url.isNullOrBlank() || !url.startsWith("http")) return null
+        if (!ctx.getSharedPreferences("lector", Context.MODE_PRIVATE).getBoolean("ahorro_datos", false)) return null
+        val cli = clienteGeneral() ?: return null
+        val pedido = okhttp3.Request.Builder()
+            .url("https://wsrv.nl/?url=" + java.net.URLEncoder.encode(url, "UTF-8") + "&w=1080&q=65&output=webp&we").build()
+        return runCatching { cli.newCall(pedido).execute().use { r -> if (r.isSuccessful) r.body.bytes().takeIf { it.size > 512 } else null } }.getOrNull()
+    }
 
     private val semaforos = ConcurrentHashMap<Long, kotlinx.coroutines.sync.Semaphore>()
     private fun semaforo(id: Long) = semaforos.getOrPut(id) { kotlinx.coroutines.sync.Semaphore(2) }

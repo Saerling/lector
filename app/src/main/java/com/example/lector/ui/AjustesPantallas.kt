@@ -609,6 +609,11 @@ fun AjAvanzadoScreen(almacen: Almacen, onBack: () -> Unit) {
         }
         Divisor()
         TituloSeccion("Red")
+        var ahorro by remember { mutableStateOf(ctx.getSharedPreferences("lector", android.content.Context.MODE_PRIVATE).getBoolean("ahorro_datos", false)) }
+        FilaSwitch("Ahorro de datos", "Las páginas se piden recomprimidas (WebP, 1080 px) a wsrv.nl, como en Komikku. Si una web no lo permite, se usa la imagen normal.", ahorro) {
+            ahorro = it
+            ctx.getSharedPreferences("lector", android.content.Context.MODE_PRIVATE).edit().putBoolean("ahorro_datos", it).apply()
+        }
         LText("DNS sobre HTTPS (para las fuentes)", LectorType.Body.copy(fontSize = 15.sp), Modifier.padding(start = 24.dp, top = 4.dp))
         FilaChips(listOf("Desactivado", "Cloudflare", "Google", "AdGuard", "Quad9"), almacen.doh.coerceIn(0, 4)) {
             almacen.doh = it
