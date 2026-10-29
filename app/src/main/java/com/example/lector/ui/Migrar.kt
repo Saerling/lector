@@ -165,6 +165,11 @@ fun MigrarScreen(
                     }
                     Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
                         ChipSel("Solo con resultados", soloConResultados) { soloConResultados = !soloConResultados }
+                        val omit = fuentes.count { it.id in FuentesOmitidas.omitidas }
+                        if (omit > 0) {
+                            Spacer(Modifier.width(8.dp))
+                            ChipSel("Volver a incluir $omit omitidas", false) { FuentesOmitidas.restablecer(); val q = enviada; enviada = ""; scope.launch { enviada = q } }
+                        }
                     }
                     val hechas = globales.values.count { it !is EstadoBusqueda.Cargando }
                     val conAlgo = globales.values.count { it is EstadoBusqueda.Hecho && it.mangas.isNotEmpty() }

@@ -1,5 +1,9 @@
 package com.example.lector.ui
 
+import kotlinx.coroutines.async
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -101,9 +105,35 @@ fun BusquedaGlobalScreen(
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 private val hilosBusqueda = kotlinx.coroutines.Dispatchers.IO.limitedParallelism(8)
 
+/**
+ * Fuentes que estaban buscando cuando la app se cerró (p. ej. una extensión que agota la memoria): se anotan antes de
+ * buscar y se quitan al terminar; lo que queda anotado al volver a abrir la app se omite en las búsquedas globales.
+ */
+internal object FuentesOmitidas {
+    private var prefs: android.content.SharedPreferences? = null
+    private val activas = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    var omitidas by mutableStateOf(emptySet<Long>()); private set
+
+    fun iniciar(ctx: android.content.Context) {
+        if (prefs != null) return
+        val p = ctx.getSharedPreferences("busqueda_global", android.content.Context.MODE_PRIVATE).also { prefs = it }
+        val antes = p.getStringSet("omitidas", null).orEmpty() + p.getStringSet("activas", null).orEmpty()
+        omitidas = antes.mapNotNull { it.toLongOrNull() }.toSet()
+        p.edit().putStringSet("omitidas", omitidas.map { "$it" }.toSet()).remove("activas").commit()
+    }
+    private fun guardarActivas() { prefs?.edit()?.putStringSet("activas", activas.map { "$it" }.toSet())?.commit() }
+    fun empieza(id: Long) { activas.add(id); guardarActivas() }
+    fun termina(id: Long) { activas.remove(id); guardarActivas() }
+    fun restablecer() { omitidas = emptySet(); prefs?.edit()?.remove("omitidas")?.apply() }
+}
+
+private val ambitoBusqueda = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + hilosBusqueda)
+
 @Composable
 internal fun rememberResultadosGlobales(fuentes: List<FuenteUI>, consulta: String): Map<Long, EstadoBusqueda> {
     val motor = Motor.actual
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    remember { FuentesOmitidas.iniciar(ctx.applicationContext) }
     val resultados = remember { mutableStateMapOf<Long, EstadoBusqueda>() }
     LaunchedEffect(consulta, fuentes) {
         resultados.clear()
@@ -112,13 +142,22 @@ internal fun rememberResultadosGlobales(fuentes: List<FuenteUI>, consulta: Strin
         // 12 a la vez (son webs distintas), 12 s como mucho por fuente (las lentas o con Cloudflare no frenan a las
         // demás) y lo ya buscado sale al instante de la memoria.
         val limite = Semaphore(6)
-        fuentes.forEach { f -> resultados[f.id] = CacheBusquedas.leer(f.id, q)?.let { EstadoBusqueda.Hecho(it) } ?: EstadoBusqueda.Cargando }
+        val omitidas = if (fuentes.size > 1) FuentesOmitidas.omitidas else emptySet()
+        fuentes.forEach { f ->
+            resultados[f.id] = CacheBusquedas.leer(f.id, q)?.let { EstadoBusqueda.Hecho(it) }
+                ?: if (f.id in omitidas) EstadoBusqueda.Fallo("Omitida: cerró la app en una búsqueda anterior") else EstadoBusqueda.Cargando
+        }
         fuentes.filter { resultados[it.id] is EstadoBusqueda.Cargando }.forEach { f ->
             launch {
                 limite.withPermit {
                     resultados[f.id] = try {
                         // En su propio grupo de hilos: una fuente colgada no deja sin hilos al resto de la app.
-                        val r = kotlinx.coroutines.withTimeout(12_000) { kotlinx.coroutines.withContext(hilosBusqueda) { motor.buscar(f, q, 1).mangas.distinctBy { it.url }.take(20) } }
+                        // La búsqueda va aparte: si se cuelga, se deja de esperar a los 12 s y no retiene el turno.
+                        val tarea = ambitoBusqueda.async {
+                            FuentesOmitidas.empieza(f.id)
+                            try { motor.buscar(f, q, 1).mangas.distinctBy { it.url }.take(20) } finally { FuentesOmitidas.termina(f.id) }
+                        }
+                        val r = kotlinx.coroutines.withTimeout(12_000) { tarea.await() }
                         CacheBusquedas.guardar(f.id, q, r)
                         EstadoBusqueda.Hecho(r)
                     } catch (e: kotlinx.coroutines.TimeoutCancellationException) {

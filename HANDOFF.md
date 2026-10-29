@@ -703,3 +703,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Migrar: paso 0 «Seleccionar fuentes» (Elegidas/Disponibles, buscar, ★ ancladas, ✓ todas, ✕ ninguna; se recuerda en prefs `migrar_fuentes`). Paso 1 ahora en LazyColumn (antes Column con scroll pintaba cientos de filas → cierre).
 - Búsqueda global: 6 a la vez en un grupo propio de 8 hilos (IO.limitedParallelism), máx. 20 resultados por fuente y captura Throwable (errores de extensiones rotas cerraban la app).
 - Ficha: menú ⋮ como Komikku: Actualizar, Editar categorías, Migrar, Compartir, Notas (prefs `notas`, se ven en la ficha), Unir, Editar información, Ver recomendaciones (desplaza a la sección), Abrir carpeta, Limpiar manga (descargas + leídos), Ajustes de la fuente.
+
+## 2ao. PASO 41 (0.30)
+- OOM al migrar (0.28): una extensión llenaba un HashSet dentro de getSearchManga. FuentesOmitidas (BusquedaGlobal.kt) anota en prefs las fuentes que están buscando; si la app muere, al reabrir quedan omitidas en búsquedas globales (chip «Volver a incluir» en Migrar). Cada búsqueda corre aparte (ambitoBusqueda.async) y se deja de esperar a los 12 s sin retener el turno. android:largeHeap="true".
