@@ -88,55 +88,12 @@ fun MigrarScreen(
     }
 
     val f = destino
-    // Paso 0 (como Komikku): elegir en qué fuentes buscar. Se recuerda para la próxima migración.
-    val prefs = remember { ctx.getSharedPreferences("lector", android.content.Context.MODE_PRIVATE) }
-    val todas = remember(ext.fuentes, ext.idiomas, ext.mostrarNsfw) {
-        ext.fuentes.filter { it.id != origen.id && (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas }
-            .distinctBy { it.id }.sortedBy { it.nombre.lowercase() }
-    }
-    var elegidas by remember {
-        val guardadas = prefs.getStringSet("migrar_fuentes", null)?.mapNotNull { it.toLongOrNull() }?.toSet().orEmpty()
-        val ids = todas.map { it.id }.toSet()
-        mutableStateOf(
-            (guardadas intersect ids).ifEmpty { todas.filter { it.id.toString() in ext.fijadas }.map { it.id }.toSet() }.ifEmpty { ids }
-        )
-    }
+    // Paso 0 (como Komikku): elegir en qué fuentes buscar. Se recuerda para la próxima vez.
+    val todas = remember(ext.fuentes, ext.idiomas, ext.mostrarNsfw) { fuentesBuscables(ext, origen.id) }
+    var elegidas by remember { mutableStateOf(elegidasGuardadas(ctx, ext, todas)) }
     var eligiendo by remember { mutableStateOf(true) }
     if (f == null && eligiendo) {
-        var filtro by remember { mutableStateOf("") }
-        Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                BotonRedondoTema(Icons.Rounded.ArrowBack, "Atrás", onBack)
-                Spacer(Modifier.width(14.dp))
-                LText("Seleccionar fuentes", LectorType.Section, Modifier.weight(1f), maxLines = 1)
-                BotonRedondoTema(Icons.Rounded.Star, "Solo las ancladas", {
-                    elegidas = todas.filter { it.id.toString() in ext.fijadas }.map { it.id }.toSet()
-                    if (elegidas.isEmpty()) Avisos.mostrar("No tienes fuentes ancladas")
-                })
-                Spacer(Modifier.width(6.dp))
-                BotonRedondoTema(Icons.Rounded.Check, "Todas", { elegidas = todas.map { it.id }.toSet() })
-                Spacer(Modifier.width(6.dp))
-                BotonRedondoTema(Icons.Rounded.Clear, "Ninguna", { elegidas = emptySet() })
-            }
-            Box(Modifier.padding(horizontal = 16.dp)) { CampoBusqueda(filtro, { filtro = it }, "Buscar fuentes") }
-            val visibles = todas.filter { filtro.isBlank() || it.nombre.contains(filtro.trim(), true) }
-            val (si, no) = visibles.partition { it.id in elegidas }
-            Box(Modifier.weight(1f)) {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 110.dp)) {
-                    if (si.isNotEmpty()) item { LText("Elegidas (${elegidas.size})", LectorType.Label, Modifier.padding(8.dp), color = LectorColors.Muted) }
-                    items(si, key = { "s${it.id}" }) { o -> FilaFuenteSel(o, true) { elegidas = elegidas - o.id } }
-                    if (no.isNotEmpty()) item { LText("Disponibles", LectorType.Label, Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp), color = LectorColors.Muted) }
-                    items(no, key = { "n${it.id}" }) { o -> FilaFuenteSel(o, false) { elegidas = elegidas + o.id } }
-                }
-                Box(Modifier.align(Alignment.BottomEnd).padding(20.dp).navigationBarsPadding()) {
-                    PillButton("Continuar (${elegidas.size})", Icons.Rounded.ArrowForward, {
-                        if (elegidas.isEmpty()) Avisos.mostrar("Elige al menos una fuente")
-                        else { prefs.edit().putStringSet("migrar_fuentes", elegidas.map { it.toString() }.toSet()).apply(); eligiendo = false }
-                    })
-                }
-            }
-        }
-        BackHandler(onBack = onBack)
+        SeleccionFuentes(ext, todas, elegidas, onBack) { elegidas = it; eligiendo = false }
         return
     }
     if (f == null) {
@@ -299,4 +256,62 @@ private fun FilaFuenteSel(f: FuenteUI, elegida: Boolean, alTocar: () -> Unit) {
         Icon(if (elegida) Icons.Rounded.CheckCircle else Icons.Rounded.AddCircle, null,
             tint = if (elegida) androidx.compose.material3.MaterialTheme.colorScheme.primary else LectorColors.Muted, modifier = Modifier.size(22.dp))
     }
+}
+
+/** Fuentes donde se puede buscar un título (tus idiomas, sin +18 si lo ocultas), sin la de origen. */
+internal fun fuentesBuscables(ext: ExtManager, sinId: Long): List<FuenteUI> =
+    ext.fuentes.filter { it.id != sinId && (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas }
+        .distinctBy { it.id }.sortedBy { it.nombre.lowercase() }
+
+/** Las elegidas la última vez; si no hay, las ancladas; si tampoco, todas. */
+internal fun elegidasGuardadas(ctx: android.content.Context, ext: ExtManager, todas: List<FuenteUI>): Set<Long> {
+    val guardadas = ctx.getSharedPreferences("lector", android.content.Context.MODE_PRIVATE)
+        .getStringSet("migrar_fuentes", null)?.mapNotNull { it.toLongOrNull() }?.toSet().orEmpty()
+    val ids = todas.map { it.id }.toSet()
+    return (guardadas intersect ids).ifEmpty { todas.filter { it.id.toString() in ext.fijadas }.map { it.id }.toSet() }.ifEmpty { ids }
+}
+
+/** «Seleccionar fuentes» (como Komikku): Elegidas / Disponibles, buscar, ancladas, todas o ninguna. */
+@Composable
+internal fun SeleccionFuentes(ext: ExtManager, todas: List<FuenteUI>, inicial: Set<Long>, onBack: () -> Unit, onContinuar: (Set<Long>) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var elegidas by remember { mutableStateOf(inicial) }
+    var filtro by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            BotonRedondoTema(Icons.Rounded.ArrowBack, "Atrás", onBack)
+            Spacer(Modifier.width(14.dp))
+            LText("Seleccionar fuentes", LectorType.Section, Modifier.weight(1f), maxLines = 1)
+            BotonRedondoTema(Icons.Rounded.Star, "Solo las ancladas", {
+                elegidas = todas.filter { it.id.toString() in ext.fijadas }.map { it.id }.toSet()
+                if (elegidas.isEmpty()) Avisos.mostrar("No tienes fuentes ancladas")
+            })
+            Spacer(Modifier.width(6.dp))
+            BotonRedondoTema(Icons.Rounded.Check, "Todas", { elegidas = todas.map { it.id }.toSet() })
+            Spacer(Modifier.width(6.dp))
+            BotonRedondoTema(Icons.Rounded.Clear, "Ninguna", { elegidas = emptySet() })
+        }
+        Box(Modifier.padding(horizontal = 16.dp)) { CampoBusqueda(filtro, { filtro = it }, "Buscar fuentes") }
+        val visibles = todas.filter { filtro.isBlank() || it.nombre.contains(filtro.trim(), true) }
+        val (si, no) = visibles.partition { it.id in elegidas }
+        Box(Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 110.dp)) {
+                if (si.isNotEmpty()) item { LText("Elegidas (${elegidas.size})", LectorType.Label, Modifier.padding(8.dp), color = LectorColors.Muted) }
+                items(si, key = { "s${it.id}" }) { o -> FilaFuenteSel(o, true) { elegidas = elegidas - o.id } }
+                if (no.isNotEmpty()) item { LText("Disponibles", LectorType.Label, Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp), color = LectorColors.Muted) }
+                items(no, key = { "n${it.id}" }) { o -> FilaFuenteSel(o, false) { elegidas = elegidas + o.id } }
+            }
+            Box(Modifier.align(Alignment.BottomEnd).padding(20.dp).navigationBarsPadding()) {
+                PillButton("Continuar (${elegidas.size})", Icons.Rounded.ArrowForward, {
+                    if (elegidas.isEmpty()) Avisos.mostrar("Elige al menos una fuente")
+                    else {
+                        ctx.getSharedPreferences("lector", android.content.Context.MODE_PRIVATE).edit()
+                            .putStringSet("migrar_fuentes", elegidas.map { it.toString() }.toSet()).apply()
+                        onContinuar(elegidas)
+                    }
+                })
+            }
+        }
+    }
+    BackHandler(onBack = onBack)
 }

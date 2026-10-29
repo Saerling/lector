@@ -75,10 +75,18 @@ fun FuenteNoDisponible(
     var migrando by remember { mutableStateOf(false) }
 
     // Se busca en todas las fuentes de tus idiomas (no solo en las ancladas): lo que importa es encontrarlo.
-    val fuentes = remember(ext.fuentes, ext.idiomas, ext.mostrarNsfw, fuenteId) {
-        ext.fuentes.filter { it.id != fuenteId && (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas }
-            .sortedWith(compareBy({ it.id.toString() !in ext.fijadas }, { it.nombre.lowercase() }))
+    // Primero se eligen las fuentes (como al migrar): buscar en más de mil a la vez es lento y gasta batería.
+    val todas = remember(ext.fuentes, ext.idiomas, ext.mostrarNsfw, fuenteId) { fuentesBuscables(ext, fuenteId) }
+    var elegidas by remember { mutableStateOf(elegidasGuardadas(ctx, ext, todas)) }
+    var eligiendo by rememberSaveable { mutableStateOf(true) }
+    if (eligiendo) {
+        SeleccionFuentes(ext, todas, elegidas, onBack) { elegidas = it; eligiendo = false }
+        return
     }
+    val fuentes = remember(todas, elegidas) {
+        todas.filter { it.id in elegidas }.sortedWith(compareBy({ it.id.toString() !in ext.fijadas }, { it.nombre.lowercase() }))
+    }
+    androidx.activity.compose.BackHandler { eligiendo = true }
     val resultados = rememberResultadosGlobales(fuentes, enviada)
     val claves = remember(almacen.version) { almacen.clavesEnLinea() }
     val (instalada, disponible) = ext.extensionDeFuente(fuenteId)
@@ -136,6 +144,7 @@ fun FuenteNoDisponible(
                     }
                     Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ChipSel("Solo con resultados", soloConResultados) { soloConResultados = !soloConResultados }
+                        ChipSel("Fuentes (${elegidas.size})", false) { eligiendo = true }
                     }
                     val hechas = resultados.values.count { it !is EstadoBusqueda.Cargando }
                     val conAlgo = resultados.values.count { it is EstadoBusqueda.Hecho && it.mangas.isNotEmpty() }

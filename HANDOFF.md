@@ -706,3 +706,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2ao. PASO 41 (0.30)
 - OOM al migrar (0.28): una extensión llenaba un HashSet dentro de getSearchManga. FuentesOmitidas (BusquedaGlobal.kt) anota en prefs las fuentes que están buscando; si la app muere, al reabrir quedan omitidas en búsquedas globales (chip «Volver a incluir» en Migrar). Cada búsqueda corre aparte (ambitoBusqueda.async) y se deja de esperar a los 12 s sin retener el turno. android:largeHeap="true".
+
+## 2ap. PASO 42 (0.31)
+- «Fuente no disponible»: primero «Seleccionar fuentes» (componente compartido SeleccionFuentes/fuentesBuscables/elegidasGuardadas en Migrar.kt); chip «Fuentes (N)» para volver a elegir.
