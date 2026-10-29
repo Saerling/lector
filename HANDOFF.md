@@ -698,3 +698,8 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2am. PASO 39 (0.28)
 - Historial: tocar la portada de una entrada en línea abre la ficha del manga (alAbrirManga), como en Actualizaciones.
+
+## 2an. PASO 40 (0.29)
+- Migrar: paso 0 «Seleccionar fuentes» (Elegidas/Disponibles, buscar, ★ ancladas, ✓ todas, ✕ ninguna; se recuerda en prefs `migrar_fuentes`). Paso 1 ahora en LazyColumn (antes Column con scroll pintaba cientos de filas → cierre).
+- Búsqueda global: 6 a la vez en un grupo propio de 8 hilos (IO.limitedParallelism), máx. 20 resultados por fuente y captura Throwable (errores de extensiones rotas cerraban la app).
+- Ficha: menú ⋮ como Komikku: Actualizar, Editar categorías, Migrar, Compartir, Notas (prefs `notas`, se ven en la ficha), Unir, Editar información, Ver recomendaciones (desplaza a la sección), Abrir carpeta, Limpiar manga (descargas + leídos), Ajustes de la fuente.

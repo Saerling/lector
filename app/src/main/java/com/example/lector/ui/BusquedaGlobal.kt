@@ -98,6 +98,9 @@ fun BusquedaGlobalScreen(
  * Busca [consulta] en todas las [fuentes] a la vez (5 en paralelo) y devuelve el estado de cada una por id. Vuelve a
  * buscar si cambia la consulta o la lista de fuentes.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+private val hilosBusqueda = kotlinx.coroutines.Dispatchers.IO.limitedParallelism(8)
+
 @Composable
 internal fun rememberResultadosGlobales(fuentes: List<FuenteUI>, consulta: String): Map<Long, EstadoBusqueda> {
     val motor = Motor.actual
@@ -108,21 +111,23 @@ internal fun rememberResultadosGlobales(fuentes: List<FuenteUI>, consulta: Strin
         val q = consulta.trim()
         // 12 a la vez (son webs distintas), 12 s como mucho por fuente (las lentas o con Cloudflare no frenan a las
         // demás) y lo ya buscado sale al instante de la memoria.
-        val limite = Semaphore(12)
+        val limite = Semaphore(6)
         fuentes.forEach { f -> resultados[f.id] = CacheBusquedas.leer(f.id, q)?.let { EstadoBusqueda.Hecho(it) } ?: EstadoBusqueda.Cargando }
         fuentes.filter { resultados[it.id] is EstadoBusqueda.Cargando }.forEach { f ->
             launch {
                 limite.withPermit {
                     resultados[f.id] = try {
-                        val r = kotlinx.coroutines.withTimeout(12_000) { motor.buscar(f, q, 1).mangas.distinctBy { it.url } }
+                        // En su propio grupo de hilos: una fuente colgada no deja sin hilos al resto de la app.
+                        val r = kotlinx.coroutines.withTimeout(12_000) { kotlinx.coroutines.withContext(hilosBusqueda) { motor.buscar(f, q, 1).mangas.distinctBy { it.url }.take(20) } }
                         CacheBusquedas.guardar(f.id, q, r)
                         EstadoBusqueda.Hecho(r)
                     } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                         EstadoBusqueda.Fallo("Tardó demasiado")
                     } catch (e: CancellationException) {
                         throw e
-                    } catch (e: Exception) {
-                        EstadoBusqueda.Fallo(e.message ?: "Error")
+                    } catch (e: Throwable) {
+                        // También los Error de extensiones rotas (NoClassDefFoundError, StackOverflow…): antes cerraban la app.
+                        EstadoBusqueda.Fallo(e.message ?: e.javaClass.simpleName)
                     }
                 }
             }

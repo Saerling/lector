@@ -47,6 +47,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -184,6 +185,13 @@ fun FichaMangaScreen(
     var abriendoRec by remember { mutableStateOf<Int?>(null) }
     var otrosSeguimientos by remember { mutableStateOf(false) }
     var combinando by remember { mutableStateOf(false) }
+    // Menú ⋮ de la ficha (como Komikku) y lo que abre.
+    var menuFicha by remember { mutableStateOf(false) }
+    var editandoNotas by remember { mutableStateOf(false) }
+    var limpiar by remember { mutableStateOf(false) }
+    var ajustesFuente by remember { mutableStateOf(false) }
+    val clNotas = "${fuenteId}|${manga.url}"
+    var notas by remember(clNotas) { mutableStateOf(ctx.getSharedPreferences("notas", android.content.Context.MODE_PRIVATE).getString(clNotas, "").orEmpty()) }
     var parecidos by remember { mutableStateOf<List<MangaFuente>?>(null) }
     // Vista previa de páginas (como TachiyomiSY/Komikku): miniaturas del primer capítulo, al pedirlas.
     var vistaPrevia by remember { mutableStateOf<List<androidx.compose.ui.graphics.ImageBitmap?>?>(null) }
@@ -508,6 +516,13 @@ fun FichaMangaScreen(
                         }
                     }
                 }
+                if (notas.isNotBlank()) item {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp).clip(SuaveShape(14.dp))
+                        .background(LectorColors.Card).pressable { editandoNotas = true }.padding(14.dp)) {
+                        LText("Notas", LectorType.Label, color = acento)
+                        LText(notas, LectorType.Body)
+                    }
+                }
                 // Entrada fusionada: chips con cada fuente unida (tocar = verla; mantener = separarla).
                 item {
                     @Suppress("UNUSED_VARIABLE") val fv = ext.fusionVersion
@@ -595,7 +610,7 @@ fun FichaMangaScreen(
                 }
                 // Recomendaciones (AniList): tocar una la busca en la fuente de esta ficha y abre su ficha.
                 val recs = recomendaciones
-                if (!recs.isNullOrEmpty()) item {
+                if (!recs.isNullOrEmpty()) item(key = "recs") {
                     Column(Modifier.padding(top = 16.dp)) {
                         LText("Recomendaciones", LectorType.Section.copy(fontSize = 18.sp), Modifier.padding(horizontal = 24.dp))
                         Spacer(Modifier.height(8.dp))
@@ -822,6 +837,39 @@ fun FichaMangaScreen(
                         Modifier.size(44.dp).pressable(abrirNavegador).clip(CircleShape).background(LectorColors.SobreImagen),
                         Alignment.Center,
                     ) { Icon(Icons.Rounded.ArrowForward, "Abrir en el navegador", tint = LectorColors.Text) }
+                    Spacer(Modifier.width(10.dp))
+                    Box {
+                        Box(
+                            Modifier.size(44.dp).pressable { menuFicha = true }.clip(CircleShape).background(LectorColors.SobreImagen),
+                            Alignment.Center,
+                        ) { Icon(Icons.Rounded.MoreVert, "Más", tint = LectorColors.Text) }
+                        DropdownMenu(expanded = menuFicha, onDismissRequest = { menuFicha = false }) {
+                            @Composable fun op(t: String, accion: () -> Unit) = DropdownMenuItem(text = { Text(t) }, onClick = { menuFicha = false; accion() })
+                            op("Actualizar") { refrescando = true; recarga++ }
+                            if (enBiblioteca != null) {
+                                op("Editar categorías") { dialogoCats = true }
+                                op("Migrar") { migrando = true }
+                            }
+                            urlWeb?.let { u -> op("Compartir") { compartirTexto(ctx, "$tituloFicha\n$u") } }
+                            op("Notas") { editandoNotas = true }
+                            if (enBiblioteca != null) {
+                                op("Unir") { combinando = true }
+                                op("Editar información") { editarInfo = true }
+                            }
+                            op("Ver recomendaciones") {
+                                scope.launch {
+                                    if (recomendaciones.isNullOrEmpty()) { Avisos.mostrar(if (recomendaciones == null) "Buscando recomendaciones…" else "No hay recomendaciones"); return@launch }
+                                    repeat(30) {
+                                        lista.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "recs" }?.let { lista.animateScrollToItem(it.index); return@launch }
+                                        lista.scrollBy(900f)
+                                    }
+                                }
+                            }
+                            op("Abrir carpeta") { abrirCarpeta(ctx, com.example.lector.CarpetaApp.descargas(ctx)) }
+                            op("Limpiar manga") { limpiar = true }
+                            if (ext.configurables(f.pkg).any { it.id == f.id }) op("Ajustes de la fuente") { ajustesFuente = true }
+                        }
+                    }
                 },
             )
         }
@@ -868,6 +916,14 @@ fun FichaMangaScreen(
             }
         }
 
+        // Ajustes de la fuente, encima de la ficha.
+        if (ajustesFuente) {
+            val cfg = ext.configurables(f.pkg).firstOrNull { it.id == f.id }
+            if (cfg != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
+                BackHandler { ajustesFuente = false }
+                AjustesFuenteScreen(ext, f.pkg, cfg, f.nombre) { ajustesFuente = false; recarga++ }
+            }
+        }
         // Migrar a otra fuente: pantalla encima de la ficha.
         val comicMigrar = enBiblioteca
         if (migrando && comicMigrar != null) {
@@ -960,6 +1016,33 @@ fun FichaMangaScreen(
         }
     }
 
+    if (editandoNotas) {
+        var t by remember { mutableStateOf(notas) }
+        AlertDialog(
+            onDismissRequest = { editandoNotas = false },
+            title = { Text("Notas") },
+            text = { OutlinedTextField(t, { t = it }, Modifier.fillMaxWidth().height(180.dp), placeholder = { Text("Lo que quieras recordar de este manga") }) },
+            confirmButton = { TextButton(onClick = {
+                notas = t.trim(); editandoNotas = false
+                ctx.getSharedPreferences("notas", android.content.Context.MODE_PRIVATE).edit().putString(clNotas, notas).apply()
+            }) { Text("Guardar") } },
+            dismissButton = { TextButton(onClick = { editandoNotas = false }) { Text("Cancelar") } },
+        )
+    }
+    if (limpiar) AlertDialog(
+        onDismissRequest = { limpiar = false },
+        title = { Text("Limpiar manga") },
+        text = { Text("Se borran sus capítulos descargados, los leídos y la página por la que ibas. Sigue en tu biblioteca.") },
+        confirmButton = { TextButton(onClick = {
+            limpiar = false
+            val caps = ficha?.capitulos.orEmpty()
+            caps.forEach { if (almacen.estaDescargado(fuenteId, it.url)) almacen.borrarDescarga(fuenteId, it.url) }
+            ext.desmarcarLeidos(fuenteId, caps.map { it.url })
+            Descargas.version.value++
+            Avisos.mostrar("Manga limpiado")
+        }) { Text("Limpiar") } },
+        dismissButton = { TextButton(onClick = { limpiar = false }) { Text("Cancelar") } },
+    )
     if (editarInfo && comic != null) DialogoEditarInfo(
         comic = comic, almacen = almacen,
         alRestablecer = { almacen.actualizarComic(comic.id) { it.copy(editado = false, portadaPropia = false) }; recarga++ },
@@ -1310,4 +1393,16 @@ private fun miniatura(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitma
     while (o.outWidth / (m * 2) >= 300 || o.outHeight / m > 2000) m *= 2
     val d = android.graphics.BitmapFactory.Options().apply { inSampleSize = m }
     return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, d)?.asImageBitmap()
+}
+
+/** Abre una carpeta en el gestor de archivos (si se puede); si no, enseña su ruta. */
+internal fun abrirCarpeta(ctx: android.content.Context, dir: java.io.File) {
+    val base = android.os.Environment.getExternalStorageDirectory().path
+    val ok = dir.path.startsWith(base) && runCatching {
+        val rel = dir.path.removePrefix(base).trim('/')
+        val uri = android.net.Uri.parse("content://com.android.externalstorage.documents/document/" + android.net.Uri.encode("primary:$rel"))
+        ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.document/directory")
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    }.isSuccess
+    if (!ok) Avisos.mostrar("Carpeta: ${dir.path}")
 }
