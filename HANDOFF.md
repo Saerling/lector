@@ -712,3 +712,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2aq. PASO 43 (0.32)
 - Tira continua real (Komikku): en modo tira los items son anterior+actual+siguiente (ItemVisor.Pagina/Transicion con índice de capítulo c, claves p{c}_{i}); los totales de los vecinos se cargan aparte (totales). Al centrar una página de otro capítulo, ci cambia con porScroll=true y no se recoloca: LazyColumn conserva la posición por clave. Quitados los saltos automáticos de la tira.
+
+## 2ar. PASO 44 (0.33)
+- Slider en la tira: irAPagina buscaba el índice con el desfase viejo y caía en el capítulo anterior (que pasaba a ser el actual → saltos hacia atrás). Ahora busca la página del capítulo actual en items.

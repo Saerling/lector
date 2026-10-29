@@ -436,7 +436,10 @@ fun Visor(
     }
 
     fun irAPagina(p: Int) {
-        val idx = desfase + refs.indexOfFirst { it.indice == p }.coerceAtLeast(0)
+        // En la tira hay varios capítulos en la lista: se busca la página DEL CAPÍTULO ACTUAL (antes caía en el anterior).
+        val idx = if (paginado) desfase + refs.indexOfFirst { it.indice == p }.coerceAtLeast(0)
+            else items.indexOfFirst { it is ItemVisor.Pagina && it.c == ci && it.ref.indice == p }
+        if (idx < 0) return
         scope.launch { if (paginado) pager.scrollToPage(idx) else lista.scrollToItem(idx) }
     }
 
