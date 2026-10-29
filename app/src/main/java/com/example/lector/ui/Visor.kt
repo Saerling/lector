@@ -123,8 +123,9 @@ class AccionesVisor(
 private data class RefPagina(val indice: Int, val mitad: Int)
 
 private sealed interface ItemVisor {
-    data class Pagina(val ref: RefPagina) : ItemVisor
-    data class Transicion(val siguiente: Boolean) : ItemVisor
+    // [c]: índice del capítulo al que pertenece (en la tira continua conviven varios; -1 = el actual).
+    data class Pagina(val ref: RefPagina, val c: Int = -1) : ItemVisor
+    data class Transicion(val siguiente: Boolean, val c: Int = -1) : ItemVisor
 }
 
 private enum class AccionToque { SIGUIENTE, ANTERIOR, MENU }
@@ -237,21 +238,42 @@ fun Visor(
     var tocando by remember { mutableStateOf(false) }
 
     val refs = remember(cap.clave) { mutableStateListOf<RefPagina>() }
+    // Tira continua (como Komikku): páginas de cada capítulo ya conocido, para encadenar anterior, actual y siguiente.
+    val totales = remember { mutableStateMapOf<String, Int>() }
+    // El capítulo cambió porque se llegó a él desplazando la tira: no hay que recolocar nada.
+    var porScroll by remember { mutableStateOf(false) }
     LaunchedEffect(cap.clave, recarga) {
         total = null; error = null; refs.clear()
         runCatching { cap.origen.total() }
             .onSuccess { n ->
                 if (n <= 0) error = "El capítulo no tiene páginas"
-                else { refs.addAll((0 until n).map { RefPagina(it, 0) }); total = n }
+                else { refs.addAll((0 until n).map { RefPagina(it, 0) }); total = n; totales[cap.clave] = n }
             }
             .onFailure { if (it is CancellationException) throw it; error = it.message ?: "No se pudieron cargar las páginas" }
     }
 
     val hayAnterior = ci > 0
     val haySiguiente = ci < capitulos.lastIndex
-    val items by remember(hayAnterior, refs) {
+    LaunchedEffect(ci, paginado) {
+        if (paginado) return@LaunchedEffect
+        for (c in listOf(ci + 1, ci - 1)) {
+            val cv = capitulos.getOrNull(c) ?: continue
+            if (totales[cv.clave] == null) runCatching { cv.origen.total() }.getOrNull()?.takeIf { it > 0 }?.let { totales[cv.clave] = it }
+        }
+    }
+    val items by remember(hayAnterior, refs, paginado, ci) {
         derivedStateOf {
-            buildList<ItemVisor> {
+            if (!paginado) buildList<ItemVisor> {
+                // Anterior, actual y siguiente en la misma lista; al pasar de uno a otro las claves no cambian y la
+                // tira no salta (LazyColumn conserva la posición por clave).
+                val rango = (ci - 1..ci + 1).filter { it in capitulos.indices && totales[capitulos[it].clave] != null }
+                if (rango.isEmpty()) return@buildList
+                add(ItemVisor.Transicion(false, rango.first()))
+                rango.forEach { c ->
+                    repeat(totales[capitulos[c].clave]!!) { add(ItemVisor.Pagina(RefPagina(it, 0), c)) }
+                    add(ItemVisor.Transicion(true, c))
+                }
+            } else buildList<ItemVisor> {
                 if (hayAnterior) add(ItemVisor.Transicion(false))
                 refs.forEach { add(ItemVisor.Pagina(it)) }
                 add(ItemVisor.Transicion(true))
@@ -282,8 +304,14 @@ fun Visor(
         }
         irAlFinal = false
         primeraCarga = false
-        val idx = desfase + refs.indexOfFirst { it.indice == pagina }.coerceAtLeast(0)
-        runCatching { if (modo.paginado) pager.scrollToPage(idx) else lista.scrollToItem(idx) }
+        if (porScroll) { porScroll = false; return@LaunchedEffect }
+        if (modo.paginado) {
+            val idx = desfase + refs.indexOfFirst { it.indice == pagina }.coerceAtLeast(0)
+            runCatching { pager.scrollToPage(idx) }
+        } else {
+            val idx = items.indexOfFirst { it is ItemVisor.Pagina && it.c == ci && it.ref.indice == pagina }
+            if (idx >= 0) runCatching { lista.scrollToItem(idx) }
+        }
     }
 
     // Elemento actual (página o transición).
@@ -298,7 +326,12 @@ fun Visor(
                 val centro = (info.viewportStartOffset + info.viewportEndOffset) / 2
                 info.visibleItemsInfo.firstOrNull { it.offset <= centro && it.offset + it.size > centro }?.index
                     ?: lista.firstVisibleItemIndex
-            }.distinctUntilChanged().collect { itemActual = it }
+            }.distinctUntilChanged().collect { i ->
+                itemActual = i
+                // Al entrar en las páginas de otro capítulo de la tira, ese pasa a ser el actual (sin recolocar).
+                val c = when (val it = items.getOrNull(i)) { is ItemVisor.Pagina -> it.c; else -> -1 }
+                if (c >= 0 && c != ci) { porScroll = true; ci = c }
+            }
         }
     }
     val actual = items.getOrNull(itemActual)
@@ -333,36 +366,7 @@ fun Visor(
         else if (!a.siguiente && hayAnterior) irCapitulo(ci - 1, true)
     }
     // Webtoon: al entrar en la transición final, sigue con el siguiente capítulo (como la tira infinita de Komikku).
-    if (!paginado) {
-        LaunchedEffect(cap.clave, total) {
-            if (total == null) return@LaunchedEffect
-            snapshotFlow {
-                val info = lista.layoutInfo
-                val fin = info.visibleItemsInfo.firstOrNull { it.index == items.lastIndex } ?: return@snapshotFlow false
-                val alto = info.viewportEndOffset - info.viewportStartOffset
-                // Como en Komikku: la tira sigue sola. Basta con que asome la transición mientras desplazas hacia abajo
-                // (antes tenía que subir al 45 % de la pantalla, y al final de la tira no podía).
-                lista.isScrollInProgress && (fin.offset < info.viewportStartOffset + alto * 0.85f || !lista.canScrollForward)
-            }.distinctUntilChanged().collect { dentro ->
-                if (dentro && haySiguiente && almacen.pasarCapituloSolo) irCapitulo(ci + 1, false)
-            }
-        }
-        // Y hacia atrás: al subir hasta la transición del principio, se abre el anterior por su final.
-        LaunchedEffect(cap.clave, total) {
-            if (total == null || !hayAnterior) return@LaunchedEffect
-            delay(800) // que no salte al abrir el capítulo
-            snapshotFlow {
-                val info = lista.layoutInfo
-                val ini = info.visibleItemsInfo.firstOrNull { it.index == 0 } ?: return@snapshotFlow false
-                val alto = info.viewportEndOffset - info.viewportStartOffset
-                // Hacia atrás igual: al asomar la transición del principio desplazando hacia arriba.
-                items.firstOrNull() is ItemVisor.Transicion && lista.isScrollInProgress &&
-                    (ini.offset + ini.size > info.viewportStartOffset + alto * 0.15f || !lista.canScrollBackward)
-            }.distinctUntilChanged().collect { dentro ->
-                if (dentro && almacen.pasarCapituloSolo) irCapitulo(ci - 1, true)
-            }
-        }
-    }
+    // (La tira ya no salta de capítulo: los encadena en la misma lista.)
 
     // El capítulo COMPLETO se descarga al abrirlo (a disco, sin decodificar: casi no gasta memoria), 3 a la vez.
     LaunchedEffect(cap.clave, total) {
@@ -514,7 +518,7 @@ fun Visor(
     ) {
         val n = total
         when {
-            n == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+            n == null && (paginado || items.isEmpty() || error != null) -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                 if (error == null) CircularProgressIndicator(Modifier.size(30.dp), color = Color.White)
                 else Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
                     Text(error!!, color = Color(0xFFE57373), textAlign = TextAlign.Center, style = LectorType.Body)
@@ -744,8 +748,8 @@ fun Visor(
 }
 
 private fun claveItem(i: ItemVisor?, pos: Int): Any = when (i) {
-    is ItemVisor.Pagina -> "p${i.ref.indice}_${i.ref.mitad}"
-    is ItemVisor.Transicion -> if (i.siguiente) "t_sig" else "t_ant"
+    is ItemVisor.Pagina -> "p${i.c}_${i.ref.indice}_${i.ref.mitad}"
+    is ItemVisor.Transicion -> if (i.siguiente) "t_sig${i.c}" else "t_ant${i.c}"
     null -> "x$pos"
 }
 
@@ -1057,21 +1061,23 @@ private fun Tira(
         ) {
             items(items.size, key = { claveItem(items.getOrNull(it), it) }) { i ->
                 when (val it = items[i]) {
-                    is ItemVisor.Pagina -> PaginaTira(cap.origen, it.ref.indice, anchoMax, recortar, filtro, fondo)
+                    is ItemVisor.Pagina -> PaginaTira((capitulos.getOrNull(it.c) ?: cap).origen, it.ref.indice, anchoMax, recortar, filtro, fondo)
                     is ItemVisor.Transicion -> {
-                        val otro = if (it.siguiente) capitulos.getOrNull(ci + 1)?.nombre else capitulos.getOrNull(ci - 1)?.nombre
+                        val este = capitulos.getOrNull(it.c) ?: cap
+                        val k = if (it.c >= 0) it.c else ci
+                        val otro = if (it.siguiente) capitulos.getOrNull(k + 1)?.nombre else capitulos.getOrNull(k - 1)?.nombre
                         Column(
                             Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 24.dp).navigationBarsPadding(),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Text(if (it.siguiente) "Terminado: ${cap.nombre}" else "Actual: ${cap.nombre}", color = Color(0xFF9A9AA0), style = LectorType.Label, textAlign = TextAlign.Center)
+                            Text(if (it.siguiente) "Finalizado: ${este.nombre}" else "Actual: ${este.nombre}", color = Color(0xFF9A9AA0), style = LectorType.Label, textAlign = TextAlign.Center)
                             Spacer(Modifier.height(12.dp))
                             if (otro != null) {
                                 Text(if (it.siguiente) "Siguiente: $otro" else "Anterior: $otro", color = Color.White, style = LectorType.Section, textAlign = TextAlign.Center)
                             } else {
                                 Text(if (it.siguiente) "No hay más capítulos" else "Es el primer capítulo", color = Color.White, style = LectorType.Body)
                             }
-                            if (it.siguiente) Spacer(Modifier.height(160.dp))
+                            if (it.siguiente && otro == null) Spacer(Modifier.height(160.dp))
                         }
                     }
                 }

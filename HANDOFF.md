@@ -709,3 +709,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2ap. PASO 42 (0.31)
 - «Fuente no disponible»: primero «Seleccionar fuentes» (componente compartido SeleccionFuentes/fuentesBuscables/elegidasGuardadas en Migrar.kt); chip «Fuentes (N)» para volver a elegir.
+
+## 2aq. PASO 43 (0.32)
+- Tira continua real (Komikku): en modo tira los items son anterior+actual+siguiente (ItemVisor.Pagina/Transicion con índice de capítulo c, claves p{c}_{i}); los totales de los vecinos se cargan aparte (totales). Al centrar una página de otro capítulo, ci cambia con porScroll=true y no se recoloca: LazyColumn conserva la posición por clave. Quitados los saltos automáticos de la tira.
