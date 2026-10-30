@@ -96,7 +96,13 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
 
     override suspend fun buscar(fuente: FuenteUI, consulta: String, pagina: Int, filtros: FilterList?): PaginaMangas =
         withContext(Dispatchers.IO) {
-            FuentesEnUso.con(fuente) { fuenteReal(fuente).getSearchManga(pagina, consulta, filtros ?: FilterList()).aPagina() }
+            FuentesEnUso.con(fuente) {
+                val s = fuenteReal(fuente)
+                // Como Mihon/Komikku: sin filtros elegidos se pasan los de la fuente por defecto. Con una lista vacía,
+                // muchas extensiones (p. ej. LectorTMO) fallan con «Collection contains no element matching the predicate».
+                val fs = filtros?.takeIf { it.isNotEmpty() } ?: runCatching { s.getFilterList() }.getOrDefault(FilterList())
+                s.getSearchManga(pagina, consulta, fs).aPagina()
+            }
         }
 
     // ---- Ficha, capítulos y páginas ----

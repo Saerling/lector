@@ -783,3 +783,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2bg. PASO 59 (0.49)
 - Verificación del lector: recargar / volver del WebView / recrear la pantalla vuelve a la última página vista (paginaVista rememberSaveable, antes saltaba a la 1); la unión con el capítulo anterior cuenta como principio (no guarda la última página al cerrar ahí); la descarga del capítulo empieza por la página de destino real; cambiar de modo antes del primer guardado usa la página actual.
+
+## 2bh. PASO 60 (0.51)
+- Búsqueda: sin filtros elegidos se pasan los de la fuente por defecto (getFilterList()), como Mihon/Komikku. Con FilterList() vacía, LectorTMO y otras fallaban con «Collection contains no element matching the predicate».
