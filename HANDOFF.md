@@ -759,3 +759,12 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2bb. PASO 54 (0.43)
 - Correcciones de la revisión de la entrega 1: slider con rememberUpdatedState (los gestos llamaban a callbacks viejos y un toque podía no cambiar de página), asa dentro de la pista en los extremos, ficha sin portada de origen cierra sin esperar 380 ms, la portada de origen se consume al abrir (no se reutiliza una vieja), al taparla el detalle se funde; interruptor centrado apagado; indicador quieto con «Quitar animaciones».
+
+## 2bc. PASO 55 (0.45) — Rediseño completo «de una vez» (DISENO.md)
+- El usuario no notó la base (0.43): se hizo todo de una vez y visible. Especificación en DISENO.md. 4 agentes en paralelo (cada uno con sus archivos) + capa global:
+  - Global: barra inferior con píldora de acento, icono que salta y nombre de la pestaña activa; atrás predictivo (PredictiveBackHandler + Modifier.gestoAtras: la página se encoge al 90 %, se corre y redondea siguiendo el dedo; enableOnBackInvokedCallback); Display 36 sp ExtraBold.
+  - Inicio: carrusel héroe ~56 % con portada desenfocada, auto-avance, puntos que se estiran, parallax; secciones 22 sp; Más con cabecera y burbujas agrupadas.
+  - Biblioteca: título 40 sp con contador, pestañas con indicador de acento que sigue al deslizamiento (gota), tarjetas con insignias en píldora y barra de progreso; Historial/Actualizaciones con cabeceras de día fijas y filas en tarjeta.
+  - Ficha: cabecera inmersiva (portada desenfocada a sangre en API 31+), portada nítida 156 dp, título 31 sp, metadatos en píldoras, acción principal Expressive, sinopsis expandible, capítulos con punto de no leído.
+  - Explorar: título 40 sp, sub-pestañas con indicador que se desliza, fuentes/extensiones en tarjetas, catálogo y búsqueda global rediseñados.
+- La prueba del emulador ahora saca capturas de todas las pantallas (probar-pantalla:<Tab|Ruta>) y un vídeo de la transición biblioteca → ficha.
