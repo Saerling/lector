@@ -130,6 +130,7 @@ fun Inicio(
         android.util.Log.i("LectorPrueba", "fuente=${fuente?.nombre} id=${fuente?.id}")
         val fp = fuente
         // «|capitulo»: recorre populares → ficha → primer capítulo como lo haría el usuario, sin tocar la pantalla.
+        var abrirLector: (() -> Unit)? = null
         if (fp != null && PruebaAuto.probarCapitulo) {
             PruebaAuto.probarCapitulo = false
             val motor = com.example.lector.ext.Motor.actual
@@ -141,12 +142,18 @@ fun Inicio(
                 // Como al abrirlo desde Actualizaciones o la cola de descargas: sin memo, recuperado de la ficha guardada.
                 val recuperado = com.example.lector.CacheFichas.conMemo(fp.id, m.url, cap.copy(memo = null))
                 val n = motor.cantidadPaginas(fp, recuperado)
+                // Y lo abre en el lector de verdad (para las capturas del emulador).
+                abrirLector = {
+                    fuenteId = fp.id; mangaSel = m; desdeNovedades = false
+                    capsLectura = fi.capitulos; capIndice = 0; paginaLectura = 0; ruta = Ruta.LeerOnline
+                }
                 "«${m.titulo}»: ${fi.capitulos.size} caps, memo manga=${fi.memo != null}, memo cap=${cap.memo != null} " +
                     "(guardado=${recuperado.memo != null}); «${cap.nombre}»: $n páginas"
             }
             android.util.Log.i("LectorPrueba", "capitulo ${fp.nombre}: " + r.getOrElse { "ERROR ${it.message ?: it.javaClass.simpleName}" })
         }
-        fuente?.let { fuenteId = it.id; desdeNovedades = false; ruta = Ruta.FuenteDetalle }
+        val abrir = abrirLector
+        if (abrir != null) abrir() else fuente?.let { fuenteId = it.id; desdeNovedades = false; ruta = Ruta.FuenteDetalle }
     }
 
     // Abrir desde una notificación.
