@@ -79,13 +79,13 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
     )
 
     override suspend fun populares(fuente: FuenteUI, pagina: Int): PaginaMangas = withContext(Dispatchers.IO) {
-        fuenteReal(fuente).getPopularManga(pagina).aPagina()
+        FuentesEnUso.con(fuente) { fuenteReal(fuente).getPopularManga(pagina).aPagina() }
     }
 
     override suspend fun recientes(fuente: FuenteUI, pagina: Int): PaginaMangas = withContext(Dispatchers.IO) {
         val s = fuenteReal(fuente)
         if (!s.supportsLatest) error("${fuente.nombre} no tiene sección de recientes")
-        s.getLatestUpdates(pagina).aPagina()
+        FuentesEnUso.con(fuente) { s.getLatestUpdates(pagina).aPagina() }
     }
 
     override suspend fun buscar(fuente: FuenteUI, consulta: String, pagina: Int): PaginaMangas =
@@ -96,7 +96,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
 
     override suspend fun buscar(fuente: FuenteUI, consulta: String, pagina: Int, filtros: FilterList?): PaginaMangas =
         withContext(Dispatchers.IO) {
-            fuenteReal(fuente).getSearchManga(pagina, consulta, filtros ?: FilterList()).aPagina()
+            FuentesEnUso.con(fuente) { fuenteReal(fuente).getSearchManga(pagina, consulta, filtros ?: FilterList()).aPagina() }
         }
 
     // ---- Ficha, capítulos y páginas ----
@@ -336,5 +336,14 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         return withContext(Dispatchers.IO) {
             calcularCabeceras(fuente).also { if (it.isNotEmpty()) cabecerasCache[fuente.id] = it }
         }
+    }
+}
+
+/** Qué fuentes están trabajando ahora mismo: si la app muere sin memoria, el informe de fallo dice cuáles eran. */
+object FuentesEnUso {
+    val activas = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    inline fun <T> con(f: FuenteUI, bloque: () -> T): T {
+        activas[f.id] = f.nombre
+        try { return bloque() } finally { activas.remove(f.id) }
     }
 }

@@ -715,3 +715,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2ar. PASO 44 (0.33)
 - Slider en la tira: irAPagina buscaba el índice con el desfase viejo y caía en el capítulo anterior (que pasaba a ser el actual → saltos hacia atrás). Ahora busca la página del capítulo actual en items.
+
+## 2as. PASO 45 (0.34)
+- OOM (heap 512 MB lleno; la traza cae en una animación cualquiera). FuentesEnUso (MotorExt) anota las fuentes en populares/recientes/buscar; Fallos añade «Memoria: X de Y MB» y «Fuentes trabajando: …» y, si fue OOM, las pasa a omitidas de la búsqueda global.
