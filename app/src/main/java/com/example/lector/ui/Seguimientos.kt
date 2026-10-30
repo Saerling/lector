@@ -13,7 +13,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -76,7 +75,7 @@ fun CuentasSeguimiento() {
                 Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) { CampoBusqueda(usuario, { usuario = it }, "Usuario o correo") }
                 Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) { CampoBusqueda(clave, { clave = it }, "Contraseña") }
             }
-            if (ocupado) CircularProgressIndicator(Modifier.padding(10.dp))
+            if (ocupado) IndicadorCarga(Modifier.padding(10.dp))
         }
     }
 }

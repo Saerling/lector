@@ -26,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -127,7 +126,7 @@ fun DialogoDuplicado(ext: ExtManager, almacen: Almacen, alRecargar: () -> Unit, 
                     }, Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                     if (migrando) {
-                        Box(Modifier.fillMaxWidth().height(46.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) }
+                        Box(Modifier.fillMaxWidth().height(46.dp), Alignment.Center) { IndicadorCarga(Modifier.size(22.dp), strokeWidth = 2.dp) }
                     } else PillButton("Migrar aquí (con tu progreso)", Icons.Rounded.Refresh, {
                         migrando = true
                         scope.launch {

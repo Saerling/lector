@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -201,7 +200,7 @@ internal fun FilaResultados(
             LText(bandera(f.lang), LectorType.Body)
         }
         when (e) {
-            EstadoBusqueda.Cargando -> Box(Modifier.fillMaxWidth().height(60.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp)) }
+            EstadoBusqueda.Cargando -> Box(Modifier.fillMaxWidth().height(60.dp), Alignment.Center) { IndicadorCarga(Modifier.size(22.dp)) }
             is EstadoBusqueda.Fallo -> LText(e.motivo, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Error, maxLines = 2)
             is EstadoBusqueda.Hecho -> if (e.mangas.isEmpty()) {
                 LText("Sin resultados", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
@@ -211,7 +210,7 @@ internal fun FilaResultados(
                     items(lista, key = { it.url }) { m ->
                         val esta = "${f.id}|${m.url}" in enBiblioteca
                         val igual = clave != null && tituloComparable(m.titulo) == clave
-                        Column(Modifier.width(112.dp).press3D().pressable(onLongClick = { onLargo(m) }) { onManga(m) }) {
+                        Column(Modifier.width(112.dp).origenTransicion().press3D().pressable(onLongClick = { onLargo(m) }) { onManga(m) }) {
                             Box {
                                 ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), motor?.cabeceras(f).orEmpty(), fuenteId = f.id)
                                 if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))

@@ -114,16 +114,8 @@ fun ProgressLine(progress: Float, modifier: Modifier = Modifier) {
 
 @Composable
 fun PillButton(text: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        // Botón tonal compacto de musicfy (~46 dp de alto, gris #2C2C2E).
-        modifier.pressable(onClick).clip(CircleShape).background(LectorColors.PillFill)
-            .heightIn(min = 46.dp).padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, null, tint = LectorColors.Text, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        LText(text, LectorType.Body)
-    }
+    // Botón tonal Expressive: píldora que cuadra sus esquinas al pulsar.
+    BotonExpresivo(text, icon, onClick, modifier, EstiloBoton.TONAL, alto = 46.dp)
 }
 
 @Composable

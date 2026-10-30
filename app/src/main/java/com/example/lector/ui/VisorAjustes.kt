@@ -90,14 +90,7 @@ private fun Etiqueta(texto: String) {
 
 @Composable
 private fun Deslizador(valor: Float, rango: ClosedFloatingPointRange<Float>, pasos: Int = 0, onCambio: (Float) -> Unit) {
-    Slider(
-        value = valor, onValueChange = onCambio, valueRange = rango, steps = pasos,
-        colors = SliderDefaults.colors(
-            thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary,
-            inactiveTrackColor = LectorColors.PillFill,
-        ),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-    )
+    DeslizadorExpresivo(valor, rango, onCambio, Modifier.fillMaxWidth().padding(horizontal = 24.dp), pasos = pasos)
 }
 
 /**

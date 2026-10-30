@@ -609,7 +609,7 @@ private fun TarjetaBiblioteca(
 ) {
     val acento = MaterialTheme.colorScheme.primary
     val forma = SuaveShape(14.dp)
-    Column(Modifier.press3D(5f, 0.97f).pressable(onLongClick = onLargo, onClick = onClick)) {
+    Column(Modifier.origenTransicion().press3D(5f, 0.97f).pressable(onLongClick = onLargo, onClick = onClick)) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(forma)
                 .then(if (seleccionado) Modifier.border(3.dp, acento, forma) else Modifier),

@@ -168,20 +168,8 @@ fun FilaOrden(titulo: String, elegida: Boolean, ascendente: Boolean, onClick: ()
 /** Pestañas en píldora dentro de una hoja (Filtro / Ordenar / Mostrar…). */
 @Composable
 fun PestanasPildora(titulos: List<String>, elegida: Int, onElegir: (Int) -> Unit, modifier: Modifier = Modifier) {
-    val acento = MaterialTheme.colorScheme.primary
-    Row(
-        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(CircleShape)
-            .background(LectorColors.CardHigh).padding(4.dp),
-    ) {
-        titulos.forEachIndexed { i, t ->
-            Box(
-                Modifier.weight(1f).height(38.dp).clip(CircleShape)
-                    .background(if (i == elegida) acento.copy(alpha = 0.22f) else Color.Transparent)
-                    .pressable { onElegir(i) },
-                Alignment.Center,
-            ) { LText(t, LectorType.Body, color = if (i == elegida) acento else LectorColors.Text, maxLines = 1) }
-        }
-    }
+    // Grupo de botones conectados (Expressive).
+    GrupoBotones(titulos, elegida, onElegir, modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 }
 
 

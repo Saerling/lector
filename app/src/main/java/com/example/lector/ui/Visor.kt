@@ -43,7 +43,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -534,7 +533,7 @@ fun Visor(
         val n = total
         when {
             n == null && (paginado || items.isEmpty() || error != null) -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                if (error == null) CircularProgressIndicator(Modifier.size(30.dp), color = Color.White)
+                if (error == null) IndicadorCarga(Modifier.size(30.dp), color = Color.White)
                 else Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
                     Text(error!!, color = Color(0xFFE57373), textAlign = TextAlign.Center, style = LectorType.Body)
                     Spacer(Modifier.height(14.dp))
@@ -670,22 +669,18 @@ fun Visor(
                         if (tot > 1) {
                             var arrastre by remember { mutableStateOf<Float?>(null) }
                             var ultimaP by remember { mutableIntStateOf(-1) }
-                            Slider(
-                                value = arrastre ?: paginaReal.toFloat(),
-                                onValueChange = {
+                            DeslizadorExpresivo(
+                                valor = arrastre ?: paginaReal.toFloat(),
+                                onCambio = {
                                     arrastre = it
                                     // Solo al cambiar de página (no en cada píxel), con un toque háptico como Komikku.
                                     val p = it.roundToInt()
                                     if (ultimaP == -1) ultimaP = paginaReal
                                     if (p != ultimaP) { ultimaP = p; Tacto.tic(); irAPagina(p) }
                                 },
-                                onValueChangeFinished = { arrastre = null; ultimaP = -1 },
-                                valueRange = 0f..(tot - 1).toFloat(),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = TintaBarra,
-                                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                                    inactiveTrackColor = Color(0x33FFFFFF),
-                                ),
+                                alTerminar = { arrastre = null; ultimaP = -1 },
+                                rango = 0f..(tot - 1).toFloat(),
+                                colorPista = Color(0x33FFFFFF),
                                 modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
                             )
                         } else Spacer(Modifier.weight(1f))
@@ -864,7 +859,7 @@ private fun PaginaPaginada(
             Alignment.Center,
         ) {
             if (fallo == null) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(Modifier.size(28.dp), color = Color.White.copy(alpha = 0.8f))
+                IndicadorCarga(Modifier.size(28.dp), color = Color.White.copy(alpha = 0.8f))
                 Spacer(Modifier.height(10.dp))
                 Text("${ref.indice + 1}", color = Color(0x99FFFFFF), style = LectorType.Label)
             }
@@ -1142,7 +1137,7 @@ private fun PaginaTira(origen: OrigenPaginas, indice: Int, anchoMax: Int, recort
                 .then(if (fallo != null) Modifier.clickable { intento++ } else Modifier),
             Alignment.Center,
         ) {
-            if (fallo == null) CircularProgressIndicator(Modifier.size(26.dp), color = Color.White.copy(alpha = 0.7f))
+            if (fallo == null) IndicadorCarga(Modifier.size(26.dp), color = Color.White.copy(alpha = 0.7f))
             else Text("${indice + 1}: $fallo\nToca para reintentar", color = Color(0xFFE57373), style = LectorType.Label, textAlign = TextAlign.Center, modifier = Modifier.padding(24.dp))
         }
     }
@@ -1173,7 +1168,7 @@ private fun MenuPagina(
         title = { Text("Página ${pagina + 1}") },
         text = {
             Column {
-                if (trabajando) CircularProgressIndicator(Modifier.size(24.dp))
+                if (trabajando) IndicadorCarga(Modifier.size(24.dp))
                 else {
                     TextButton(onClick = { conBytes { compartirImagen(ctx, it, titulo) } }) { Text("Compartir página") }
                     TextButton(onClick = { conBytes { Avisos.mostrar(guardarImagen(ctx, it, titulo, pagina)) } }) { Text("Guardar en el teléfono") }

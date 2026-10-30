@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -152,7 +151,7 @@ fun ActualizacionesScreen(
                             .pressable { if (Actualizador.corriendo) Actualizador.cancelar(ctx) else Actualizador.iniciar(ctx) },
                         Alignment.Center,
                     ) {
-                        if (Actualizador.corriendo) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                        if (Actualizador.corriendo) IndicadorCarga(Modifier.size(24.dp), strokeWidth = 2.5.dp)
                         else Icon(Icons.Rounded.Refresh, "Buscar capítulos nuevos", tint = LectorColors.Text)
                     }
                     Box {

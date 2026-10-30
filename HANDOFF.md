@@ -750,3 +750,9 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2az. PASO 52 (0.41)
 - Quitado el efecto Polvo (al usuario no le gustó: «parece PowerPoint»). Próximo: rehacer desde cero la capa de diseño/animaciones (sin tocar la lógica).
+
+## 2ba. PASO 53 (0.42) — Rediseño, entrega 1: base (mezcla Mochy + Material 3 Expressive)
+- Decisión del usuario: «Mezcla» (movimiento y cristal de Mochy + componentes y formas de M3 Expressive), entregas por pantallas. Se queda en Compose BOM 2024.10 (sin APIs Expressive oficiales): las piezas se hacen a mano en ui/Expresivo.kt.
+- Expresivo.kt: Muelles (MotionScheme expressive: espacial 0.8/380, rápido 0.6/800, efectos 1/1600), BotonExpresivo (píldora que cuadra esquinas al pulsar; relleno/tonal/contorno/texto), GrupoBotones (botones conectados; el elegido se vuelve píldora y crece), IndicadorCarga (forma de lóbulos que gira y cambia de figura; sustituye a todos los CircularProgressIndicator), DeslizadorExpresivo (pista de 16 dp con asa vertical; Ajustes del visor y barra del lector).
+- PillButton → BotonExpresivo; PestanasPildora → GrupoBotones; Interruptor → estilo Expressive (botón que crece con visto).
+- Container transform (Mochy): Modifier.origenTransicion() en portadas (catálogo, biblioteca en cuadrícula, búsqueda global) guarda su rectángulo; la ficha nace recortada a esa portada y se expande con muelle 0.88/150, y vuelve a ella al cerrar (560 ms, CierreEasing). Modifier.contenedor en LectorApp.

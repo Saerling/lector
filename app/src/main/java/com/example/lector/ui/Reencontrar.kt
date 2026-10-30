@@ -23,7 +23,6 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -159,7 +158,7 @@ fun FuenteNoDisponible(
                     }
                     Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (enviada.isNotBlank() && hechas < fuentes.size) {
-                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            IndicadorCarga(Modifier.size(14.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(10.dp))
                         }
                         LText(estado, LectorType.Label, color = LectorColors.Muted)
@@ -195,7 +194,7 @@ fun FuenteNoDisponible(
                     )
                     if (migrando) {
                         Spacer(Modifier.height(12.dp))
-                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        IndicadorCarga(Modifier.size(22.dp), strokeWidth = 2.dp)
                     }
                 }
             },

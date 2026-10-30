@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -165,7 +164,7 @@ fun MigrarScreen(
         }
         error?.let { LText(it, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Error) }
         if (buscando) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp)) }
+            Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { IndicadorCarga(Modifier.size(24.dp)) }
         } else if (resultados.isEmpty() && error == null) {
             LText("Sin resultados. Prueba con otro título.", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
         }
@@ -198,7 +197,7 @@ fun MigrarScreen(
                     Text("Se conservan categorías y portada; los capítulos leídos se emparejan por número. Las descargas de la fuente anterior no se mueven.")
                     if (migrando) {
                         Spacer(Modifier.size(12.dp))
-                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        IndicadorCarga(Modifier.size(22.dp), strokeWidth = 2.dp)
                     }
                 }
             },

@@ -28,6 +28,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.composed
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -328,7 +332,7 @@ fun Inicio(
                 awaitPointerEventScope {
                     while (true) {
                         val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                        ev.changes.firstOrNull { it.pressed && !it.previousPressed }?.let { OrigenToque.punto = it.position }
+                        ev.changes.firstOrNull { it.pressed && !it.previousPressed }?.let { OrigenToque.punto = it.position; OrigenToque.rect = null }
                     }
                 }
             }
@@ -496,12 +500,22 @@ fun Inicio(
                 AnimatedVisibility(
                     visible = r in pila && detalleId == null,
                     // La página «crece» al abrirse (muelle suave, interrumpible) y se encoge al cerrarse.
-                    enter = if (Mov.reducido) fadeIn(tween(120)) else scaleIn(spring(dampingRatio = 0.88f, stiffness = 150f), initialScale = 0.86f, transformOrigin = OrigenToque.origen()) +
-                        fadeIn(tween(240)),
-                    exit = if (Mov.reducido) fadeOut(tween(100)) else scaleOut(tween(420, easing = CierreEasing), targetScale = 0.88f) + fadeOut(tween(300, easing = CierreEasing)),
+                    // Si se abrió tocando una portada (ficha), la página crece DESDE esa portada (container transform de
+                    // Mochy); si no, crece desde el punto tocado.
+                    enter = if (Mov.reducido) fadeIn(tween(120)) else if (r == Ruta.Ficha && OrigenToque.rect != null) fadeIn(tween(90))
+                        else scaleIn(spring(dampingRatio = 0.88f, stiffness = 150f), initialScale = 0.86f, transformOrigin = OrigenToque.origen()) + fadeIn(tween(240)),
+                    exit = if (Mov.reducido) fadeOut(tween(100)) else if (r == Ruta.Ficha) fadeOut(tween(200, delayMillis = 380))
+                        else scaleOut(tween(420, easing = CierreEasing), targetScale = 0.88f) + fadeOut(tween(300, easing = CierreEasing)),
                 ) {
+                    val rectOrigen = remember { if (r == Ruta.Ficha && !Mov.reducido) OrigenToque.rect else null }
+                    val p by transition.animateFloat(
+                        transitionSpec = {
+                            if (targetState == androidx.compose.animation.EnterExitState.Visible) spring(0.88f, 150f, 0.001f)
+                            else tween(ContenedorCierreMs, easing = CierreEasing)
+                        }, label = "contenedor",
+                    ) { if (it == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
                     // Fondo opaco y toques propios: la pantalla de debajo no se ve ni recibe toques.
-                    Box(Modifier.fillMaxSize().background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {
+                    Box(Modifier.fillMaxSize().contenedor(rectOrigen) { p }.background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {
                         when (r) {
                         Ruta.FuenteDetalle -> FuenteDetalleScreen(
                             ext, fuenteId ?: 0L,
@@ -620,9 +634,48 @@ val CierreEasing = CubicBezierEasing(0.4f, 0f, 0.1f, 1f)
 
 /** Último punto tocado, como origen de la pantalla que se abre (efecto «la portada crece hasta ser la página»). */
 object OrigenToque {
+    /** Portada tocada (su rectángulo en la ventana), si el toque fue sobre una: la ficha crece desde ella. */
+    var rect: androidx.compose.ui.geometry.Rect? = null
     var punto = androidx.compose.ui.geometry.Offset.Unspecified
     var tam = androidx.compose.ui.unit.IntSize.Zero
     fun origen(): androidx.compose.ui.graphics.TransformOrigin =
         if (!punto.isSpecified || tam.width == 0 || tam.height == 0) androidx.compose.ui.graphics.TransformOrigin.Center
         else androidx.compose.ui.graphics.TransformOrigin((punto.x / tam.width).coerceIn(0f, 1f), (punto.y / tam.height).coerceIn(0f, 1f))
 }
+
+const val ContenedorCierreMs = 560
+
+/** Marca una portada como origen del «container transform»: al pulsarla se guarda su rectángulo. */
+fun Modifier.origenTransicion(): Modifier = composed {
+    val c = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
+    this.then(androidx.compose.ui.Modifier.onGloballyPositioned { c[0] = it }).pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                if (ev.changes.any { it.pressed && !it.previousPressed }) c[0]?.takeIf { it.isAttached }?.let { OrigenToque.rect = it.boundsInRoot() }
+            }
+        }
+    }
+}
+
+/**
+ * Container transform (Mochy): con [p] = 0 la página ocupa exactamente la portada de origen (mismo ancho, recortada a
+ * su alto y con sus esquinas); con [p] = 1, la pantalla entera. Se escala por el ancho desde arriba.
+ */
+fun Modifier.contenedor(rect: androidx.compose.ui.geometry.Rect?, p: () -> Float): Modifier =
+    if (rect == null) this else this.graphicsLayer {
+        val t = p()
+        if (t >= 0.999f || size.width <= 0f) return@graphicsLayer
+        val e0 = rect.width / size.width
+        val e = e0 + (1f - e0) * t
+        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+        scaleX = e; scaleY = e
+        translationX = rect.left * (1f - t)
+        translationY = rect.top * (1f - t)
+        val altoVisible = (rect.height / e0) + (size.height - rect.height / e0) * t
+        val radio = (16.dp.toPx() / e0) * (1f - t)
+        shape = androidx.compose.foundation.shape.GenericShape { s, _ ->
+            addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, 0f, s.width, altoVisible.coerceAtMost(s.height), androidx.compose.ui.geometry.CornerRadius(radio)))
+        }
+        clip = true
+    }

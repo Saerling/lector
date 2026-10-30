@@ -56,7 +56,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -626,7 +625,7 @@ fun FichaMangaScreen(
                                         if (abriendoRec == r.id) Box(
                                             Modifier.matchParentSize().clip(SuaveShape(12.dp)).background(Color.Black.copy(alpha = 0.5f)),
                                             Alignment.Center,
-                                        ) { CircularProgressIndicator(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) }
+                                        ) { IndicadorCarga(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) }
                                     }
                                     Spacer(Modifier.height(6.dp))
                                     LText(r.titulo, LectorType.Label, maxLines = 2)
@@ -776,7 +775,7 @@ fun FichaMangaScreen(
             if (caps) item {
                 Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) {
                     when {
-                        cargando -> if (fi == null) BonesCapitulos() else CircularProgressIndicator(Modifier.size(28.dp))
+                        cargando -> if (fi == null) BonesCapitulos() else IndicadorCarga(Modifier.size(28.dp))
                         error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             LText(error!!, LectorType.Label, color = LectorColors.Error)
                             Spacer(Modifier.height(10.dp))

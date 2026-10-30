@@ -237,16 +237,24 @@ fun Marca(marcada: Boolean) {
  */
 @Composable
 fun Interruptor(activado: Boolean, onChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier) {
-    val gris = Color(0xFF8E8E93)
-    val pista by animateColorAsState(if (activado) gris else Color.Transparent, tween(150), label = "pista")
-    val borde by animateColorAsState(if (activado) Color.Transparent else gris.copy(alpha = 0.45f), tween(150), label = "borde")
-    val boton by animateColorAsState(if (activado) Color.White else gris, tween(150), label = "boton")
-    val x by animateDpAsState(if (activado) 52.dp - 24.dp - 4.dp else 4.dp, tween(150), label = "x")
+    // Interruptor Expressive: apagado, botón pequeño gris en pista con borde; encendido, pista de acento y botón
+    // grande con un visto. El botón crece, se mueve y cambia de color con muelles.
+    val acento = MaterialTheme.colorScheme.primary
+    val gris = LectorColors.Muted
+    val pista by animateColorAsState(if (activado) acento else Color.Transparent, Muelles.efectos(), label = "pista")
+    val borde by animateColorAsState(if (activado) Color.Transparent else gris, Muelles.efectos(), label = "borde")
+    val boton by animateColorAsState(if (activado) MaterialTheme.colorScheme.onPrimary else gris, Muelles.efectos(), label = "boton")
+    val tam by animateDpAsState(if (activado) 24.dp else 16.dp, Muelles.espacialRapido(), label = "tam")
+    val x by animateDpAsState(if (activado) 52.dp - 24.dp - 4.dp else 8.dp, Muelles.espacialRapido(), label = "x")
     Box(
         modifier.size(52.dp, 32.dp)
             .then(if (onChange != null) Modifier.toggleable(activado, role = Role.Switch, onValueChange = { Tacto.alternar(it); onChange(it) }) else Modifier)
-            .clip(CircleShape).background(pista).border(1.dp, borde, CircleShape),
-    ) { Box(Modifier.align(Alignment.CenterStart).offset(x = x).size(24.dp).clip(CircleShape).background(boton)) }
+            .clip(CircleShape).background(pista).border(2.dp, borde, CircleShape),
+    ) {
+        Box(Modifier.align(Alignment.CenterStart).offset(x = x + (24.dp - tam) / 2).size(tam).clip(CircleShape).background(boton), Alignment.Center) {
+            if (activado) Icon(Icons.Rounded.Check, null, tint = acento, modifier = Modifier.size(16.dp))
+        }
+    }
 }
 
 @Composable

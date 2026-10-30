@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -167,7 +166,7 @@ private fun DialogoAnadirRepo(ext: ExtManager, cerrar: () -> Unit) {
                 if (trabajando) {
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        IndicadorCarga(Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(12.dp))
                         Text("Comprobando el listado…")
                     }
@@ -603,7 +602,7 @@ private fun NavegarFuente(
             itemsIndexed(visibles, key = { _, m -> m.url }) { i, m ->
                 val esta = "${f.id}|${m.url}" in enBiblioteca
                 // Mantener pulsado = añadir o quitar de la biblioteca (como en Komikku).
-                val mod = Modifier.entrada(i % 12).press3D().pressable(onLongClick = { alternarEnBiblioteca(ctx, almacen, f, m) }) { onManga(m) }
+                val mod = Modifier.entrada(i % 12).origenTransicion().press3D().pressable(onLongClick = { alternarEnBiblioteca(ctx, almacen, f, m) }) { onManga(m) }
                 if (enLista) Row(mod, verticalAlignment = Alignment.CenterVertically) {
                     ImagenRemota(m.portadaUrl, Modifier.width(52.dp).aspectRatio(2f / 3f).clip(SuaveShape(10.dp)), motor.cabeceras(f), fuenteId = f.id)
                     Spacer(Modifier.width(14.dp))
@@ -635,7 +634,7 @@ private fun NavegarFuente(
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), Alignment.Center) {
                     when {
-                        cargando -> CircularProgressIndicator(Modifier.size(24.dp))
+                        cargando -> IndicadorCarga(Modifier.size(24.dp))
                         hay && lista.isNotEmpty() -> PillButton(if (error != null) "Reintentar" else "Cargar más", Icons.Rounded.Add, {
                             error = null
                             scope.launch { cargarMas() }
