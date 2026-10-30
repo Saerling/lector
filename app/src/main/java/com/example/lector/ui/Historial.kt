@@ -147,7 +147,6 @@ fun HistorialScreen(
             text = { Text("«${item.titulo}» dejará de aparecer aquí. Tu progreso de lectura no se borra.") },
             confirmButton = {
                 TextButton(onClick = {
-                    scope.launch { Polvo.desintegrar("h_" + item.clave) }
                     when (item) {
                         is ItemHistorial.Local -> almacen.quitarDelHistorial(item.comic.id)
                         is ItemHistorial.EnLinea -> almacen.quitarHistorialLinea(item.entrada.fuenteId, item.entrada.urlManga)
@@ -175,7 +174,7 @@ private var abrirMangaHist: (EntradaHistorial) -> Unit = {}
 @Composable
 private fun FilaHistorial(item: ItemHistorial, almacen: Almacen, hora: String, alAbrir: () -> Unit, alQuitar: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().polvo("h_" + item.clave).resaltable(onLongClick = alQuitar, onClick = alAbrir).padding(start = 24.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        Modifier.fillMaxWidth().resaltable(onLongClick = alQuitar, onClick = alAbrir).padding(start = 24.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val portada = Modifier.width(52.dp).aspectRatio(2f / 3f)

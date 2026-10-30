@@ -287,8 +287,6 @@ fun ActualizacionesScreen(
                     seleccion = emptySet()
                 },
                 AccionBarra(Icons.Rounded.Delete, "Quitar") {
-                    val ids = seleccion.toList()
-                    scope.launch { ids.forEach { launch { Polvo.desintegrar("a_$it") } } }
                     almacen.quitarActualizaciones(seleccion)
                     seleccion = emptySet()
                 },
@@ -384,7 +382,6 @@ private fun FilaActualizacion(
     Row(
         Modifier.fillMaxWidth()
             .background(if (seleccionado) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
-            .polvo("a_" + clave(a))
             .resaltable(onLongClick = onLargo, onClick = onClick)
             .padding(start = if (sangria) 48.dp else 24.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

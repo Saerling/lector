@@ -747,3 +747,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Ficha a dos columnas en tablet (≥ 840 dp, como MangaScreenLargeImpl de Komikku): el contenido de la lista es la lambda `contenido(info, caps)`; la cabecera, el parallax y «Ver recomendaciones» siguen a la columna de información (listaCab).
 - BarraDesplazamiento generalizada (BarraBase) con versión para LazyGridState: barra rápida también en la biblioteca en cuadrícula.
 - Correcciones de la revisión: Polvo.reconstruir siempre vuelve a mostrar el elemento (finally), máx. 12 efectos y ≤ ~1400 trozos por efecto, ids de cabecera por manga, sin fotograma fantasma; el total del anillo ya no usa Odometro por fotograma.
+
+## 2az. PASO 52 (0.41)
+- Quitado el efecto Polvo (al usuario no le gustó: «parece PowerPoint»). Próximo: rehacer desde cero la capa de diseño/animaciones (sin tocar la lógica).

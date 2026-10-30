@@ -327,14 +327,13 @@ fun FichaMangaScreen(
     fun alternarBiblioteca() {
         if (f == null || motor == null || guardando) return
         if (enBiblioteca != null) {
-            scope.launch { Polvo.desintegrar("cabecera_" + tituloFicha) } // se va «en polvo»
             almacen.quitarEnLinea(f.id, manga.url)
             alRecargar()
             Avisos.mostrar("Quitado de la biblioteca")
             return
         }
         // ¿Ya está en la biblioteca desde otra fuente? Entonces se pregunta antes (ver, migrar o añadir igualmente).
-        Duplicados.comprobar(almacen, f, manga, fi?.detalle?.titulo ?: manga.titulo) { anadirABiblioteca(); scope.launch { Polvo.reconstruir("cabecera_" + tituloFicha) } }
+        Duplicados.comprobar(almacen, f, manga, fi?.detalle?.titulo ?: manga.titulo) { anadirABiblioteca() }
     }
 
     if (f == null || motor == null) {
@@ -1215,7 +1214,7 @@ private fun CabeceraFicha(
     val t by animateFloatAsState(if (entro) 1f else 0f, tween(600), label = "entradaFicha")
     val aparece by animateFloatAsState(if (portadaLista) 1f else 0f, tween(700), label = "portadaFicha")
     // clipToBounds: con el parallax la portada se corría hacia abajo y asomaba por debajo de la cabecera.
-    Box(Modifier.fillMaxWidth().height(560.dp).polvo("cabecera_" + titulo).clipToBounds()) {
+    Box(Modifier.fillMaxWidth().height(560.dp).clipToBounds()) {
         ImagenRemota(
             portada,
             Modifier.fillMaxSize().graphicsLayer {
