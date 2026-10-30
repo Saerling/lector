@@ -12,9 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -159,7 +157,7 @@ fun ActualizacionesScreen(
                         Box(Modifier.size(48.dp).pressable { menu = true }, Alignment.Center) {
                             Icon(Icons.Rounded.MoreVert, "Más", tint = LectorColors.Text)
                         }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        MenuShiori(expanded = menu, onDismissRequest = { menu = false }) {
                             if (almacen.erroresActualizacion.isNotEmpty()) {
                                 DropdownMenuItem(
                                     text = { Text("Errores de la última revisión (${almacen.erroresActualizacion.size})") },
@@ -208,7 +206,7 @@ fun ActualizacionesScreen(
                 } else {
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
                         grupos.forEach { (dia, mangas) ->
-                            item(key = "d_$dia") {
+                            item(key = "d_$dia", contentType = 0) {
                                 LText(
                                     etiquetaDia(dia), LectorType.Section.copy(fontSize = 15.sp),
                                     Modifier.padding(start = 24.dp, end = 24.dp, top = 18.dp, bottom = 6.dp),
@@ -220,7 +218,7 @@ fun ActualizacionesScreen(
                                 val kGrupo = "$dia|${primera.fuenteId}|${primera.urlManga}"
                                 val comic = comics["${primera.fuenteId}|${primera.urlManga}"]
                                 if (filas.size == 1) {
-                                    item(key = "c_${clave(primera)}") {
+                                    item(key = "c_${clave(primera)}", contentType = 1) {
                                         FilaActualizacion(
                                             primera, comic, almacen, ext, leidos, clave(primera) in seleccion, seleccion.isNotEmpty(),
                                             onClick = { if (seleccion.isNotEmpty()) alternar(primera) else alAbrir(primera) },
@@ -229,7 +227,7 @@ fun ActualizacionesScreen(
                                     }
                                 } else {
                                     val abierto = kGrupo in abiertos
-                                    item(key = "g_$kGrupo") {
+                                    item(key = "g_$kGrupo", contentType = 2) {
                                         CabeceraGrupo(
                                             primera, comic, almacen, filas.size, filas.count { ext.esLeido(it.fuenteId, it.capUrl) }, abierto,
                                             seleccionado = filas.all { clave(it) in seleccion },
@@ -242,7 +240,7 @@ fun ActualizacionesScreen(
                                             onLargo = { seleccion = seleccion + filas.map { clave(it) } },
                                         )
                                     }
-                                    if (abierto) items(filas, key = { "c_${clave(it)}" }) { a ->
+                                    if (abierto) itemsAnimados(filas, key = { "c_${clave(it)}" }, contentType = { 1 }) { a ->
                                         FilaActualizacion(
                                             a, comic, almacen, ext, leidos, clave(a) in seleccion, seleccion.isNotEmpty(),
                                             onClick = { if (seleccion.isNotEmpty()) alternar(a) else alAbrir(a) },
@@ -295,7 +293,7 @@ fun ActualizacionesScreen(
     }
 
     if (confirmarLimpiar) {
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { confirmarLimpiar = false },
             title = { Text("¿Borrar las actualizaciones?") },
             text = { Text("Solo se vacía esta lista. Tu biblioteca y tu progreso no cambian.") },
@@ -305,7 +303,7 @@ fun ActualizacionesScreen(
     }
 
     if (verErrores) {
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { verErrores = false },
             title = { Text("No se pudieron revisar") },
             text = {

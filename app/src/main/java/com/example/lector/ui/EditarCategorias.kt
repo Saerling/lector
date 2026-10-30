@@ -13,11 +13,8 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,10 +65,7 @@ fun EditarCategoriasScreen(almacen: Almacen, onBack: () -> Unit) {
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(LectorColors.PillFill),
-                    Alignment.Center,
-                ) { Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text) }
+                BotonAtras(onBack)
                 Spacer(Modifier.width(14.dp))
                 LText("Editar categorías", LectorType.Display.copy(fontSize = 26.sp), maxLines = 1)
             }
@@ -173,7 +167,7 @@ fun EditarCategoriasScreen(almacen: Almacen, onBack: () -> Unit) {
         )
     }
     borrar?.let { c ->
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { borrar = null },
             title = { Text("¿Borrar «${c.nombre}»?") },
             text = { Text("Los mangas y cómics no se borran, solo pierden esta etiqueta.") },
@@ -195,10 +189,10 @@ private fun BotonIcono(icono: androidx.compose.ui.graphics.vector.ImageVector, d
 @Composable
 private fun DialogoNombreCategoria(titulo: String, inicial: String, alAceptar: (String) -> Unit, alCancelar: () -> Unit) {
     var texto by remember { mutableStateOf(inicial) }
-    AlertDialog(
+    DialogoAlerta(
         onDismissRequest = alCancelar,
         title = { Text(titulo) },
-        text = { OutlinedTextField(value = texto, onValueChange = { texto = it }, singleLine = true, label = { Text("Nombre") }) },
+        text = { CampoTextoShiori(value = texto, onValueChange = { texto = it }, singleLine = true, label = { Text("Nombre") }) },
         confirmButton = { TextButton(onClick = { alAceptar(texto) }) { Text("Aceptar") } },
         dismissButton = { TextButton(onClick = alCancelar) { Text("Cancelar") } },
     )
@@ -238,7 +232,7 @@ fun DialogoAsignarCategorias(
                                 .padding(horizontal = 16.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Checkbox(checked = marcada, onCheckedChange = { sel = if (marcada) sel - c.id else sel + c.id })
+                            CasillaShiori(checked = marcada, onCheckedChange = { sel = if (marcada) sel - c.id else sel + c.id })
                             Spacer(Modifier.width(12.dp))
                             LText(c.nombre, LectorType.Body.copy(fontSize = 16.sp), maxLines = 1)
                         }

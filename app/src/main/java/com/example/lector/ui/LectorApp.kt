@@ -337,7 +337,7 @@ fun Inicio(
             // Las pestañas se deslizan un octavo de pantalla hacia el lado de la pestaña nueva, con un fundido.
             transitionSpec = {
                 val derecha = targetState.ordinal > initialState.ordinal
-                ContentTransform(
+                if (Mov.reducido) ContentTransform(fadeIn(tween(120)), fadeOut(tween(100))) else ContentTransform(
                     slideInHorizontally(tween(260, easing = EnfasisEasing)) { if (derecha) it / 8 else -it / 8 } + fadeIn(tween(200)),
                     slideOutHorizontally(tween(260, easing = EnfasisEasing)) { if (derecha) -it / 8 else it / 8 } + fadeOut(tween(200)),
                 )
@@ -406,7 +406,7 @@ fun Inicio(
         AnimatedContent(
             targetState = capa, label = "capa",
             transitionSpec = {
-                ContentTransform(
+                if (Mov.reducido) ContentTransform(fadeIn(tween(120)), fadeOut(tween(100))) else ContentTransform(
                     slideInHorizontally(tween(330, easing = EnfasisEasing)) { it / 8 } +
                         scaleIn(tween(330, easing = EnfasisEasing), initialScale = 0.96f) +
                         fadeIn(tween(260, easing = EnfasisEasing)),
@@ -482,9 +482,9 @@ fun Inicio(
                 AnimatedVisibility(
                     visible = r in pila && detalleId == null,
                     // La página «crece» al abrirse (muelle suave, interrumpible) y se encoge al cerrarse.
-                    enter = scaleIn(spring(dampingRatio = 0.88f, stiffness = 150f), initialScale = 0.86f) +
+                    enter = if (Mov.reducido) fadeIn(tween(120)) else scaleIn(spring(dampingRatio = 0.88f, stiffness = 150f), initialScale = 0.86f) +
                         fadeIn(tween(240)),
-                    exit = scaleOut(tween(420, easing = CierreEasing), targetScale = 0.88f) + fadeOut(tween(300, easing = CierreEasing)),
+                    exit = if (Mov.reducido) fadeOut(tween(100)) else scaleOut(tween(420, easing = CierreEasing), targetScale = 0.88f) + fadeOut(tween(300, easing = CierreEasing)),
                 ) {
                     // Fondo opaco y toques propios: la pantalla de debajo no se ve ni recibe toques.
                     Box(Modifier.fillMaxSize().background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {

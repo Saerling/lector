@@ -8,8 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -40,7 +38,7 @@ fun ColaDescargasScreen(almacen: Almacen, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            BotonRedondoTema(Icons.Rounded.ArrowBack, "Atrás", onBack)
+            BotonAtras(onBack)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 LText("Descargas", LectorType.Display.copy(fontSize = 28.sp), maxLines = 1)
@@ -62,7 +60,7 @@ fun ColaDescargasScreen(almacen: Almacen, onBack: () -> Unit) {
                 Spacer(Modifier.width(6.dp))
                 Box {
                     BotonRedondoTema(Icons.Rounded.MoreVert, "Más", { menu = true })
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    MenuShiori(expanded = menu, onDismissRequest = { menu = false }) {
                         if (Descargas.errores.isNotEmpty()) {
                             DropdownMenuItem(text = { Text("Reintentar las fallidas") }, onClick = { menu = false; Descargas.reintentar(ctx) })
                         }
@@ -128,7 +126,7 @@ fun ColaDescargasScreen(almacen: Almacen, onBack: () -> Unit) {
     }
 
     if (confirmar) {
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { confirmar = false },
             title = { Text("¿Cancelar todas las descargas?") },
             text = { Text("Se vacía la cola. Lo que ya está descargado se queda.") },

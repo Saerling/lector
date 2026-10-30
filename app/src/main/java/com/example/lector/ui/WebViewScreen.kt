@@ -57,10 +57,7 @@ fun WebViewScreen(url: String, tituloInicial: String, cabeceras: Map<String, Str
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier.size(44.dp).pressable { alVolver() }.clip(CircleShape).background(LectorColors.PillFill),
-                Alignment.Center,
-            ) { Icon(Icons.Rounded.ArrowBack, "Cerrar", tint = LectorColors.Text) }
+            BotonAtras({ alVolver() })
             Spacer(Modifier.width(14.dp))
             LText(titulo, LectorType.Section.copy(fontSize = 18.sp), Modifier.weight(1f), maxLines = 1)
             Box(

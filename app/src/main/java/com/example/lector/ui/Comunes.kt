@@ -133,7 +133,7 @@ fun FilaTri(titulo: String, estado: Tri, onCambio: (Tri) -> Unit) {
                     when (estado) {
                         Tri.IGNORAR -> Color.Transparent
                         Tri.INCLUIR -> acento
-                        Tri.EXCLUIR -> Color(0xFFE57373)
+                        Tri.EXCLUIR -> LectorColors.Error
                     },
                 )
                 .border(2.dp, if (estado == Tri.IGNORAR) LectorColors.Muted else Color.Transparent, SuaveShape(7.dp)),

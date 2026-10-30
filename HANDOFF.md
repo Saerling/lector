@@ -724,3 +724,11 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2au. PASO 47 (0.36)
 - Freno de fuentes descontroladas sin cerrar nada: FuentesEnUso registra el hilo de cada llamada; al pasar el timeout de la búsqueda global o si la memoria supera el 80 % (vigía cada 0,5 s solo mientras hay fuentes trabajando), el hilo queda marcado y CorteRed (primer interceptor de NetworkHelper) hace fallar su siguiente petición → el bucle de la extensión termina con IOException. Además se vacían CacheVisor/Imagenes (también en onTrimMemory).
+
+## 2av. PASO 48 (0.37) — Unificación de diseño y movimiento (auditado por 3 revisores + 1 verificador)
+- Nuevo ui/Unificado.kt: Mov (tiempos/curvas; con MovimientoReducido todo es fundido corto), CapaEncima (pantallas encima con la transición de las capas, bloquea «atrás» mientras sale), DialogoAlerta (sustituye a los ~40 AlertDialog de Material: tarjeta Shiori animada), MenuShiori, CasillaShiori, CampoTextoShiori, itemsAnimados/itemsIndexedAnimados (animateItem).
+- Sustituidos en todos los ui/*.kt; botones atrás unificados en BotonAtras; rojo de error → LectorColors.Error.
+- Capas sin animación (WebView, Editar categorías, Ajustes de fuente, Migrar en la ficha; WebView del lector) → CapaEncima. LectorApp (pestañas, capas, pila) respeta MovimientoReducido. Pliegue de títulos 900 → 340 ms.
+- Listas con animación de entrada/recolocación y contentType: Historial, Actualizaciones (grupos), Biblioteca (lista y cuadrícula), capítulos de la ficha. Biblioteca: idioma por fuente en un mapa (antes búsqueda lineal por manga).
+- De Komikku: guardar progreso al salir del lector (solo si ya se colocó), precarga de las 2 primeras páginas del capítulo siguiente, slider con toque háptico y salto solo al cambiar de página, contentType en la tira, caché de portadas sensible al tamaño (la portada grande ya no sale borrosa).
+- Pendiente (de la auditoría): cancelar cargas fuera de pantalla con prioridad a lo visible, barra de desplazamiento rápido en biblioteca/capítulos, búsqueda en Ajustes, hojas como diálogo en tablet, ficha a dos columnas en tablet, aviso de capítulos que faltan en las transiciones, CampoBusqueda/Deslizador compartidos, cabecera plegable para pantallas con listas.

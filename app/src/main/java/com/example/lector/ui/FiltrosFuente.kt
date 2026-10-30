@@ -16,10 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TriStateCheckbox
@@ -93,7 +91,7 @@ private fun FilaFiltro(filtro: Filter<*>, tick: Int, alCambiar: () -> Unit) {
         }
         is Filter.Text -> {
             var texto by remember(filtro) { mutableStateOf(filtro.state) }
-            OutlinedTextField(
+            CampoTextoShiori(
                 value = texto,
                 onValueChange = { texto = it; filtro.state = it },
                 label = { Text(filtro.name) },
@@ -129,7 +127,7 @@ private fun FilaFiltro(filtro: Filter<*>, tick: Int, alCambiar: () -> Unit) {
         // Etiquetas con autocompletado (solo extensiones de TachiyomiSY): se escriben separadas por comas.
         is Filter.AutoComplete -> {
             var texto by remember(filtro) { mutableStateOf(filtro.state.joinToString(", ")) }
-            OutlinedTextField(
+            CampoTextoShiori(
                 value = texto,
                 onValueChange = { nuevo ->
                     texto = nuevo
@@ -163,7 +161,7 @@ private fun FilaSeleccion(filtro: Filter.Select<*>, alCambiar: () -> Unit) {
         LText(filtro.name, LectorType.Body, Modifier.weight(1f))
         Box {
             TextButton(onClick = { abierto = true }) { Text(opciones.getOrElse(filtro.state) { "" } + " ▾") }
-            DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }) {
+            MenuShiori(expanded = abierto, onDismissRequest = { abierto = false }) {
                 opciones.forEachIndexed { i, opcion ->
                     DropdownMenuItem(
                         text = { Text(opcion) },

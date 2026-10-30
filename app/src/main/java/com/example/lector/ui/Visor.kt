@@ -43,7 +43,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -295,6 +294,7 @@ fun Visor(
     val dividir = paginado && almacen.dividirDobles
 
     // Al cargar un capítulo: salta a la página que toca (la guardada, la última si se vuelve atrás, o la primera).
+    var posicionado by remember(cap.clave) { mutableStateOf(false) }
     LaunchedEffect(cap.clave, total) {
         val n = total ?: return@LaunchedEffect
         val pagina = when {
@@ -304,7 +304,7 @@ fun Visor(
         }
         irAlFinal = false
         primeraCarga = false
-        if (porScroll) { porScroll = false; return@LaunchedEffect }
+        if (porScroll) { porScroll = false; posicionado = true; return@LaunchedEffect }
         if (modo.paginado) {
             val idx = desfase + refs.indexOfFirst { it.indice == pagina }.coerceAtLeast(0)
             runCatching { pager.scrollToPage(idx) }
@@ -312,6 +312,7 @@ fun Visor(
             val idx = items.indexOfFirst { it is ItemVisor.Pagina && it.c == ci && it.ref.indice == pagina }
             if (idx >= 0) runCatching { lista.scrollToItem(idx) }
         }
+        posicionado = true
     }
 
     // Elemento actual (página o transición).
@@ -355,6 +356,12 @@ fun Visor(
         alPagina(ci, paginaReal.coerceIn(0, n - 1), n)
         if (paginaReal >= n - 1 && terminados.add(ci)) alTerminarCapitulo(ci)
     }
+    // Al salir del lector se guarda la página al momento (la espera de arriba podía perderla, como no pasa en Komikku).
+    // (Solo si ya se colocó en su página: si no, guardaría la 0 encima del progreso.)
+    val ultimoProgreso = rememberUpdatedState(Triple(ci, paginaReal, if (posicionado) total else null))
+    DisposableEffect(Unit) {
+        onDispose { val (c, p, n) = ultimoProgreso.value; if (n != null) alPagina(c, p.coerceIn(0, n - 1), n) }
+    }
 
     // Lectura continua (como Komikku): al llegar a la página de transición se pasa solo al capítulo siguiente, y al
     // volver a la del principio, al anterior (por su última página). Se ve un instante el «Siguiente: …».
@@ -393,7 +400,12 @@ fun Visor(
             } catch (_: Exception) {
             }
         }
-        if (paginaReal >= n - 3 && haySiguiente) runCatching { capitulos[ci + 1].origen.total() }
+        if (paginaReal >= n - 3 && haySiguiente) {
+            // Como Komikku: cerca del final se preparan ya las primeras páginas del capítulo siguiente.
+            val sig = capitulos[ci + 1].origen
+            val m = runCatching { sig.total() }.getOrNull() ?: 0
+            for (p in 0 until minOf(2, m)) try { CacheVisor.obtener(sig, p, 0, anchoDecodificar, recortar) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
+        }
     }
 
     // ---- Navegación ----
@@ -657,10 +669,17 @@ fun Visor(
                         Text("${if (tot > 0) paginaReal + 1 else 0}", style = LectorType.Label, color = TintaBarra, modifier = girar.widthIn(min = 24.dp), textAlign = TextAlign.Center)
                         if (tot > 1) {
                             var arrastre by remember { mutableStateOf<Float?>(null) }
+                            var ultimaP by remember { mutableIntStateOf(-1) }
                             Slider(
                                 value = arrastre ?: paginaReal.toFloat(),
-                                onValueChange = { arrastre = it; irAPagina(it.roundToInt()) },
-                                onValueChangeFinished = { arrastre = null },
+                                onValueChange = {
+                                    arrastre = it
+                                    // Solo al cambiar de página (no en cada píxel), con un toque háptico como Komikku.
+                                    val p = it.roundToInt()
+                                    if (ultimaP == -1) ultimaP = paginaReal
+                                    if (p != ultimaP) { ultimaP = p; Tacto.tic(); irAPagina(p) }
+                                },
+                                onValueChangeFinished = { arrastre = null; ultimaP = -1 },
                                 valueRange = 0f..(tot - 1).toFloat(),
                                 colors = SliderDefaults.colors(
                                     thumbColor = TintaBarra,
@@ -696,7 +715,7 @@ fun Visor(
     }
 
     // Al volver del WebView se recargan las páginas (por si se pasó un captcha o Cloudflare).
-    webCap?.let { u -> WebViewScreen(u, titulo, acciones.cabecerasWeb) { webCap = null; CacheVisor.vaciar(); recarga++ } }
+    CapaEncima(webCap) { u -> WebViewScreen(u, titulo, acciones.cabecerasWeb) { webCap = null; CacheVisor.vaciar(); recarga++ } }
 
     if (hoja) {
         HojaLector({ hoja = false }) {
@@ -718,7 +737,7 @@ fun Visor(
     }
 
     if (dialogoCaps) {
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { dialogoCaps = false },
             title = { Text("Capítulos") },
             text = {
@@ -1062,7 +1081,7 @@ private fun Tira(
             contentPadding = PaddingValues(horizontal = relleno),
             verticalArrangement = Arrangement.spacedBy(separacion),
         ) {
-            items(items.size, key = { claveItem(items.getOrNull(it), it) }) { i ->
+            items(items.size, key = { claveItem(items.getOrNull(it), it) }, contentType = { if (items.getOrNull(it) is ItemVisor.Pagina) 0 else 1 }) { i ->
                 when (val it = items[i]) {
                     is ItemVisor.Pagina -> PaginaTira((capitulos.getOrNull(it.c) ?: cap).origen, it.ref.indice, anchoMax, recortar, filtro, fondo)
                     is ItemVisor.Transicion -> {
@@ -1143,7 +1162,7 @@ private fun MenuPagina(
             onCerrar()
         }
     }
-    AlertDialog(
+    DialogoAlerta(
         onDismissRequest = onCerrar,
         title = { Text("Página ${pagina + 1}") },
         text = {

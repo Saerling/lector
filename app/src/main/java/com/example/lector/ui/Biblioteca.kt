@@ -21,9 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -128,6 +125,8 @@ fun BibliotecaScreen(
     val conSeguimiento = remember(version) { almacen.idsConSeguimiento() }
     val descargas = remember(version, Descargas.version.value) { almacen.conteoDescargas() }
     val fuentes = ext.fuentes
+    // Idioma por fuente, calculado una vez (antes se buscaba en toda la lista por cada manga en cada repintado).
+    val idiomaDe = remember(fuentes) { fuentes.associate { it.id to it.lang } }
     fun nombreFuente(c: Comic) = if (!c.enLinea) "Local" else fuentes.firstOrNull { it.id == c.fuenteId }?.nombre ?: "Fuente ${c.fuenteId}"
     fun descargasDe(c: Comic) = if (!c.enLinea) 0 else descargas["${c.fuenteId}|${c.urlManga}"] ?: 0
 
@@ -288,7 +287,7 @@ fun BibliotecaScreen(
                         Box(Modifier.size(44.dp).pressable { menu = true }, Alignment.Center) {
                             Icon(Icons.Rounded.MoreVert, "Más", tint = LectorColors.Text)
                         }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        MenuShiori(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text("Buscar capítulos nuevos") }, onClick = { menu = false; Actualizador.iniciar(ctx) })
                             if (grupoActual.categoriaId != null) {
                                 DropdownMenuItem(
@@ -363,9 +362,9 @@ fun BibliotecaScreen(
                         MensajeVacio(if (!q.vacia || filtrosActivos > 0) "Nada coincide con la búsqueda o los filtros." else "Esta categoría está vacía.")
                     } else if (almacen.vista == Vista.LISTA) {
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 190.dp)) {
-                            items(g.comics, key = { it.id }) { c ->
+                            itemsAnimados(g.comics, key = { it.id }) { c ->
                                 FilaBiblioteca(
-                                    c, almacen, c.id in seleccion, descargasDe(c), if (c.enLinea) fuentes.firstOrNull { it.id == c.fuenteId }?.lang else null,
+                                    c, almacen, c.id in seleccion, descargasDe(c), if (c.enLinea) idiomaDe[c.fuenteId] else null,
                                     onClick = { if (enSeleccion) alternar(c) else alAbrir(c) },
                                     onLargo = { alternar(c) }, onContinuar = { alLeer(c) },
                                 )
@@ -380,10 +379,10 @@ fun BibliotecaScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(if (almacen.vista == Vista.CUADRICULA_COMODA) 14.dp else 10.dp),
                         ) {
-                            items(g.comics, key = { it.id }) { c ->
+                            itemsAnimados(g.comics, key = { it.id }) { c ->
                                 TarjetaBiblioteca(
                                     c, almacen, almacen.vista, c.id in seleccion, descargasDe(c),
-                                    if (c.enLinea) fuentes.firstOrNull { it.id == c.fuenteId }?.lang else null,
+                                    if (c.enLinea) idiomaDe[c.fuenteId] else null,
                                     onClick = { if (enSeleccion) alternar(c) else alAbrir(c) },
                                     onLargo = { alternar(c) }, onContinuar = { alLeer(c) },
                                 )
@@ -410,7 +409,7 @@ fun BibliotecaScreen(
                     add(AccionBarra(Icons.Rounded.Delete, "Quitar") { confirmarBorrado = true })
                 },
             )
-            DropdownMenu(expanded = menuDescarga, onDismissRequest = { menuDescarga = false }) {
+            MenuShiori(expanded = menuDescarga, onDismissRequest = { menuDescarga = false }) {
                 DropdownMenuItem(text = { Text("Siguiente capítulo sin leer") }, onClick = { menuDescarga = false; descargar(true, 1) })
                 DropdownMenuItem(text = { Text("Siguientes 5 sin leer") }, onClick = { menuDescarga = false; descargar(true, 5) })
                 DropdownMenuItem(text = { Text("Todos los no leídos") }, onClick = { menuDescarga = false; descargar(true, null) })
@@ -483,7 +482,7 @@ fun BibliotecaScreen(
             }
         }
         var estados by remember { mutableStateOf(inicial) }
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { dialogoCategorias = false },
             title = { Text("Categorías") },
             text = {
@@ -526,7 +525,7 @@ fun BibliotecaScreen(
     if (confirmarBorrado) {
         var tambienDescargas by remember { mutableStateOf(false) }
         val unico = seleccionados.singleOrNull()
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { confirmarBorrado = false },
             title = { Text("Quitar de la biblioteca") },
             text = {
@@ -540,7 +539,7 @@ fun BibliotecaScreen(
                         Modifier.fillMaxWidth().pressable { tambienDescargas = !tambienDescargas }.padding(top = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Checkbox(checked = tambienDescargas, onCheckedChange = { tambienDescargas = it })
+                        CasillaShiori(checked = tambienDescargas, onCheckedChange = { tambienDescargas = it })
                         Text("Borrar también los capítulos descargados")
                     }
                 }

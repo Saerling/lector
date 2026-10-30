@@ -23,7 +23,6 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -93,7 +92,7 @@ fun FuenteNoDisponible(
 
     Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            BotonRedondoTema(Icons.Rounded.ArrowBack, "Atrás", onBack)
+            BotonAtras(onBack)
             Spacer(Modifier.width(16.dp))
             LText("Fuente no disponible", LectorType.Section, Modifier.weight(1f), maxLines = 1)
         }
@@ -185,7 +184,7 @@ fun FuenteNoDisponible(
     val sel = elegido
     if (sel != null && enBiblioteca != null) {
         val (f, m) = sel
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { if (!migrando) elegido = null },
             title = { Text("«${m.titulo}» en ${f.nombre}") },
             text = {

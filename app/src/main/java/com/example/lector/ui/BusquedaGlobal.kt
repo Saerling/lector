@@ -68,7 +68,7 @@ fun BusquedaGlobalScreen(
 
     Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            BotonRedondoTema(Icons.Rounded.ArrowBack, "Atrás", onBack)
+            BotonAtras(onBack)
             Spacer(Modifier.width(12.dp))
             Box(Modifier.weight(1f)) { CampoBusqueda(consulta, { consulta = it }, "Buscar en todas las fuentes") }
             Spacer(Modifier.width(8.dp))

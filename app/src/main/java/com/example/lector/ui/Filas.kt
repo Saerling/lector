@@ -88,7 +88,7 @@ fun rememberPliegue(scroll: ScrollState, entra: Dp = 24.dp, sale: Dp = 6.dp): St
             n
         }
     }
-    return animateFloatAsState(if (plegado) 1f else 0f, tween(900, easing = PliegueEasing), label = "pliegue")
+    return animateFloatAsState(if (plegado) 1f else 0f, if (Mov.reducido) tween(120) else tween(340, easing = EnfasisEasing), label = "pliegue")
 }
 
 /** Botón atrás redondo gris de 40 dp. */

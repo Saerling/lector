@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,7 +25,7 @@ fun DialogoActualizacion() {
     if (!NuevaVersion.verDialogo || v == null) return
     val ctx = LocalContext.current
     val paso = NuevaVersion.paso
-    AlertDialog(
+    DialogoAlerta(
         onDismissRequest = { if (paso != Paso.DESCARGANDO) NuevaVersion.cerrar() },
         title = { Text("Nueva versión disponible") },
         text = {

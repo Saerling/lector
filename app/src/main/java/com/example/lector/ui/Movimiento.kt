@@ -95,10 +95,7 @@ fun BarraSuperior(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(LectorColors.SobreImagen),
-                Alignment.Center
-            ) { Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text) }
+            BotonAtras(onBack)
             Spacer(Modifier.width(14.dp))
             LText(
                 titulo, LectorType.Display.copy(fontSize = 24.sp, letterSpacing = (-0.5).sp),

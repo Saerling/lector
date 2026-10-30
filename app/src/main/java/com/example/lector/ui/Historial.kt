@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -117,13 +116,13 @@ fun HistorialScreen(
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 190.dp)) {
                 grupos.forEach { (dia, lista) ->
-                    item(key = "dia_$dia") {
+                    item(key = "dia_$dia", contentType = 0) {
                         LText(
                             etiquetaDia(dia), LectorType.Section.copy(fontSize = 15.sp),
                             Modifier.padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 6.dp), color = LectorColors.Muted,
                         )
                     }
-                    items(lista, key = { it.clave }) { item ->
+                    itemsAnimados(lista, key = { it.clave }, contentType = { 1 }) { item ->
                         FilaHistorial(item, almacen, formatoHora.format(Date(item.tiempo)),
                             alAbrir = {
                                 when (item) {
@@ -140,7 +139,7 @@ fun HistorialScreen(
     }
 
     quitar?.let { item ->
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { quitar = null },
             title = { Text("Quitar del historial") },
             text = { Text("«${item.titulo}» dejará de aparecer aquí. Tu progreso de lectura no se borra.") },
@@ -158,7 +157,7 @@ fun HistorialScreen(
     }
 
     if (confirmarTodo) {
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { confirmarTodo = false },
             title = { Text("Borrar el historial") },
             text = { Text("Se vaciará el historial. Tu progreso de lectura no se borra.") },

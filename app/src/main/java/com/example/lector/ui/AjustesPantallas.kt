@@ -23,10 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -273,7 +270,7 @@ fun AjDescargasScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> Un
         FilaAjuste(Icons.Rounded.Delete, "Borrar todas las descargas", "Ocupan $espacio") { confirmar = true }
     }
     if (confirmar) {
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { confirmar = false },
             title = { Text("¿Borrar todas las descargas?") },
             text = { Text("Se borran los capítulos descargados. Podrás seguir leyéndolos online.") },
@@ -316,7 +313,7 @@ fun AjSeguimientoScreen(almacen: Almacen, onBack: () -> Unit) {
                     "2. Pega aquí su Client ID (un número) y pulsa «Iniciar sesión».",
                 LectorType.Label.copy(fontSize = 13.sp), Modifier.padding(24.dp, 8.dp), color = LectorColors.Muted,
             )
-            OutlinedTextField(
+            CampoTextoShiori(
                 value = clientId, onValueChange = { clientId = it.filter { c -> c.isDigit() } },
                 singleLine = true, label = { Text("Client ID") },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
@@ -372,14 +369,14 @@ fun AjExplorarScreen(almacen: Almacen, ext: ExtManager, onBack: () -> Unit, onRu
     if (idiomas) {
         val todos = (ext.disponibles.map { it.lang } + ext.instaladas.map { it.lang } + ext.idiomas + "all")
             .filter { it.isNotBlank() }.distinct().sortedBy { nombreIdioma(it) }
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { idiomas = false },
             title = { Text("Idiomas") },
             text = {
                 Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
                     todos.forEach { l ->
                         Row(Modifier.fillMaxWidth().pressable { ext.alternarIdioma(l) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = l in ext.idiomas, onCheckedChange = null)
+                            CasillaShiori(checked = l in ext.idiomas, onCheckedChange = null)
                             Spacer(Modifier.width(12.dp))
                             Text("${bandera(l)}  ${nombreIdioma(l)}")
                         }
@@ -534,7 +531,7 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
         }
     }
     resultado?.let {
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { resultado = null },
             title = { Text("Copia de seguridad") },
             text = { Text(it) },
@@ -586,7 +583,7 @@ fun AjAvanzadoScreen(almacen: Almacen, onBack: () -> Unit) {
         }
     }
     informe?.let { texto ->
-        androidx.compose.material3.AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { informe = null },
             title = { androidx.compose.material3.Text("Diagnóstico de extensiones") },
             text = {

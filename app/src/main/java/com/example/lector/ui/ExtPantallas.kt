@@ -27,12 +27,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -115,7 +113,7 @@ fun ListadosExtScreen(ext: ExtManager, onBack: () -> Unit) {
 
     if (anadir) DialogoAnadirRepo(ext) { anadir = false }
     borrar?.let { r ->
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { borrar = null },
             title = { Text("¿Quitar «${r.nombre}»?") },
             text = { Text("Las extensiones ya instaladas se quedan; solo desaparece este listado.") },
@@ -145,12 +143,12 @@ private fun DialogoAnadirRepo(ext: ExtManager, cerrar: () -> Unit) {
     var url by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var trabajando by remember { mutableStateOf(false) }
-    AlertDialog(
+    DialogoAlerta(
         onDismissRequest = { if (!trabajando) cerrar() },
         title = { Text("Añadir listado de extensiones") },
         text = {
             Column {
-                OutlinedTextField(
+                CampoTextoShiori(
                     value = url, onValueChange = { url = it; error = null }, singleLine = true,
                     enabled = !trabajando, isError = error != null,
                     label = { Text("Dirección URL del listado") },
@@ -447,9 +445,7 @@ private fun NavegarFuente(
 
     Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).pressable(onBack).clip(CircleShape).background(LectorColors.PillFill), Alignment.Center) {
-                Icon(Icons.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text)
-            }
+            BotonAtras(onBack)
             Spacer(Modifier.width(14.dp))
             LText(f.nombre, LectorType.Display.copy(fontSize = 26.sp), Modifier.weight(1f), maxLines = 1)
             // WebView del sitio, siempre a mano (como el icono de Komikku en la barra).
@@ -501,7 +497,7 @@ private fun NavegarFuente(
         }
         error?.let {
             Column(Modifier.padding(horizontal = 24.dp)) {
-                LText(it, LectorType.Label, color = Color(0xFFE57373))
+                LText(it, LectorType.Label, color = LectorColors.Error)
                 if (f.baseUrl.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -515,12 +511,12 @@ private fun NavegarFuente(
         if (guardar) {
             var nombre by remember { mutableStateOf(enviada.ifBlank { "Filtros" }) }
             var enNovedades by remember { mutableStateOf(true) }
-            AlertDialog(
+            DialogoAlerta(
                 onDismissRequest = { guardar = false },
                 title = { Text("Guardar búsqueda") },
                 text = {
                     Column {
-                        OutlinedTextField(nombre, { nombre = it }, label = { Text("Nombre") }, singleLine = true)
+                        CampoTextoShiori(nombre, { nombre = it }, label = { Text("Nombre") }, singleLine = true)
                         LText(if (aplicados != null) "Se guarda con los filtros puestos." else "Se guarda el texto buscado.", LectorType.Label, Modifier.padding(top = 8.dp), color = LectorColors.Muted)
                         FilaSwitch("Mostrar en Novedades", "Como una fila propia en Explorar → Novedades", enNovedades) { enNovedades = it }
                     }

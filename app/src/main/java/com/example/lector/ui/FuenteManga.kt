@@ -12,7 +12,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.OutlinedTextField
 import com.example.lector.Comic
 import com.example.lector.CacheFichas
 import com.example.lector.Anilist
@@ -57,9 +56,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -645,7 +642,7 @@ fun FichaMangaScreen(
                         // Menú de descargas en lote (como Komikku): siguiente, siguientes N, no leídos o todos.
                         Box {
                             BotonRedondoTema(Iconos.Descargar, "Descargar capítulos", { menuDescarga = true })
-                            DropdownMenu(expanded = menuDescarga, onDismissRequest = { menuDescarga = false }) {
+                            MenuShiori(expanded = menuDescarga, onDismissRequest = { menuDescarga = false }) {
                                 // La lista llega con lo más nuevo primero: "siguientes" = desde el primero sin leer hacia los nuevos.
                                 val opciones = listOf(
                                     "Siguiente capítulo" to fi.capitulos.slice((sig downTo maxOf(sig, 0)).toList()),
@@ -674,7 +671,7 @@ fun FichaMangaScreen(
                     LText("Ningún capítulo coincide con los filtros.", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
                 }
                 // La clave es el índice original del capítulo (único aunque la fuente repita direcciones).
-                itemsIndexed(visibles, key = { _, iv -> iv.index }) { pos, iv ->
+                itemsIndexedAnimados(visibles, key = { _, iv -> iv.index }, contentType = { _, _ -> "cap" }) { pos, iv ->
                     val i = iv.index
                     val c = iv.value
                     val clave = Descargas.clave(f, c)
@@ -843,7 +840,7 @@ fun FichaMangaScreen(
                             Modifier.size(44.dp).pressable { menuFicha = true }.clip(CircleShape).background(LectorColors.SobreImagen),
                             Alignment.Center,
                         ) { Icon(Icons.Rounded.MoreVert, "Más", tint = LectorColors.Text) }
-                        DropdownMenu(expanded = menuFicha, onDismissRequest = { menuFicha = false }) {
+                        MenuShiori(expanded = menuFicha, onDismissRequest = { menuFicha = false }) {
                             @Composable fun op(t: String, accion: () -> Unit) = DropdownMenuItem(text = { Text(t) }, onClick = { menuFicha = false; accion() })
                             op("Actualizar") { refrescando = true; recarga++ }
                             if (enBiblioteca != null) {
@@ -875,7 +872,7 @@ fun FichaMangaScreen(
         }
 
         // WebView del sitio, encima de la ficha.
-        webUrl?.let { u ->
+        CapaEncima(webUrl) { u ->
             Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
                 WebViewScreen(u, tituloFicha, motor.cabeceras(f)) { webUrl = null; recarga++ }
             }
@@ -883,7 +880,7 @@ fun FichaMangaScreen(
 
         // Sinopsis completa.
         if (descExpandida) {
-            AlertDialog(
+            DialogoAlerta(
                 onDismissRequest = { descExpandida = false },
                 title = { Text("Sinopsis") },
                 text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(descripcion.orEmpty()) } },
@@ -909,25 +906,25 @@ fun FichaMangaScreen(
         }
 
         // «Editar» abre la pantalla de editar categorías encima de la ficha; al volver reaparece el diálogo.
-        if (editandoCats) {
-            BackHandler { editandoCats = false; dialogoCats = true }
+        CapaEncima(editandoCats) {
+            BackHandler(editandoCats) { editandoCats = false; dialogoCats = true }
             Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
                 EditarCategoriasScreen(almacen) { editandoCats = false; dialogoCats = true }
             }
         }
 
         // Ajustes de la fuente, encima de la ficha.
-        if (ajustesFuente) {
-            val cfg = ext.configurables(f.pkg).firstOrNull { it.id == f.id }
+        CapaEncima(ajustesFuente) {
+            val cfg = remember { ext.configurables(f.pkg).firstOrNull { it.id == f.id } }
             if (cfg != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
-                BackHandler { ajustesFuente = false }
+                BackHandler(ajustesFuente) { ajustesFuente = false }
                 AjustesFuenteScreen(ext, f.pkg, cfg, f.nombre) { ajustesFuente = false; recarga++ }
             }
         }
         // Migrar a otra fuente: pantalla encima de la ficha.
         val comicMigrar = enBiblioteca
-        if (migrando && comicMigrar != null) {
-            BackHandler { migrando = false }
+        CapaEncima(if (migrando) comicMigrar else null) { comicMigrar ->
+            BackHandler(migrando) { migrando = false }
             Box(Modifier.fillMaxSize().background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {
                 MigrarScreen(
                     ext, almacen, comicMigrar, f, fi?.capitulos,
@@ -938,7 +935,7 @@ fun FichaMangaScreen(
         }
 
         quitarDescarga?.let { c ->
-            AlertDialog(
+            DialogoAlerta(
                 onDismissRequest = { quitarDescarga = null },
                 title = { Text("¿Quitar la descarga?") },
                 text = { Text("Se borrará el archivo descargado de «${nombreCapitulo(c)}». Podrás seguir leyéndolo online.") },
@@ -1018,10 +1015,10 @@ fun FichaMangaScreen(
 
     if (editandoNotas) {
         var t by remember { mutableStateOf(notas) }
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { editandoNotas = false },
             title = { Text("Notas") },
-            text = { OutlinedTextField(t, { t = it }, Modifier.fillMaxWidth().height(180.dp), placeholder = { Text("Lo que quieras recordar de este manga") }) },
+            text = { CampoTextoShiori(t, { t = it }, Modifier.fillMaxWidth().height(180.dp), placeholder = { Text("Lo que quieras recordar de este manga") }) },
             confirmButton = { TextButton(onClick = {
                 notas = t.trim(); editandoNotas = false
                 ctx.getSharedPreferences("notas", android.content.Context.MODE_PRIVATE).edit().putString(clNotas, notas).apply()
@@ -1029,7 +1026,7 @@ fun FichaMangaScreen(
             dismissButton = { TextButton(onClick = { editandoNotas = false }) { Text("Cancelar") } },
         )
     }
-    if (limpiar) AlertDialog(
+    if (limpiar) DialogoAlerta(
         onDismissRequest = { limpiar = false },
         title = { Text("Limpiar manga") },
         text = { Text("Se borran sus capítulos descargados, los leídos y la página por la que ibas. Sigue en tu biblioteca.") },
@@ -1073,15 +1070,15 @@ private fun DialogoEditarInfo(comic: Comic, almacen: Almacen, alRestablecer: () 
             Avisos.mostrar(if (ok) "Portada cambiada" else "No se pudo usar esa imagen")
         }
     }
-    AlertDialog(
+    DialogoAlerta(
         onDismissRequest = alCerrar,
         title = { Text("Editar información") },
         text = {
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(titulo, { titulo = it }, label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(autor, { autor = it }, label = { Text("Autor") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(generos, { generos = it }, label = { Text("Géneros (separados por comas)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(descripcion, { descripcion = it }, label = { Text("Descripción") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                CampoTextoShiori(titulo, { titulo = it }, label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                CampoTextoShiori(autor, { autor = it }, label = { Text("Autor") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                CampoTextoShiori(generos, { generos = it }, label = { Text("Géneros (separados por comas)") }, modifier = Modifier.fillMaxWidth())
+                CampoTextoShiori(descripcion, { descripcion = it }, label = { Text("Descripción") }, minLines = 3, modifier = Modifier.fillMaxWidth())
                 Text("Estado", style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(0, 1, 2, 4, 5, 6).forEach { e -> ChipSel(if (e == 0) "Desconocido" else estadoTexto(e), estado == e) { estado = e } }

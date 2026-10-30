@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -109,7 +108,7 @@ fun MigrarScreen(
         BackHandler { eligiendo = true }
         Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                BotonRedondoTema(Icons.Rounded.ArrowBack, "Fuentes", { eligiendo = true })
+                BotonAtras({ eligiendo = true })
                 Spacer(Modifier.width(14.dp))
                 LText("Migrar «${comic.titulo}»", LectorType.Section, Modifier.weight(1f), maxLines = 1)
             }
@@ -164,7 +163,7 @@ fun MigrarScreen(
             Spacer(Modifier.width(10.dp))
             PillButton("Buscar", Icons.Rounded.Search, { buscar(f, consulta) })
         }
-        error?.let { LText(it, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = Color(0xFFE57373)) }
+        error?.let { LText(it, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Error) }
         if (buscando) {
             Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp)) }
         } else if (resultados.isEmpty() && error == null) {
@@ -189,7 +188,7 @@ fun MigrarScreen(
     }
 
     elegido?.let { m ->
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { if (!migrando) elegido = null },
             title = { Text("¿Migrar a ${f.nombre}?") },
             text = {
@@ -279,7 +278,7 @@ internal fun SeleccionFuentes(ext: ExtManager, todas: List<FuenteUI>, inicial: S
     var filtro by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            BotonRedondoTema(Icons.Rounded.ArrowBack, "Atrás", onBack)
+            BotonAtras(onBack)
             Spacer(Modifier.width(14.dp))
             LText("Seleccionar fuentes", LectorType.Section, Modifier.weight(1f), maxLines = 1)
             BotonRedondoTema(Icons.Rounded.Star, "Solo las ancladas", {

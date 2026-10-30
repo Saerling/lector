@@ -24,10 +24,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -77,7 +74,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-private val Rojo = Color(0xFFE57373)
+private val Rojo get() = LectorColors.Error
 
 /** Pestaña "Explorar", como en Komikku: Fuentes · Novedades · Extensiones · Migrar. */
 @Composable
@@ -131,7 +128,7 @@ fun ExplorarScreen(
                 ) { LText("18", LectorType.Body.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp), color = color) }
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "Más", tint = LectorColors.Text) }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    MenuShiori(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text("Búsqueda global") }, onClick = { menu = false; onBuscarGlobal() })
                         DropdownMenuItem(text = { Text("Listados de extensiones") }, onClick = { menu = false; onRuta(Ruta.ListadosExt) })
                         DropdownMenuItem(text = { Text("Idiomas") }, onClick = { menu = false; dialogoIdiomas = true })
@@ -180,7 +177,7 @@ fun ExplorarScreen(
     if (dialogoNovedades) DialogoNovedades(ext) { dialogoNovedades = false }
 
     porConfiar?.let { e ->
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { porConfiar = null },
             title = { Text("¿Confiar en «${e.nombre}»?") },
             text = {
@@ -194,7 +191,7 @@ fun ExplorarScreen(
     if (dialogoIdiomas) {
         val todos = (ext.disponibles.map { it.lang } + ext.instaladas.map { it.lang } + ext.idiomas + "all")
             .filter { it.isNotBlank() }.distinct().sortedBy { nombreIdioma(it) }
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { dialogoIdiomas = false },
             title = { Text("Idiomas") },
             text = {
@@ -204,7 +201,7 @@ fun ExplorarScreen(
                             Modifier.fillMaxWidth().clickable { ext.alternarIdioma(l) }.padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Checkbox(checked = l in ext.idiomas, onCheckedChange = null)
+                            CasillaShiori(checked = l in ext.idiomas, onCheckedChange = null)
                             Spacer(Modifier.width(12.dp))
                             Text("${bandera(l)}  ${nombreIdioma(l)}")
                         }
@@ -498,7 +495,7 @@ private fun DialogoNovedades(ext: ExtManager, onCerrar: () -> Unit) {
     val todas = ext.fuentes
         .filter { (ext.mostrarNsfw || !it.nsfw) && (q.isBlank() || it.nombre.contains(q.trim(), ignoreCase = true)) }
         .sortedWith(compareBy({ it.nombre.lowercase() }, { it.lang }))
-    AlertDialog(
+    DialogoAlerta(
         onDismissRequest = onCerrar,
         title = { Text("Novedades") },
         text = {
@@ -514,7 +511,7 @@ private fun DialogoNovedades(ext: ExtManager, onCerrar: () -> Unit) {
                                 Modifier.fillMaxWidth().clickable { ext.alternarNovedad(f.id) }.padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Checkbox(checked = f.id in ext.novedades, onCheckedChange = { ext.alternarNovedad(f.id) })
+                                CasillaShiori(checked = f.id in ext.novedades, onCheckedChange = { ext.alternarNovedad(f.id) })
                                 IconoExt(f.pkg, null, Modifier.size(40.dp))
                                 Spacer(Modifier.width(12.dp))
                                 Text("${f.nombre} (${bandera(f.lang)})", maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -526,7 +523,7 @@ private fun DialogoNovedades(ext: ExtManager, onCerrar: () -> Unit) {
                                     Modifier.fillMaxWidth().clickable { ext.alternarNovedadBusqueda(f.id, b.nombre) }.padding(start = 40.dp, top = 2.dp, bottom = 2.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Checkbox(checked = k in ext.novedadesBusq, onCheckedChange = { ext.alternarNovedadBusqueda(f.id, b.nombre) })
+                                    CasillaShiori(checked = k in ext.novedadesBusq, onCheckedChange = { ext.alternarNovedadBusqueda(f.id, b.nombre) })
                                     Text("Búsqueda: ${b.nombre}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
@@ -561,7 +558,7 @@ private fun ExtensionesTab(
     val sinConfianza = ext.instaladas.filter { !it.confiable }
     var confirmarTodas by remember { mutableStateOf(false) }
     if (confirmarTodas) {
-        AlertDialog(
+        DialogoAlerta(
             onDismissRequest = { confirmarTodas = false },
             title = { Text("¿Confiar en ${sinConfianza.size} extensiones?") },
             text = {
@@ -883,17 +880,26 @@ object Imagenes {
     }
 
     /** Devuelve la imagen si ya está en memoria (sin esperar), para pintarla en el primer fotograma. */
-    fun enMemoria(url: String): ImageBitmap? = memoria.get(url)
+    // Tamaño (lado mayor pedido) con el que se decodificó cada imagen guardada: la pequeña no sirve para la grande.
+    private val pedidoDe = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private fun valeParaTam(url: String, maxLado: Int) = (pedidoDe[url] ?: 0) >= maxLado * 0.8f
+    fun enMemoria(url: String, maxLado: Int = 0): ImageBitmap? = memoria.get(url)?.takeIf { maxLado == 0 || valeParaTam(url, maxLado) }
+    private fun guardar(url: String, img: ImageBitmap, maxLado: Int) {
+        if ((pedidoDe[url] ?: 0) > maxLado && memoria.get(url) != null) return // no sustituir una grande por una pequeña
+        pedidoDe[url] = maxLado; memoria.put(url, img)
+    }
 
     suspend fun cargar(url: String, cabeceras: Map<String, String> = emptyMap(), maxLado: Int = 512, fuenteId: Long? = null): ImageBitmap? {
-        memoria.get(url)?.let { return it }
+        // Lo guardado vale si es al menos casi tan grande como lo pedido (si no, la portada a pantalla completa salía borrosa).
+        enMemoria(url, maxLado)?.let { return it }
+        val kv = "$url@$maxLado"
         val tarea = synchronized(enVuelo) {
-            enVuelo.getOrPut(url) {
+            enVuelo.getOrPut(kv) {
                 scope.async {
                     try {
                         limite.withPermit { obtener(url, cabeceras, maxLado, fuenteId) }
                     } finally {
-                        synchronized(enVuelo) { enVuelo.remove(url) }
+                        synchronized(enVuelo) { enVuelo.remove(kv) }
                     }
                 }
             }
@@ -943,7 +949,7 @@ object Imagenes {
             val img = bytes?.let { decodificar(it, maxLado) }
             if (img != null) {
                 archivo.setLastModified(System.currentTimeMillis())
-                memoria.put(url, img)
+                guardar(url, img, maxLado)
                 return img
             }
             archivo.delete() // archivo dañado
@@ -958,7 +964,7 @@ object Imagenes {
                 if (!tmp.renameTo(archivo)) tmp.delete()
             }
         }
-        memoria.put(url, img)
+        guardar(url, img, maxLado)
         return img
     }
 
@@ -985,7 +991,7 @@ fun ImagenRemota(
     val ctx = LocalContext.current
     remember { Imagenes.iniciar(ctx) }
     // Si ya estaba en memoria se pinta en el primer fotograma, sin parpadeo ni fundido al hacer scroll.
-    var img by remember(url) { mutableStateOf(url?.takeIf { it.isNotBlank() }?.let { Imagenes.enMemoria(it) }) }
+    var img by remember(url) { mutableStateOf(url?.takeIf { it.isNotBlank() }?.let { Imagenes.enMemoria(it, maxLado) }) }
     LaunchedEffect(url, cabeceras, fuenteId) {
         if (!url.isNullOrBlank()) {
             val cargada = img ?: Imagenes.cargar(url, cabeceras, maxLado, fuenteId)
