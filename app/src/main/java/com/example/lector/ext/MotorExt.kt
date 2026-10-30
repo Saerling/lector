@@ -339,11 +339,61 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
     }
 }
 
-/** Qué fuentes están trabajando ahora mismo: si la app muere sin memoria, el informe de fallo dice cuáles eran. */
+/**
+ * Qué fuentes están trabajando ahora mismo, y el freno para las que se descontrolan (sin cerrar la app ni la
+ * extensión): si una tarda demasiado o la memoria se acerca al límite, su hilo queda marcado y la siguiente petición
+ * de red que haga falla con IOException (ver [CorteRed]). Las extensiones que entran en bucle suelen pedir página tras
+ * página, así que el bucle se corta solo y la extensión sigue sirviendo para lo demás. Mientras no hay fuentes
+ * trabajando, no se vigila nada (no gasta).
+ */
 object FuentesEnUso {
-    val activas = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    class Tarea(val id: Long, val nombre: String, val hilo: Thread)
+    val tareas = java.util.concurrent.ConcurrentHashMap<Thread, Tarea>()
+    val activas: Map<Long, String> get() = tareas.values.associate { it.id to it.nombre }
+    private val abortados: MutableSet<Thread> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    @Volatile private var vigilando = false
+    var alLiberarMemoria: () -> Unit = {}
+
+    fun abortado(t: Thread = Thread.currentThread()) = t in abortados
+
+    /** Frena las tareas de esa fuente (o todas con null). */
+    fun abortar(id: Long?) {
+        tareas.values.filter { id == null || it.id == id }.forEach { abortados.add(it.hilo) }
+    }
+
     inline fun <T> con(f: FuenteUI, bloque: () -> T): T {
-        activas[f.id] = f.nombre
-        try { return bloque() } finally { activas.remove(f.id) }
+        val h = Thread.currentThread()
+        tareas[h] = Tarea(f.id, f.nombre, h)
+        vigilar()
+        try { return bloque() } finally { tareas.remove(h); soltar(h) }
+    }
+
+    fun soltar(h: Thread) { abortados.remove(h) }
+
+    /** Vigía de memoria: cada medio segundo, solo mientras hay fuentes trabajando. */
+    fun vigilar() {
+        if (vigilando) return
+        vigilando = true
+        Thread {
+            val rt = Runtime.getRuntime()
+            while (tareas.isNotEmpty()) {
+                val usada = rt.totalMemory() - rt.freeMemory()
+                if (usada > rt.maxMemory() * 0.8) {
+                    android.util.Log.w("LectorPrueba", "memoria al ${usada * 100 / rt.maxMemory()} %: freno ${activas.values}")
+                    alLiberarMemoria()
+                    abortar(null)
+                }
+                Thread.sleep(500)
+            }
+            vigilando = false
+        }.apply { isDaemon = true; name = "vigia-memoria" }.start()
+    }
+}
+
+/** Interceptor que corta las peticiones de un hilo frenado por [FuentesEnUso]. */
+object CorteRed : okhttp3.Interceptor {
+    override fun intercept(chain: okhttp3.Interceptor.Chain): okhttp3.Response {
+        if (FuentesEnUso.abortado()) throw java.io.IOException("Cancelado: la fuente tardaba demasiado o gastaba demasiada memoria")
+        return chain.proceed(chain.request())
     }
 }

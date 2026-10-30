@@ -162,6 +162,7 @@ internal fun rememberResultadosGlobales(fuentes: List<FuenteUI>, consulta: Strin
                         CacheBusquedas.guardar(f.id, q, r)
                         EstadoBusqueda.Hecho(r)
                     } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                        com.example.lector.ext.FuentesEnUso.abortar(f.id) // que no siga trabajando a escondidas
                         EstadoBusqueda.Fallo("Tardó demasiado")
                     } catch (e: CancellationException) {
                         throw e

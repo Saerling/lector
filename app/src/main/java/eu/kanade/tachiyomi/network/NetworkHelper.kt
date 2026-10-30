@@ -26,6 +26,7 @@ open class NetworkHelper(
             .readTimeout(30, TimeUnit.SECONDS)
             .callTimeout(120, TimeUnit.SECONDS)
             .cache(Cache(directory = File(context.cacheDir, "network_cache"), maxSize = 5L * 1024 * 1024))
+            .addInterceptor(com.example.lector.ext.CorteRed)
             .addInterceptor(UncaughtExceptionInterceptor())
             .addInterceptor(UserAgentInterceptor(::defaultUserAgentProvider))
             .addInterceptor(CloudflareInterceptor(context, cookieJar, ::defaultUserAgentProvider))

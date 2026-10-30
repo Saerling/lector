@@ -721,3 +721,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2at. PASO 46 (0.35)
 - Búsqueda global como Komikku (SearchScreenModel): grupo fijo de 5 hilos (Executors.newFixedThreadPool(5)) y 5 a la vez. Komikku no protege contra extensiones que agotan la memoria; lo nuestro (FuentesOmitidas/FuentesEnUso/timeout) va más allá.
+
+## 2au. PASO 47 (0.36)
+- Freno de fuentes descontroladas sin cerrar nada: FuentesEnUso registra el hilo de cada llamada; al pasar el timeout de la búsqueda global o si la memoria supera el 80 % (vigía cada 0,5 s solo mientras hay fuentes trabajando), el hilo queda marcado y CorteRed (primer interceptor de NetworkHelper) hace fallar su siguiente petición → el bucle de la extensión termina con IOException. Además se vacían CacheVisor/Imagenes (también en onTrimMemory).

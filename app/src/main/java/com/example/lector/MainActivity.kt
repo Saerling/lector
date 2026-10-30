@@ -57,6 +57,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private fun liberarMemoria() {
+        runCatching { com.example.lector.ui.CacheVisor.vaciar() }
+        runCatching { com.example.lector.ui.Imagenes.vaciar() }
+    }
+
+    // El sistema avisa de que falta memoria: se sueltan las cachés antes de que llegue a cerrar la app.
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) liberarMemoria()
+    }
+
     private lateinit var almacen: Almacen
 
     // Destino pedido por una notificación (lo consume la pantalla principal).
@@ -84,6 +96,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Fallos.instalar(applicationContext)
+        // Si la memoria aprieta mientras trabaja una fuente: se vacían las cachés de imágenes (se recargan solas).
+        com.example.lector.ext.FuentesEnUso.alLiberarMemoria = { liberarMemoria() }
         com.example.lector.ui.MovimientoReducido.actualizar()
         com.example.lector.ui.Tacto.iniciar(window.decorView)
         com.example.lector.ui.Aspecto.iniciar(applicationContext)
