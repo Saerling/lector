@@ -497,17 +497,24 @@ fun Inicio(
         // Pila fuente → ficha → lector online: cada una sigue viva mientras haya otra encima.
         listOf(Ruta.FuenteDetalle, Ruta.Ficha, Ruta.LeerOnline).forEach { r ->
             key(r) {
+                // Portada de origen de la ficha: se toma (y se consume) al abrirla, y se usa también al cerrarla.
+                val visibleR = r in pila && detalleId == null
+                val antes = remember { booleanArrayOf(false) }
+                val rectFicha = remember { arrayOfNulls<androidx.compose.ui.geometry.Rect>(1) }
+                if (visibleR && !antes[0]) rectFicha[0] = if (r == Ruta.Ficha && !Mov.reducido) OrigenToque.rect.also { OrigenToque.rect = null } else null
+                antes[0] = visibleR
+                val conContenedor = r == Ruta.Ficha && rectFicha[0] != null
                 AnimatedVisibility(
-                    visible = r in pila && detalleId == null,
+                    visible = visibleR,
                     // La página «crece» al abrirse (muelle suave, interrumpible) y se encoge al cerrarse.
                     // Si se abrió tocando una portada (ficha), la página crece DESDE esa portada (container transform de
                     // Mochy); si no, crece desde el punto tocado.
-                    enter = if (Mov.reducido) fadeIn(tween(120)) else if (r == Ruta.Ficha && OrigenToque.rect != null) fadeIn(tween(90))
+                    enter = if (Mov.reducido) fadeIn(tween(120)) else if (conContenedor) fadeIn(tween(90))
                         else scaleIn(spring(dampingRatio = 0.88f, stiffness = 150f), initialScale = 0.86f, transformOrigin = OrigenToque.origen()) + fadeIn(tween(240)),
-                    exit = if (Mov.reducido) fadeOut(tween(100)) else if (r == Ruta.Ficha) fadeOut(tween(200, delayMillis = 380))
+                    exit = if (Mov.reducido) fadeOut(tween(100)) else if (conContenedor && detalleId == null) fadeOut(tween(200, delayMillis = 380))
                         else scaleOut(tween(420, easing = CierreEasing), targetScale = 0.88f) + fadeOut(tween(300, easing = CierreEasing)),
                 ) {
-                    val rectOrigen = remember { if (r == Ruta.Ficha && !Mov.reducido) OrigenToque.rect else null }
+                    val rectOrigen = if (conContenedor && detalleId == null) rectFicha[0] else null
                     val p by transition.animateFloat(
                         transitionSpec = {
                             if (targetState == androidx.compose.animation.EnterExitState.Visible) spring(0.88f, 150f, 0.001f)

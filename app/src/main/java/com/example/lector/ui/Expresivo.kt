@@ -162,10 +162,10 @@ fun IndicadorCarga(modifier: Modifier = Modifier, color: Color = MaterialTheme.c
     val quieto = Mov.reducido
     Canvas(modifier.size(36.dp)) {
         val figuras = intArrayOf(4, 9, 5, 7, 3, 6)
-        val i = fase.toInt() % figuras.size
+        val i = if (quieto) 0 else fase.toInt() % figuras.size
         val f = fase - fase.toInt()
         // Paso suave de una figura a la siguiente en la segunda mitad de cada tramo.
-        val m = ((f - 0.5f) / 0.5f).coerceIn(0f, 1f).let { it * it * (3 - 2 * it) }
+        val m = if (quieto) 0f else ((f - 0.5f) / 0.5f).coerceIn(0f, 1f).let { it * it * (3 - 2 * it) }
         val n1 = figuras[i]; val n2 = figuras[(i + 1) % figuras.size]
         val r = size.minDimension / 2f
         val c = Offset(size.width / 2, size.height / 2)
@@ -202,6 +202,9 @@ fun DeslizadorExpresivo(
 ) {
     var ancho by remember { mutableIntStateOf(1) }
     var arrastrando by remember { mutableStateOf(false) }
+    // Los gestos viven más que cada recomposición: siempre llaman a la versión actual de los callbacks.
+    val cambio by androidx.compose.runtime.rememberUpdatedState(onCambio)
+    val fin by androidx.compose.runtime.rememberUpdatedState(alTerminar)
     val asa by animateDpAsState(if (arrastrando) 2.dp else 4.dp, Muelles.espacialRapido(), label = "asa")
     val span = (rango.endInclusive - rango.start).takeIf { it > 0f } ?: 1f
     fun aValor(x: Float): Float {
@@ -212,24 +215,25 @@ fun DeslizadorExpresivo(
     val frac = ((valor - rango.start) / span).coerceIn(0f, 1f)
     Box(
         modifier.fillMaxWidth().height(44.dp).onSizeChanged { ancho = it.width.coerceAtLeast(1) }
-            .pointerInput(rango, pasos) { detectTapGestures { onCambio(aValor(it.x)); alTerminar?.invoke() } }
+            .pointerInput(rango, pasos) { detectTapGestures { cambio(aValor(it.x)); fin?.invoke() } }
             .pointerInput(rango, pasos) {
                 detectHorizontalDragGestures(
-                    onDragStart = { arrastrando = true; onCambio(aValor(it.x)) },
-                    onDragEnd = { arrastrando = false; alTerminar?.invoke() },
-                    onDragCancel = { arrastrando = false; alTerminar?.invoke() },
-                ) { ch, _ -> onCambio(aValor(ch.position.x)) }
+                    onDragStart = { arrastrando = true; cambio(aValor(it.x)) },
+                    onDragEnd = { arrastrando = false; fin?.invoke() },
+                    onDragCancel = { arrastrando = false; fin?.invoke() },
+                ) { ch, _ -> cambio(aValor(ch.position.x)) }
             },
         Alignment.CenterStart,
     ) {
         Canvas(Modifier.fillMaxWidth().height(44.dp)) {
             val h = 16.dp.toPx(); val y = (size.height - h) / 2f
-            val x = frac * size.width
+            val aw0 = 4.dp.toPx()
+            val x = (frac * size.width).coerceIn(aw0 / 2f, size.width - aw0 / 2f)
             val hueco = 6.dp.toPx()
             val r = androidx.compose.ui.geometry.CornerRadius(h / 2f)
             val ri = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())
             // Parte activa (esquina interior pequeña) y resto de la pista, con el hueco del asa entre medias.
-            if (x - hueco > 0f) drawRoundRect(colorActivo, Offset(0f, y), androidx.compose.ui.geometry.Size((x - hueco).coerceAtLeast(h / 2f), h), r)
+            if (x - hueco >= h / 2f) drawRoundRect(colorActivo, Offset(0f, y), androidx.compose.ui.geometry.Size(x - hueco, h), r)
             if (x + hueco < size.width) drawRoundRect(colorPista, Offset(x + hueco, y), androidx.compose.ui.geometry.Size(size.width - x - hueco, h), r)
             if (x - hueco > h / 2f) drawRoundRect(colorActivo, Offset(x - hueco - h / 2f, y), androidx.compose.ui.geometry.Size(h / 2f, h), ri)
             val aw = asa.toPx()

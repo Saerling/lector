@@ -245,7 +245,7 @@ fun Interruptor(activado: Boolean, onChange: ((Boolean) -> Unit)?, modifier: Mod
     val borde by animateColorAsState(if (activado) Color.Transparent else gris, Muelles.efectos(), label = "borde")
     val boton by animateColorAsState(if (activado) MaterialTheme.colorScheme.onPrimary else gris, Muelles.efectos(), label = "boton")
     val tam by animateDpAsState(if (activado) 24.dp else 16.dp, Muelles.espacialRapido(), label = "tam")
-    val x by animateDpAsState(if (activado) 52.dp - 24.dp - 4.dp else 8.dp, Muelles.espacialRapido(), label = "x")
+    val x by animateDpAsState(if (activado) 52.dp - 24.dp - 4.dp else 4.dp, Muelles.espacialRapido(), label = "x")
     Box(
         modifier.size(52.dp, 32.dp)
             .then(if (onChange != null) Modifier.toggleable(activado, role = Role.Switch, onValueChange = { Tacto.alternar(it); onChange(it) }) else Modifier)
