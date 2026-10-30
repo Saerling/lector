@@ -1425,7 +1425,7 @@ fun LeerOnlineScreen(
         alPagina = { i, pagina, total ->
             val c = enOrden[i]
             borrarLeidos(c.url)
-            if (pagina < total - 1) ext.guardarPagina(f.id, c.url, pagina)
+            ext.guardarPagina(f.id, c.url, pagina) // también la última: al reabrirlo sigue ahí
             if (manga != null) {
                 alm.registrarHistorialLinea(
                     EntradaHistorial(

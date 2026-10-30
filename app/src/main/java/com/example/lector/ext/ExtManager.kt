@@ -936,8 +936,9 @@ class ExtManager private constructor(private val app: Context) {
 
     fun guardarPagina(fuenteId: Long, url: String, pagina: Int) {
         val k = "$fuenteId|$url"
-        if (pagina <= 0 || paginasCap[k] == pagina) return
-        paginasCap[k] = pagina
+        if (paginasCap[k] == pagina || (pagina <= 0 && k !in paginasCap)) return
+        // Volver a la primera página también cuenta (se olvida la guardada).
+        if (pagina <= 0) paginasCap.remove(k) else paginasCap[k] = pagina
         guardarPaginasCap()
     }
 
