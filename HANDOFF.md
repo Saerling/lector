@@ -772,3 +772,7 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 ## 2bd. PASO 56 (0.46)
 - Revisión independiente del rediseño: gestoAtras lee el progreso solo al dibujar (antes recomponía la página en cada fotograma), carrusel de Inicio en pausa con una página encima (GestoAtras.hayEncima), gesto cancelado sin carreras (Job compartido), vuelta entre fichas encadenadas con muelle, CoverCarousel vuelve a abrir al tocar el título, idiomas con el mismo nombre ya no se pierden en Explorar.
 - Capturas del emulador: títulos grandes cortados → TituloAjustable (encoge hasta caber); «Novedades» de la barra → «Nuevos»; etiquetas de StatCard sin letra monoespaciada.
+
+## 2be. PASO 57 (0.47)
+- Ficha: el botón principal (Leer / Continuar cap. N) ocupa todo el ancho y los botones redondos van debajo, centrados (en el móvil se cortaba el texto).
+- Nota: el emulador de CI corre con las animaciones del sistema desactivadas (Mov.reducido = true), así que los vídeos no muestran el movimiento; las capturas sí sirven para el diseño.

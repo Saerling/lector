@@ -1334,13 +1334,15 @@ private fun CabeceraFicha(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) { pildoras.forEach { (ic, tx) -> PildoraMeta(ic, tx, acento) } }
                 Spacer(Modifier.height(22.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ConAcento(acento) {
-                        BotonExpresivo(
-                            textoLeer, Icons.Rounded.PlayArrow, onLeer, Modifier.weight(1f),
-                            estilo = EstiloBoton.RELLENO, alto = 56.dp, habilitado = puedeLeer,
-                        )
-                    }
+                // Acción principal a todo el ancho (cabe «Continuar cap. 123» en cualquier móvil) y las secundarias debajo.
+                ConAcento(acento) {
+                    BotonExpresivo(
+                        textoLeer, Icons.Rounded.PlayArrow, onLeer, Modifier.fillMaxWidth(),
+                        estilo = EstiloBoton.RELLENO, alto = 56.dp, habilitado = puedeLeer,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
                     BotonTonalRedondo(
                         if (enBiblioteca) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                         if (enBiblioteca) "Quitar de la biblioteca" else "Añadir a la biblioteca",
