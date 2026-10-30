@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.spring
@@ -318,7 +320,19 @@ fun Inicio(
         else retroceso.animateTo(0f, tween(560, easing = CierreEasing))
     }
 
-    Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
+    Box(
+        Modifier.fillMaxSize().background(LectorColors.Bg)
+            // Dónde se tocó por última vez (sin consumir el toque): la ficha crece desde ahí, como en Mochy.
+            .onSizeChanged { OrigenToque.tam = it }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        ev.changes.firstOrNull { it.pressed && !it.previousPressed }?.let { OrigenToque.punto = it.position }
+                    }
+                }
+            }
+    ) {
       // Todo lo que queda bajo la barra flotante: se graba para el cristal esmerilado de la barra y el mini lector.
       val estadoPestanas = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
       Box(Modifier.fillMaxSize().raizCristal(CristalApp)) {
@@ -482,7 +496,7 @@ fun Inicio(
                 AnimatedVisibility(
                     visible = r in pila && detalleId == null,
                     // La página «crece» al abrirse (muelle suave, interrumpible) y se encoge al cerrarse.
-                    enter = if (Mov.reducido) fadeIn(tween(120)) else scaleIn(spring(dampingRatio = 0.88f, stiffness = 150f), initialScale = 0.86f) +
+                    enter = if (Mov.reducido) fadeIn(tween(120)) else scaleIn(spring(dampingRatio = 0.88f, stiffness = 150f), initialScale = 0.86f, transformOrigin = OrigenToque.origen()) +
                         fadeIn(tween(240)),
                     exit = if (Mov.reducido) fadeOut(tween(100)) else scaleOut(tween(420, easing = CierreEasing), targetScale = 0.88f) + fadeOut(tween(300, easing = CierreEasing)),
                 ) {
@@ -603,3 +617,12 @@ fun Inicio(
 
 /** Curva de cierre de las páginas (empieza suave: un primer fotograma lento no se nota). */
 val CierreEasing = CubicBezierEasing(0.4f, 0f, 0.1f, 1f)
+
+/** Último punto tocado, como origen de la pantalla que se abre (efecto «la portada crece hasta ser la página»). */
+object OrigenToque {
+    var punto = androidx.compose.ui.geometry.Offset.Unspecified
+    var tam = androidx.compose.ui.unit.IntSize.Zero
+    fun origen(): androidx.compose.ui.graphics.TransformOrigin =
+        if (!punto.isSpecified || tam.width == 0 || tam.height == 0) androidx.compose.ui.graphics.TransformOrigin.Center
+        else androidx.compose.ui.graphics.TransformOrigin((punto.x / tam.width).coerceIn(0f, 1f), (punto.y / tam.height).coerceIn(0f, 1f))
+}

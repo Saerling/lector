@@ -56,17 +56,96 @@ import java.io.File
 /** Ajustes: lista de secciones (como la de Komikku). */
 @Composable
 fun AjustesScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> Unit) {
+    // Como Mochy: buscador arriba y cada apartado como una burbuja grande; al buscar, salen los ajustes que coinciden.
+    var q by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     PaginaAjustes("Ajustes", onBack) {
-        FilaAjuste(Icons.Rounded.Create, "Apariencia", "Tema claro / oscuro, color de acento y portadas") { onRuta(Ruta.Apariencia) }
-        FilaAjuste(Icons.Rounded.List, "Biblioteca", "Vista, categorías y actualizaciones automáticas") { onRuta(Ruta.AjBiblioteca) }
-        FilaAjuste(Icons.Rounded.PlayArrow, "Visor", "Modos de lectura, zonas de toque, zoom, filtros") { onRuta(Ruta.AjVisor) }
-        FilaAjuste(Iconos.Descargar, "Descargas", "Solo Wi‑Fi, borrar al leer, descargar por adelantado") { onRuta(Ruta.AjDescargas) }
-        FilaAjuste(Icons.Rounded.Refresh, "Seguimiento", "Sincroniza tu progreso con AniList") { onRuta(Ruta.AjSeguimiento) }
-        FilaAjuste(Icons.Rounded.Search, "Explorar", "Contenido +18, idiomas, listados de extensiones") { onRuta(Ruta.AjExplorar) }
-        FilaAjuste(Icons.Rounded.Share, "Datos y almacenamiento", "Copias de seguridad (también automáticas) y cachés") { onRuta(Ruta.Datos) }
-        FilaAjuste(Icons.Rounded.Lock, "Seguridad y privacidad", "Bloqueo de la app, pantalla segura, modo incógnito") { onRuta(Ruta.AjSeguridad) }
-        FilaAjuste(Icons.Rounded.Build, "Avanzado", "DNS sobre HTTPS, cookies, batería") { onRuta(Ruta.AjAvanzado) }
-        FilaAjuste(Icons.Rounded.Info, "Acerca de", null) { onRuta(Ruta.AcercaDe) }
+        Box(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) { CampoBusqueda(q, { q = it }, "Buscar en ajustes") }
+        Spacer(Modifier.height(12.dp))
+        val texto = q.trim()
+        if (texto.isEmpty()) {
+            APARTADOS_AJUSTES.forEachIndexed { i, a ->
+                BurbujaAjuste(a.icono, a.titulo, Modifier.entrada(i)) { onRuta(a.ruta) }
+            }
+        } else {
+            val norm = { t: String -> java.text.Normalizer.normalize(t.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}"), "") }
+            val qn = norm(texto)
+            val hallados = AJUSTES_BUSCABLES.filter { (t, d, _) -> norm(t).contains(qn) || norm(d).contains(qn) }
+            if (hallados.isEmpty()) LText("Ningún ajuste coincide con «$texto».", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
+            hallados.forEach { (t, d, r) ->
+                val apartado = APARTADOS_AJUSTES.firstOrNull { it.ruta == r }
+                FilaAjuste(apartado?.icono, t, listOfNotNull(apartado?.titulo, d.takeIf { it.isNotBlank() }).joinToString(" · ")) { onRuta(r) }
+            }
+        }
+    }
+}
+
+private class Apartado(val icono: androidx.compose.ui.graphics.vector.ImageVector, val titulo: String, val ruta: Ruta)
+
+private val APARTADOS_AJUSTES = listOf(
+    Apartado(Icons.Rounded.Create, "Apariencia", Ruta.Apariencia),
+    Apartado(Icons.Rounded.List, "Biblioteca", Ruta.AjBiblioteca),
+    Apartado(Icons.Rounded.PlayArrow, "Visor", Ruta.AjVisor),
+    Apartado(Iconos.Descargar, "Descargas", Ruta.AjDescargas),
+    Apartado(Icons.Rounded.Refresh, "Seguimiento", Ruta.AjSeguimiento),
+    Apartado(Icons.Rounded.Search, "Explorar", Ruta.AjExplorar),
+    Apartado(Icons.Rounded.Share, "Datos y almacenamiento", Ruta.Datos),
+    Apartado(Icons.Rounded.Lock, "Seguridad y privacidad", Ruta.AjSeguridad),
+    Apartado(Icons.Rounded.Build, "Avanzado", Ruta.AjAvanzado),
+    Apartado(Icons.Rounded.Info, "Acerca de", Ruta.AcercaDe),
+)
+
+/** Lo que se puede buscar en Ajustes: (título, palabras clave, apartado donde está). */
+private val AJUSTES_BUSCABLES: List<Triple<String, String, Ruta>> = listOf(
+    Triple("Tema", "claro oscuro negro puro sistema", Ruta.Apariencia),
+    Triple("Color de acento", "color tema portada", Ruta.Apariencia),
+    Triple("Superficies", "cristal liquid glass sólido transparencia", Ruta.Apariencia),
+    Triple("Fondo", "aurora liso color fondo vivo", Ruta.Apariencia),
+    Triple("Animación al abrir", "agujero negro arranque inicio", Ruta.Apariencia),
+    Triple("Luz al tocar", "luz táctil toque", Ruta.Apariencia),
+    Triple("Vista de la biblioteca", "cuadrícula lista columnas portadas", Ruta.AjBiblioteca),
+    Triple("Categorías", "categoría ordenar ocultas", Ruta.AjBiblioteca),
+    Triple("Actualizar biblioteca", "actualizaciones automáticas novedades capítulos nuevos", Ruta.AjBiblioteca),
+    Triple("Modo de lectura", "paginado tira webtoon continuo derecha izquierda vertical", Ruta.AjVisor),
+    Triple("Zonas de toque", "tocar pasar página toque", Ruta.AjVisor),
+    Triple("Zoom", "doble toque ampliar", Ruta.AjVisor),
+    Triple("Filtros de color", "tinte sepia luz cálida brillo", Ruta.AjVisor),
+    Triple("Precarga de páginas", "precargar páginas siguiente capítulo", Ruta.AjVisor),
+    Triple("Teclas de volumen", "volumen pasar página", Ruta.AjVisor),
+    Triple("Pasar de capítulo solo", "continuo transición siguiente capítulo", Ruta.AjVisor),
+    Triple("Solo con Wi‑Fi", "wifi datos móviles descargas", Ruta.AjDescargas),
+    Triple("Borrar al leer", "borrar descargas leídos", Ruta.AjDescargas),
+    Triple("Descargar por adelantado", "descarga automática siguientes", Ruta.AjDescargas),
+    Triple("AniList", "seguimiento sincronizar progreso", Ruta.AjSeguimiento),
+    Triple("MyAnimeList, Kitsu y MangaUpdates", "mal kitsu mangaupdates seguimiento", Ruta.AjSeguimiento),
+    Triple("Contenido +18", "nsfw adultos", Ruta.AjExplorar),
+    Triple("Idiomas", "idioma lenguaje fuentes", Ruta.AjExplorar),
+    Triple("Listados de extensiones", "repositorios repos extensiones", Ruta.AjExplorar),
+    Triple("Copias de seguridad", "backup copia restaurar mihon komikku tachiyomi", Ruta.Datos),
+    Triple("Carpeta de la app", "almacenamiento carpeta descargas ubicación", Ruta.Datos),
+    Triple("Borrar cachés", "caché memoria espacio", Ruta.Datos),
+    Triple("Bloqueo de la app", "huella bloqueo seguridad pin", Ruta.AjSeguridad),
+    Triple("Modo incógnito", "incógnito historial privacidad", Ruta.AjSeguridad),
+    Triple("Pantalla segura", "capturas pantalla segura", Ruta.AjSeguridad),
+    Triple("DNS sobre HTTPS", "dns doh cloudflare google bloqueo red", Ruta.AjAvanzado),
+    Triple("Cookies", "cookies webview borrar", Ruta.AjAvanzado),
+    Triple("Batería", "batería optimización segundo plano", Ruta.AjAvanzado),
+    Triple("Versión y actualizaciones", "versión actualizar app novedades", Ruta.AcercaDe),
+)
+
+/** Burbuja de apartado (Mochy): 64 dp, esquinas de 22 dp, icono en círculo de 40 dp y título de 17 sp. */
+@Composable
+private fun BurbujaAjuste(icono: androidx.compose.ui.graphics.vector.ImageVector, titulo: String, modifier: Modifier, onClick: () -> Unit) {
+    Row(
+        modifier.padding(horizontal = 20.dp, vertical = 6.dp).fillMaxWidth().height(64.dp).clip(SuaveShape(22.dp))
+            .background(LectorColors.Card).pressableCon(0.97f, onClick).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(LectorColors.PillFill), Alignment.Center) {
+            Icon(icono, null, tint = LectorColors.Text, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        LText(titulo, LectorType.Body.copy(fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), Modifier.weight(1f), maxLines = 1)
+        Icon(Icons.Rounded.KeyboardArrowRight, null, tint = LectorColors.Muted)
     }
 }
 

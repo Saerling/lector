@@ -148,24 +148,14 @@ object CacheVisor {
     ): PaginaLista {
         val k = clave(origen, indice, mitad, anchoMax, recortar)
         cache.get(k)?.let { return it }
-        val tarea = synchronized(enVuelo) {
-            enVuelo.getOrPut(k) {
-                scope.async {
-                    try {
-                        val r = limite.withPermit {
-                            decodificar(origen.bytes(indice), anchoMax, recortar, mitad, permitirHardware)
-                        }
-                        cache.put(k, r)
-                        if (mitad == 0) proporcion = r.proporcion.coerceIn(0.5f, 3f)
-                        r
-                    } finally {
-                        synchronized(enVuelo) { enVuelo.remove(k) }
-                    }
-                }
-            }
+        return tareas.esperar(k) {
+            val r = limite.withPermit { decodificar(origen.bytes(indice), anchoMax, recortar, mitad, permitirHardware) }
+            cache.put(k, r)
+            if (mitad == 0) proporcion = r.proporcion.coerceIn(0.5f, 3f)
+            r
         }
-        return tarea.await()
     }
+    private val tareas by lazy { TareasCompartidas<PaginaLista>(scope) }
 
     fun vaciar() = cache.evictAll()
 }
@@ -249,4 +239,36 @@ suspend fun decodificar(
         }
     }
     PaginaLista(partes, if (mitad == 0) w else rw, h)
+}
+
+/**
+ * Cargas compartidas que se cancelan solas cuando ya nadie las espera (como Coil/Komikku al salir una página de la
+ * pantalla): tras un desplazamiento rápido, las páginas que pasaste sueltan su turno y la visible carga antes.
+ */
+internal class TareasCompartidas<T>(private val scope: CoroutineScope) {
+    private class Entrada<T>(var esperando: Int) { lateinit var tarea: Deferred<T> }
+    private val mapa = HashMap<String, Entrada<T>>()
+
+    suspend fun esperar(k: String, bloque: suspend () -> T): T {
+        val e = synchronized(mapa) {
+            mapa.getOrPut(k) {
+                Entrada<T>(0).also { n ->
+                    n.tarea = scope.async(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                        try { bloque() } finally { synchronized(mapa) { if (mapa[k] === n) mapa.remove(k) } }
+                    }
+                }
+            }.also { it.esperando++ }
+        }
+        e.tarea.start()
+        try {
+            return e.tarea.await()
+        } finally {
+            // La decisión y la retirada van juntas: nadie puede engancharse a una tarea que se va a cancelar.
+            val cancelar = synchronized(mapa) {
+                e.esperando--
+                (e.esperando <= 0 && !e.tarea.isCompleted).also { if (it && mapa[k] === e) mapa.remove(k) }
+            }
+            if (cancelar) e.tarea.cancel()
+        }
+    }
 }

@@ -64,7 +64,7 @@ private val TituloArriba = ArribaCabecera + TamAtras + 12.dp
 /** ...y al plegarse se encoge al 62 % y se coloca a la derecha del botón. */
 private val TituloPlegadoX = TamAtras + 14.dp
 private const val EscalaPlegado = 0.62f
-private val PliegueEasing = CubicBezierEasing(0.57f, 0.53f, 0f, 1f)
+private val PliegueEasing = CubicBezierEasing(0.59f, 0.53f, 0f, 1f) // la de DetailCollapsingTopBar de Mochy
 
 /**
  * Progreso del pliegue (0 abierto, 1 plegado). Cruzar el umbral cambia el destino y la animación siempre
@@ -88,7 +88,7 @@ fun rememberPliegue(scroll: ScrollState, entra: Dp = 24.dp, sale: Dp = 6.dp): St
             n
         }
     }
-    return animateFloatAsState(if (plegado) 1f else 0f, if (Mov.reducido) tween(120) else tween(340, easing = EnfasisEasing), label = "pliegue")
+    return animateFloatAsState(if (plegado) 1f else 0f, if (Mov.reducido) tween(120) else tween(1000, easing = PliegueEasing), label = "pliegue")
 }
 
 /** Botón atrás redondo gris de 40 dp. */

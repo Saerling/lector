@@ -671,7 +671,7 @@ fun FichaMangaScreen(
                     LText("Ningún capítulo coincide con los filtros.", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
                 }
                 // La clave es el índice original del capítulo (único aunque la fuente repita direcciones).
-                itemsIndexedAnimados(visibles, key = { _, iv -> iv.index }, contentType = { _, _ -> "cap" }) { pos, iv ->
+                itemsIndexedAnimados(visibles, key = { _, iv -> iv.index }, contentType = { _, _ -> 1 }) { pos, iv ->
                     val i = iv.index
                     val c = iv.value
                     val clave = Descargas.clave(f, c)
@@ -779,6 +779,8 @@ fun FichaMangaScreen(
                 }
             }
         }
+        // Barra de desplazamiento rápido (como Komikku en la lista de capítulos).
+        BarraDesplazamiento(lista)
         }
 
         if (enSeleccion) {

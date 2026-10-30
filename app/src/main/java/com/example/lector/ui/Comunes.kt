@@ -197,6 +197,20 @@ object Hojas {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HojaLector(onCerrar: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    // En tablet (≥ 600 dp de ancho) la hoja sale como ventana centrada, como AdaptiveSheet de Komikku.
+    if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600) {
+        androidx.compose.ui.window.Dialog(onCerrar, androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            val visible = remember { androidx.compose.animation.core.MutableTransitionState(false) }.apply { targetState = true }
+            androidx.compose.animation.AnimatedVisibility(visibleState = visible, enter = Mov.entraVentana()) {
+                Column(
+                    Modifier.padding(24.dp).widthIn(max = 640.dp).fillMaxWidth().clip(SuaveShape(30.dp)).background(LectorColors.Hoja)
+                        .padding(top = 18.dp),
+                    content = content,
+                )
+            }
+        }
+        return
+    }
     val estado = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     DisposableEffect(Unit) {
         Hojas.abiertas++

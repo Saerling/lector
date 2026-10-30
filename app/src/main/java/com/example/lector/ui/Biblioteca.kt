@@ -361,7 +361,9 @@ fun BibliotecaScreen(
                     if (g.comics.isEmpty()) {
                         MensajeVacio(if (!q.vacia || filtrosActivos > 0) "Nada coincide con la búsqueda o los filtros." else "Esta categoría está vacía.")
                     } else if (almacen.vista == Vista.LISTA) {
-                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 190.dp)) {
+                        val estadoLista = androidx.compose.foundation.lazy.rememberLazyListState()
+                        Box(Modifier.fillMaxSize()) {
+                        LazyColumn(Modifier.fillMaxSize(), state = estadoLista, contentPadding = PaddingValues(top = 4.dp, bottom = 190.dp)) {
                             itemsAnimados(g.comics, key = { it.id }) { c ->
                                 FilaBiblioteca(
                                     c, almacen, c.id in seleccion, descargasDe(c), if (c.enLinea) idiomaDe[c.fuenteId] else null,
@@ -369,6 +371,8 @@ fun BibliotecaScreen(
                                     onLargo = { alternar(c) }, onContinuar = { alLeer(c) },
                                 )
                             }
+                        }
+                        BarraDesplazamiento(estadoLista)
                         }
                     } else {
                         val columnas = almacen.columnas

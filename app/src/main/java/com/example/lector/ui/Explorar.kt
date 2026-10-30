@@ -892,20 +892,10 @@ object Imagenes {
     suspend fun cargar(url: String, cabeceras: Map<String, String> = emptyMap(), maxLado: Int = 512, fuenteId: Long? = null): ImageBitmap? {
         // Lo guardado vale si es al menos casi tan grande como lo pedido (si no, la portada a pantalla completa salía borrosa).
         enMemoria(url, maxLado)?.let { return it }
-        val kv = "$url@$maxLado"
-        val tarea = synchronized(enVuelo) {
-            enVuelo.getOrPut(kv) {
-                scope.async {
-                    try {
-                        limite.withPermit { obtener(url, cabeceras, maxLado, fuenteId) }
-                    } finally {
-                        synchronized(enVuelo) { enVuelo.remove(kv) }
-                    }
-                }
-            }
-        }
-        return tarea.await()
+        // Si la portada sale de la pantalla antes de cargar, su carga se cancela y deja el turno a las visibles.
+        return tareas.esperar("$url@$maxLado") { limite.withPermit { obtener(url, cabeceras, maxLado, fuenteId) } }
     }
+    private val tareas by lazy { TareasCompartidas<ImageBitmap?>(scope) }
 
     private fun archivoDe(url: String): File? {
         val carpeta = disco ?: return null

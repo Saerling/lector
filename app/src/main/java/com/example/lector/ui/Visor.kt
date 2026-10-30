@@ -1096,6 +1096,12 @@ private fun Tira(
                             Spacer(Modifier.height(12.dp))
                             if (otro != null) {
                                 Text(if (it.siguiente) "Siguiente: $otro" else "Anterior: $otro", color = Color.White, style = LectorType.Section, textAlign = TextAlign.Center)
+                                // Como Komikku: avisa si entre los dos capítulos faltan algunos.
+                                val falta = huecoCapitulos(este.nombre, otro)
+                                if (falta > 0) {
+                                    Spacer(Modifier.height(10.dp))
+                                    Text("Faltan $falta capítulo${if (falta > 1) "s" else ""}", color = LectorColors.Error, style = LectorType.Label, textAlign = TextAlign.Center)
+                                }
                             } else {
                                 Text(if (it.siguiente) "No hay más capítulos" else "Es el primer capítulo", color = Color.White, style = LectorType.Body)
                             }
@@ -1317,4 +1323,18 @@ fun AjustesPantalla(almacen: Almacen) {
             }
         }
     }
+}
+
+/** Número de capítulo sacado del nombre («Capítulo 12.5: …» → 12.5). */
+private fun numeroCapitulo(nombre: String): Float? {
+    val m = Regex("""(?i)(?:cap[ií]tulo|chapter|cap\.?|ch\.?|ep\.?)\s*(\d+(?:\.\d+)?)""").find(nombre)
+        ?: Regex("""(\d+(?:\.\d+)?)""").find(nombre)
+    return m?.groupValues?.get(1)?.toFloatOrNull()
+}
+
+/** Cuántos capítulos enteros faltan entre dos (0 si son seguidos o no se sabe). */
+private fun huecoCapitulos(a: String, b: String): Int {
+    val x = numeroCapitulo(a) ?: return 0
+    val y = numeroCapitulo(b) ?: return 0
+    return (kotlin.math.floor(maxOf(x, y)) - kotlin.math.floor(minOf(x, y)) - 1).toInt().coerceIn(0, 999)
 }
