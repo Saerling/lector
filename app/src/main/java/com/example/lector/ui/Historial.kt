@@ -107,7 +107,7 @@ fun HistorialScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                LText("Historial", LectorType.Display.copy(fontSize = 40.sp, lineHeight = 44.sp), maxLines = 1)
+                TituloAjustable("Historial")
                 Spacer(Modifier.height(4.dp))
                 Row(
                     Modifier.clip(CircleShape).background(acento.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 3.dp),

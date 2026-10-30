@@ -176,7 +176,8 @@ done
 adb shell am start -n com.example.lector/.MainActivity --es destino "probar-pantalla:Library"; sleep 3
 adb shell screenrecord --time-limit 8 --size 540x1200 /sdcard/transicion.mp4 &
 REC=$!; sleep 1
-adb shell input tap 200 700; sleep 3
+TAM=$(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1); W=${TAM%x*}; H=${TAM#*x}
+adb shell input tap $((W*25/100)) $((H*42/100)); sleep 3
 adb shell input keyevent KEYCODE_BACK; sleep 3
 wait $REC 2>/dev/null; sleep 1
 adb pull /sdcard/transicion.mp4 "captura-$ETIQUETA-transicion.mp4" >/dev/null 2>&1

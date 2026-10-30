@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import kotlinx.coroutines.launch
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.expandVertically
 import androidx.activity.compose.BackHandler
@@ -284,16 +285,23 @@ fun Inicio(
     LaunchedEffect(ruta) { if (ruta != Ruta.Ficha && ruta != Ruta.LeerOnline) fichasAnteriores.clear() }
 
     // Atrás predictivo (Android 14+): mientras se desliza, la página de arriba sigue al dedo; al soltar, se navega.
+    val ambitoGesto = rememberCoroutineScope()
+    GestoAtras.hayEncima = ruta != null || detalleId != null
     androidx.activity.compose.PredictiveBackHandler(enabled = activo && ruta != null && detalleId == null) { gesto ->
+        GestoAtras.vuelta?.cancel()
         try {
             gesto.collect { e ->
                 GestoAtras.desdeIzquierda = e.swipeEdge == androidx.activity.BackEventCompat.EDGE_LEFT
                 GestoAtras.progreso = e.progress
             }
+            val mismaPagina = ruta == Ruta.Ficha && fichasAnteriores.isNotEmpty()
             if (ruta == Ruta.Ficha) volverDeFicha() else ruta = ruta?.padre()
-            GestoAtras.progreso = 0f
+            // Entre fichas encadenadas la página sigue arriba: vuelve a su tamaño con muelle, sin salto.
+            if (mismaPagina) GestoAtras.vuelta = ambitoGesto.launchGesto {
+                androidx.compose.animation.core.animate(GestoAtras.progreso, 0f, animationSpec = Muelles.espacial()) { v, _ -> GestoAtras.progreso = v }
+            } else GestoAtras.progreso = 0f
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            GestoAtras.vuelta = ambitoGesto.launchGesto {
                 androidx.compose.animation.core.animate(GestoAtras.progreso, 0f, animationSpec = Muelles.espacial()) { v, _ -> GestoAtras.progreso = v }
             }
             throw e
@@ -707,3 +715,6 @@ fun Modifier.contenedor(rect: androidx.compose.ui.geometry.Rect?, p: () -> Float
         }
         clip = true
     }
+
+private fun kotlinx.coroutines.CoroutineScope.launchGesto(bloque: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) =
+    this.launch(block = bloque)

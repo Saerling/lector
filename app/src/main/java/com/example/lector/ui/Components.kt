@@ -141,11 +141,11 @@ fun CoverCarousel(items: List<Comic>, almacen: Almacen, onClick: (Comic) -> Unit
             val forma = SuaveShape(18.dp)
             val progreso = c.progresoLectura()
             val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
-            Column(Modifier.width(132.dp).entrada(i, 45)) {
+            Column(Modifier.width(132.dp).entrada(i, 45).pressable { onClick(c) }) {
                 Box(
                     Modifier.fillMaxWidth().aspectRatio(2f / 3f)
                         .shadow(12.dp, forma, clip = false, ambientColor = Color.Black.copy(alpha = 0.35f), spotColor = Color.Black.copy(alpha = 0.35f))
-                        .origenTransicion().press3D().pressable { onClick(c) }
+                        .origenTransicion().press3D()
                 ) {
                     ComicCover(c, almacen, Modifier.fillMaxSize(), forma)
                     // Degradado inferior + barra de progreso de acento sobre la portada.
@@ -271,7 +271,7 @@ private fun RowScope.PestanaNav(tab: LectorTab, encendida: Boolean, onClick: () 
             )
         }
         LText(
-            if (tab == LectorTab.Updates) "Novedades" else tab.label, LectorType.Label.copy(fontSize = 10.sp), color = acento, maxLines = 1,
+            if (tab == LectorTab.Updates) "Nuevos" else tab.label, LectorType.Label.copy(fontSize = 10.sp), color = acento, maxLines = 1,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 9.dp)
                 .graphicsLayer { alpha = luz; translationY = (1f - salto) * 6.dp.toPx() },
         )

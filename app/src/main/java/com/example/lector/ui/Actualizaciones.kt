@@ -147,7 +147,7 @@ fun ActualizacionesScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        LText("Actualizaciones", LectorType.Display.copy(fontSize = 32.sp, lineHeight = 36.sp), maxLines = 1)
+                        TituloAjustable("Actualizaciones")
                         Spacer(Modifier.height(4.dp))
                         Row(
                             Modifier.clip(CircleShape)

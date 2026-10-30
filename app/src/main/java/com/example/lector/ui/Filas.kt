@@ -309,6 +309,6 @@ fun StatCard(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier.clip(SuaveShape(24.dp)).background(LectorColors.Card).padding(20.dp)) {
         LText(value, LectorType.Display.copy(fontSize = if (value.length > 6) 22.sp else 36.sp), maxLines = 1)
         Spacer(Modifier.height(4.dp))
-        LText(label, LectorType.Mono, color = LectorColors.Muted)
+        LText(label, LectorType.Label, color = LectorColors.Muted, maxLines = 2)
     }
 }

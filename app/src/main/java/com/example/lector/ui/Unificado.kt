@@ -255,6 +255,10 @@ fun <T> androidx.compose.foundation.lazy.grid.LazyGridScope.itemsAnimados(
 /** Estado del gesto «atrás» predictivo: 0 = sin gesto, 1 = a punto de soltar. */
 object GestoAtras {
     var progreso by mutableFloatStateOf(0f)
+    /** Animación de vuelta a 0 de un gesto cancelado (se para si empieza otro). */
+    var vuelta: kotlinx.coroutines.Job? = null
+    /** Hay una página encima de las pestañas (el carrusel de Inicio se pausa). */
+    var hayEncima by mutableStateOf(false)
     var desdeIzquierda by mutableStateOf(true)
 }
 
@@ -264,15 +268,15 @@ object GestoAtras {
  */
 @Composable
 fun Modifier.gestoAtras(arriba: Boolean): Modifier {
-    val congelado = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    if (arriba) congelado.floatValue = GestoAtras.progreso
-    val izq = GestoAtras.desdeIzquierda
+    // Todo se lee al dibujar (no recompone la página en cada fotograma del gesto).
+    val congelado = remember { FloatArray(1) }
     return this.graphicsLayer {
-        val p = if (Mov.reducido) 0f else androidx.compose.animation.core.FastOutSlowInEasing.transform(congelado.floatValue)
+        val raw = if (arriba) GestoAtras.progreso.also { congelado[0] = it } else congelado[0]
+        val p = if (Mov.reducido) 0f else androidx.compose.animation.core.FastOutSlowInEasing.transform(raw)
         if (p <= 0f) return@graphicsLayer
         val e = 1f - 0.1f * p
         scaleX = e; scaleY = e
-        translationX = (if (izq) 1f else -1f) * 24.dp.toPx() * p
+        translationX = (if (GestoAtras.desdeIzquierda) 1f else -1f) * 24.dp.toPx() * p
         shape = SuaveShape(32.dp * p)
         clip = true
     }

@@ -768,3 +768,7 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
   - Ficha: cabecera inmersiva (portada desenfocada a sangre en API 31+), portada nítida 156 dp, título 31 sp, metadatos en píldoras, acción principal Expressive, sinopsis expandible, capítulos con punto de no leído.
   - Explorar: título 40 sp, sub-pestañas con indicador que se desliza, fuentes/extensiones en tarjetas, catálogo y búsqueda global rediseñados.
 - La prueba del emulador ahora saca capturas de todas las pantallas (probar-pantalla:<Tab|Ruta>) y un vídeo de la transición biblioteca → ficha.
+
+## 2bd. PASO 56 (0.46)
+- Revisión independiente del rediseño: gestoAtras lee el progreso solo al dibujar (antes recomponía la página en cada fotograma), carrusel de Inicio en pausa con una página encima (GestoAtras.hayEncima), gesto cancelado sin carreras (Job compartido), vuelta entre fichas encadenadas con muelle, CoverCarousel vuelve a abrir al tocar el título, idiomas con el mismo nombre ya no se pierden en Explorar.
+- Capturas del emulador: títulos grandes cortados → TituloAjustable (encoge hasta caber); «Novedades» de la barra → «Nuevos»; etiquetas de StatCard sin letra monoespaciada.

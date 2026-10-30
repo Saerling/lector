@@ -112,7 +112,7 @@ fun ExplorarScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
-                LText("Explorar", LectorType.Display.copy(fontSize = 40.sp, lineHeight = 44.sp), maxLines = 1)
+                TituloAjustable("Explorar")
                 val nFuentes = ext.fuentes.size
                 val nExt = ext.instaladas.size
                 val pendientes = remember(ext.instaladas) { ext.instaladas.count { it.actualizacion != null } }
@@ -304,7 +304,7 @@ private fun FuentesTab(
     }
     val resto = remember(visibles, fijadas) {
         visibles.filterNot { it.id.toString() in fijadas }
-            .groupBy { it.lang }.toSortedMap(compareBy<String> { nombreIdioma(it) })
+            .groupBy { it.lang }.toSortedMap(compareBy<String>({ nombreIdioma(it) }, { it }))
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -715,7 +715,7 @@ private fun ExtensionesTab(
         ext.disponibles
             .filter { it.pkg !in pkgsInstalados && (q.isEmpty() || it.nombre.contains(q, ignoreCase = true)) && (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas }
             .sortedBy { it.nombre.lowercase() }
-            .groupBy { it.lang }.toSortedMap(compareBy<String> { nombreIdioma(it) })
+            .groupBy { it.lang }.toSortedMap(compareBy<String>({ nombreIdioma(it) }, { it }))
     }
     val acento = MaterialTheme.colorScheme.primary
 

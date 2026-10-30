@@ -299,7 +299,7 @@ fun BibliotecaScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f).pressable(onLongClick = { mostrarOcultas = !mostrarOcultas }) {}) {
-                        LText("Biblioteca", LectorType.Display.copy(fontSize = 40.sp, lineHeight = 44.sp), maxLines = 1)
+                        TituloAjustable("Biblioteca")
                         Spacer(Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Row(

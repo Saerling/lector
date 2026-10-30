@@ -157,8 +157,9 @@ private fun HeroCarrusel(
     val arrastrando by pager.interactionSource.collectIsDraggedAsState()
     val reducido = Mov.reducido
     // Auto-avance suave cada 6 s (se pausa mientras lo arrastras y con movimiento reducido).
-    LaunchedEffect(pager.settledPage, arrastrando, items.size, reducido) {
-        if (reducido || arrastrando || items.size < 2) return@LaunchedEffect
+    val pausado = GestoAtras.hayEncima // con una página encima no tiene sentido seguir pasando (ni gastar)
+    LaunchedEffect(pager.settledPage, arrastrando, items.size, reducido, pausado) {
+        if (pausado || reducido || arrastrando || items.size < 2) return@LaunchedEffect
         delay(6000)
         pager.animateScrollToPage((pager.settledPage + 1) % items.size, animationSpec = spring(0.9f, 140f))
     }

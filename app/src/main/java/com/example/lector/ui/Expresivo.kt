@@ -241,3 +241,30 @@ fun DeslizadorExpresivo(
         }
     }
 }
+
+/**
+ * Título grande que nunca se corta: usa [maximo] si cabe en una línea y, si no, el tamaño más grande que quepa (hasta
+ * [minimo]). Se mide una vez por texto y ancho, no en cada fotograma.
+ */
+@Composable
+fun TituloAjustable(
+    texto: String,
+    modifier: Modifier = Modifier,
+    maximo: androidx.compose.ui.unit.TextUnit = 40.sp,
+    minimo: androidx.compose.ui.unit.TextUnit = 24.sp,
+) {
+    val medidor = androidx.compose.ui.text.rememberTextMeasurer()
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val ancho = constraints.maxWidth
+        val tam = remember(texto, ancho, maximo, minimo) {
+            var t = maximo.value
+            while (t > minimo.value) {
+                val r = medidor.measure(texto, LectorType.Display.copy(fontSize = t.sp, lineHeight = (t * 1.1f).sp), maxLines = 1, softWrap = false)
+                if (r.size.width <= ancho) break
+                t -= 1f
+            }
+            t
+        }
+        LText(texto, LectorType.Display.copy(fontSize = tam.sp, lineHeight = (tam * 1.1f).sp), maxLines = 1)
+    }
+}
