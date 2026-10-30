@@ -40,6 +40,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -247,4 +249,31 @@ fun <T> androidx.compose.foundation.lazy.grid.LazyGridScope.itemsAnimados(
         )
     }
     Box(m) { ambito.contenido(lista[i]) }
+}
+
+
+/** Estado del gesto «atrás» predictivo: 0 = sin gesto, 1 = a punto de soltar. */
+object GestoAtras {
+    var progreso by mutableFloatStateOf(0f)
+    var desdeIzquierda by mutableStateOf(true)
+}
+
+/**
+ * La página de arriba sigue al gesto atrás (como Android 14+): se encoge hasta el 90 %, se corre un poco hacia el
+ * lado contrario al borde y redondea sus esquinas. Al soltar se queda así mientras sale (no da un salto).
+ */
+@Composable
+fun Modifier.gestoAtras(arriba: Boolean): Modifier {
+    val congelado = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    if (arriba) congelado.floatValue = GestoAtras.progreso
+    val izq = GestoAtras.desdeIzquierda
+    return this.graphicsLayer {
+        val p = if (Mov.reducido) 0f else androidx.compose.animation.core.FastOutSlowInEasing.transform(congelado.floatValue)
+        if (p <= 0f) return@graphicsLayer
+        val e = 1f - 0.1f * p
+        scaleX = e; scaleY = e
+        translationX = (if (izq) 1f else -1f) * 24.dp.toPx() * p
+        shape = SuaveShape(32.dp * p)
+        clip = true
+    }
 }

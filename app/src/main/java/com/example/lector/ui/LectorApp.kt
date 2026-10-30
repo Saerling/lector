@@ -283,9 +283,21 @@ fun Inicio(
     }
     LaunchedEffect(ruta) { if (ruta != Ruta.Ficha && ruta != Ruta.LeerOnline) fichasAnteriores.clear() }
 
-    BackHandler(enabled = activo && ruta != null && detalleId == null) {
-        if (ruta == Ruta.Ficha) volverDeFicha()
-        else ruta = ruta?.padre()
+    // Atrás predictivo (Android 14+): mientras se desliza, la página de arriba sigue al dedo; al soltar, se navega.
+    androidx.activity.compose.PredictiveBackHandler(enabled = activo && ruta != null && detalleId == null) { gesto ->
+        try {
+            gesto.collect { e ->
+                GestoAtras.desdeIzquierda = e.swipeEdge == androidx.activity.BackEventCompat.EDGE_LEFT
+                GestoAtras.progreso = e.progress
+            }
+            if (ruta == Ruta.Ficha) volverDeFicha() else ruta = ruta?.padre()
+            GestoAtras.progreso = 0f
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                androidx.compose.animation.core.animate(GestoAtras.progreso, 0f, animationSpec = Muelles.espacial()) { v, _ -> GestoAtras.progreso = v }
+            }
+            throw e
+        }
     }
     BackHandler(enabled = activo && detalleId != null) { detalleId = null }
 
@@ -439,6 +451,8 @@ fun Inicio(
                 )
             }
         ) { clave ->
+          // Gesto atrás predictivo: la página sigue al dedo (se encoge y redondea) antes de soltarla.
+          Box(Modifier.fillMaxSize().gestoAtras(clave == capa && clave.isNotEmpty())) {
             when {
                 clave.isEmpty() -> Box(Modifier.fillMaxSize())
                 clave.startsWith("d:") -> {
@@ -497,6 +511,7 @@ fun Inicio(
                     Ruta.FuenteDetalle, Ruta.Ficha, Ruta.LeerOnline -> Box(Modifier.fillMaxSize())
                 }
             }
+          }
         }
 
 
@@ -528,7 +543,7 @@ fun Inicio(
                         }, label = "contenedor",
                     ) { if (it == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
                     // Fondo opaco y toques propios: la pantalla de debajo no se ve ni recibe toques.
-                    Box(Modifier.fillMaxSize().contenedor(rectOrigen) { p }.background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {
+                    Box(Modifier.fillMaxSize().contenedor(rectOrigen) { p }.gestoAtras(r == ruta).background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {
                         when (r) {
                         Ruta.FuenteDetalle -> FuenteDetalleScreen(
                             ext, fuenteId ?: 0L,

@@ -73,7 +73,7 @@ object LectorColors {
 /** Tipografía: Inter SemiBold con el interletrado cerrado de musicfy; los títulos grandes en negrita. */
 object LectorType {
     private val cerrado = (-0.05).em
-    val Display = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 38.sp, letterSpacing = (-0.03).em)
+    val Display = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.ExtraBold, fontSize = 36.sp, lineHeight = 40.sp, letterSpacing = (-0.04).em)
     val Hero = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.Bold, fontSize = 26.sp, lineHeight = 30.sp, letterSpacing = (-0.03).em)
     val Section = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp, letterSpacing = cerrado)
     val Body = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 20.sp, letterSpacing = cerrado)
