@@ -596,6 +596,8 @@ fun Inicio(
         }
 
         // Avance de una copia de seguridad (píldora pequeña arriba) y su informe al terminar.
+        // Partículas de «Polvo» (elementos que se deshacen o se rearman), encima de todo.
+        CapaPolvo()
         // «Ya lo tienes»: al añadir un manga que ya está en la biblioteca desde otra fuente.
         DialogoDuplicado(ext, almacen, alRecargar) { c ->
             if (ruta == Ruta.Ficha && mangaSel != null) {

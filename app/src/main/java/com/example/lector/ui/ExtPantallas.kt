@@ -598,6 +598,8 @@ private fun NavegarFuente(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(if (enLista) 10.dp else 16.dp),
         ) {
+            // Mientras llega la primera página: esqueletos con la ola, que se revelan en las portadas reales.
+            if (cargando && lista.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { BonesRejilla() }
             itemsIndexed(visibles, key = { _, m -> m.url }) { i, m ->
                 val esta = "${f.id}|${m.url}" in enBiblioteca
                 // Mantener pulsado = añadir o quitar de la biblioteca (como en Komikku).

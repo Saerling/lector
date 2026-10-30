@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -414,6 +415,24 @@ fun BonesPortadas(cantidad: Int = 3) {
                     Bone(124.dp, 186.dp, forma = SuaveShape(12.dp))
                     Spacer(Modifier.height(8.dp))
                     Bone(90.dp, 12.dp, forma = SuaveShape(6.dp))
+                }
+            }
+        }
+    }
+}
+
+/** Esqueleto de una cuadrícula de portadas (catálogo de una fuente mientras llega la primera página). */
+@Composable
+fun BonesRejilla(filas: Int = 3, columnas: Int = 3) {
+    BonesHost(Modifier.fillMaxWidth()) {
+        repeat(filas) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                repeat(columnas) {
+                    Column(Modifier.weight(1f)) {
+                        Box(Modifier.fillMaxWidth().then(Modifier.aspectRatio(2f / 3f)).background(ColorHueso, SuaveShape(14.dp)))
+                        Spacer(Modifier.height(8.dp))
+                        Bone(80.dp, 12.dp, forma = SuaveShape(6.dp))
+                    }
                 }
             }
         }
