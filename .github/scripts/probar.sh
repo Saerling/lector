@@ -1,5 +1,7 @@
 #!/bin/bash
 # Prueba en el emulador: instala la app y unas extensiones, abre el catálogo de cada una y guarda los fallos.
+volcar() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$1" >/dev/null 2>&1; }
+textos() { grep -o 'text="[^"]*"' "$1" 2>/dev/null | sed 's/text=//' | grep -v '""' | head -${2:-14} | tr '\n' ' '; }
 set -x
 APK="${1:-app/build/outputs/apk/debug/app-debug.apk}"
 ETIQUETA="${2:-debug}"
@@ -65,12 +67,24 @@ while read -r corto pkg url <&3; do
   for i in $(seq 1 30); do adb logcat -d | grep -q "LectorPrueba: capitulo " && break; sleep 4; done
   { adb logcat -d | grep "LectorPrueba: capitulo " | sed 's/.*LectorPrueba: //' | tail -1 || true; } >> fallos.txt
   adb logcat -d | grep -q "LectorPrueba: capitulo " || echo "$corto: sin respuesta" >> fallos.txt
+  # Capturas del lector (la primera fuente que abra un capítulo): página, barras, tras desplazar y ajustes.
+  if [ "$probadas" -le 2 ] && adb logcat -d | grep -q "LectorPrueba: capitulo "; then
+    TAM=$(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1); W=${TAM%x*}; H=${TAM#*x}
+    sleep 5; adb exec-out screencap -p > "captura-$ETIQUETA-lector-$corto-pagina.png"
+    adb shell input tap $((W/2)) $((H/2)); sleep 2
+    adb exec-out screencap -p > "captura-$ETIQUETA-lector-$corto-barras.png"
+    volcar "ui-lector-$corto.xml"; echo "Lector $corto, textos: $(textos ui-lector-$corto.xml 30)" >> fallos.txt
+    adb shell input tap $((W/2)) $((H/2)); sleep 1
+    adb shell input swipe $((W/2)) $((H*80/100)) $((W/2)) $((H*20/100)) 300; sleep 1
+    adb shell input swipe $((W*85/100)) $((H/2)) $((W*15/100)) $((H/2)) 250; sleep 3
+    adb exec-out screencap -p > "captura-$ETIQUETA-lector-$corto-desplazado.png"
+    adb shell pidof com.example.lector >/dev/null || echo "LECTOR $corto: LA APP SE CERRÓ AL DESPLAZAR" >> fallos.txt
+    adb logcat -d | grep -A20 "FATAL EXCEPTION" | head -20 >> fallos.txt
+  fi
   adb uninstall "$pkg" >/dev/null 2>&1 || true
 done 3< madara.txt
 
 # ---- Recomendaciones: abrir una desde la ficha (en la MISMA fuente) y volver con «atrás» a la ficha de antes ----
-volcar() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$1" >/dev/null 2>&1; }
-textos() { grep -o 'text="[^"]*"' "$1" 2>/dev/null | sed 's/text=//' | grep -v '""' | head -${2:-14} | tr '\n' ' '; }
 # Toca el centro del primer elemento con ese texto (o, con $3, el primero que esté por debajo de ese texto).
 tocar() {
   python3 - "$1" "$2" "${3:-}" <<'PY' > /tmp/xy.txt
