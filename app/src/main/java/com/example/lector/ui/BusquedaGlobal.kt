@@ -1,6 +1,7 @@
 package com.example.lector.ui
 
 import kotlinx.coroutines.async
+import kotlinx.coroutines.asCoroutineDispatcher
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -102,8 +103,8 @@ fun BusquedaGlobalScreen(
  * Busca [consulta] en todas las [fuentes] a la vez (5 en paralelo) y devuelve el estado de cada una por id. Vuelve a
  * buscar si cambia la consulta o la lista de fuentes.
  */
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-private val hilosBusqueda = kotlinx.coroutines.Dispatchers.IO.limitedParallelism(8)
+// Igual que Komikku (SearchScreenModel): un grupo fijo de 5 hilos solo para la búsqueda global.
+private val hilosBusqueda = java.util.concurrent.Executors.newFixedThreadPool(5).asCoroutineDispatcher()
 
 /**
  * Fuentes que estaban buscando cuando la app se cerró (p. ej. una extensión que agota la memoria): se anotan antes de
@@ -141,7 +142,7 @@ internal fun rememberResultadosGlobales(fuentes: List<FuenteUI>, consulta: Strin
         val q = consulta.trim()
         // 12 a la vez (son webs distintas), 12 s como mucho por fuente (las lentas o con Cloudflare no frenan a las
         // demás) y lo ya buscado sale al instante de la memoria.
-        val limite = Semaphore(6)
+        val limite = Semaphore(5)
         val omitidas = if (fuentes.size > 1) FuentesOmitidas.omitidas else emptySet()
         fuentes.forEach { f ->
             resultados[f.id] = CacheBusquedas.leer(f.id, q)?.let { EstadoBusqueda.Hecho(it) }

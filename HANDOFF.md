@@ -718,3 +718,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2as. PASO 45 (0.34)
 - OOM (heap 512 MB lleno; la traza cae en una animación cualquiera). FuentesEnUso (MotorExt) anota las fuentes en populares/recientes/buscar; Fallos añade «Memoria: X de Y MB» y «Fuentes trabajando: …» y, si fue OOM, las pasa a omitidas de la búsqueda global.
+
+## 2at. PASO 46 (0.35)
+- Búsqueda global como Komikku (SearchScreenModel): grupo fijo de 5 hilos (Executors.newFixedThreadPool(5)) y 5 a la vez. Komikku no protege contra extensiones que agotan la memoria; lo nuestro (FuentesOmitidas/FuentesEnUso/timeout) va más allá.
