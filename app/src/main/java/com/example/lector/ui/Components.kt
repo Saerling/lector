@@ -134,14 +134,36 @@ fun CoverCarousel(items: List<Comic>, almacen: Almacen, onClick: (Comic) -> Unit
     LazyRow(
         modifier, state = state,
         contentPadding = PaddingValues(horizontal = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         flingBehavior = rememberSnapFlingBehavior(state)
     ) {
         itemsIndexed(items, key = { _, c -> c.id }) { i, c ->
-            Column(Modifier.width(140.dp).entrada(i).press3D().pressable { onClick(c) }) {
-                ComicCover(c, almacen, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
-                Spacer(Modifier.height(8.dp))
-                LText(c.titulo, LectorType.Body, maxLines = 1)
+            val forma = SuaveShape(18.dp)
+            val progreso = c.progresoLectura()
+            val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+            Column(Modifier.width(132.dp).entrada(i, 45)) {
+                Box(
+                    Modifier.fillMaxWidth().aspectRatio(2f / 3f)
+                        .shadow(12.dp, forma, clip = false, ambientColor = Color.Black.copy(alpha = 0.35f), spotColor = Color.Black.copy(alpha = 0.35f))
+                        .origenTransicion().press3D().pressable { onClick(c) }
+                ) {
+                    ComicCover(c, almacen, Modifier.fillMaxSize(), forma)
+                    // Degradado inferior + barra de progreso de acento sobre la portada.
+                    if (progreso > 0f) {
+                        Box(
+                            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(48.dp).clip(forma)
+                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))))
+                        )
+                        Box(
+                            Modifier.align(Alignment.BottomCenter).padding(horizontal = 10.dp, vertical = 10.dp)
+                                .fillMaxWidth().height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.28f))
+                        ) {
+                            Box(Modifier.fillMaxWidth(progreso.coerceIn(0f, 1f)).fillMaxHeight().clip(CircleShape).background(acento))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                LText(c.titulo, LectorType.Body.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), maxLines = 2)
                 LText(c.textoPagina(), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
             }
         }
@@ -195,7 +217,8 @@ fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier:
         launch { inicio.animateTo(destino, if (aDerecha) detras else delante) }
         fin.animateTo(destino, if (aDerecha) delante else detras)
     }
-    val luz = LectorColors.Iluminada
+    // La píldora de la pestaña activa lleva el acento (tonal), no un blanco plano.
+    val luz = androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
     Box(
         modifier.fillMaxWidth().height(AltoCromo)
             .press3D(4f, 0.985f)
@@ -234,13 +257,23 @@ private fun RowScope.PestanaNav(tab: LectorTab, encendida: Boolean, onClick: () 
             .clickable(interactionSource = fuente, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            tab.iconoApagado, tab.label, tint = LectorColors.Text,
-            modifier = Modifier.size(24.dp).graphicsLayer { alpha = 0.7f * (1f - luz) },
-        )
-        Icon(
-            tab.icon, null, tint = LectorColors.Text,
-            modifier = Modifier.size(24.dp).graphicsLayer { alpha = luz },
+        // Encendida: el icono (relleno y con el acento) sube y da un pequeño salto, y aparece su nombre debajo.
+        val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+        val salto by animateFloatAsState(if (encendida) 1f else 0f, Muelles.espacialRapido(), label = "salto")
+        Box(Modifier.graphicsLayer { translationY = -7.dp.toPx() * salto; val e = 1f + 0.12f * salto; scaleX = e; scaleY = e }) {
+            Icon(
+                tab.iconoApagado, tab.label, tint = LectorColors.Text,
+                modifier = Modifier.size(24.dp).graphicsLayer { alpha = 0.7f * (1f - luz) },
+            )
+            Icon(
+                tab.icon, null, tint = acento,
+                modifier = Modifier.size(24.dp).graphicsLayer { alpha = luz },
+            )
+        }
+        LText(
+            if (tab == LectorTab.Updates) "Novedades" else tab.label, LectorType.Label.copy(fontSize = 10.sp), color = acento, maxLines = 1,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 9.dp)
+                .graphicsLayer { alpha = luz; translationY = (1f - salto) * 6.dp.toPx() },
         )
     }
 }

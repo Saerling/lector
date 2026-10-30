@@ -16,6 +16,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import com.example.lector.Almacen
 import com.example.lector.Comic
 import com.example.lector.Descargas
@@ -45,30 +51,94 @@ fun Ruta.padre(): Ruta? = when (this) {
 fun MasScreen(almacen: Almacen, onRuta: (Ruta) -> Unit, onAdd: () -> Unit, onAddFolder: () -> Unit) {
     val ctx = LocalContext.current
     LaunchedEffect(Unit) { Descargas.cargar(ctx) }
+    val acento = MaterialTheme.colorScheme.primary
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(bottom = 110.dp)
+        Modifier.fillMaxSize().background(LectorColors.Bg).verticalScroll(rememberScrollState()).padding(bottom = 110.dp)
     ) {
-        Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), Alignment.Center) { LogoApp(Modifier.size(96.dp)) }
-        FilaSwitch("Modo incógnito", "No se anota el historial de lectura", almacen.incognito) { almacen.incognito = it }
-        Divisor()
-        FilaAjuste(Icons.Rounded.Add, "Añadir cómic", "Archivo .cbz, .zip o .pdf de tu móvil", onAdd)
-        FilaAjuste(Icons.Rounded.Add, "Añadir carpeta", "Una carpeta de imágenes (o con capítulos)", onAddFolder)
-        Divisor()
+        // Cabecera: logo grande sobre un halo de acento, nombre de la app y lema.
+        Box(
+            Modifier.fillMaxWidth().background(
+                Brush.verticalGradient(0f to acento.copy(alpha = 0.20f), 1f to LectorColors.Bg)
+            ).statusBarsPadding().padding(top = 28.dp, bottom = 20.dp),
+            Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier.entrada(0).size(116.dp).clip(SuaveShape(40.dp)).background(acento.copy(alpha = 0.16f)),
+                    Alignment.Center,
+                ) { LogoApp(Modifier.size(100.dp)) }
+                Spacer(Modifier.height(14.dp))
+                LText("Shiori", LectorType.Display, Modifier.entrada(1))
+                LText("Tu lector de manga y cómics", LectorType.Label, Modifier.entrada(1), color = LectorColors.Muted)
+            }
+        }
+
+        var i = 2
+        GrupoMas("Lectura", Modifier.entrada(i++))
+        BurbujaMas(
+            if (almacen.incognito) Iconos.OjoTachado else Iconos.Ojo, "Modo incógnito", "No se anota el historial de lectura",
+            Modifier.entrada(i++), destacado = almacen.incognito, onClick = { almacen.incognito = !almacen.incognito },
+        ) { Interruptor(almacen.incognito, { almacen.incognito = it }) }
+
+        GrupoMas("Añadir", Modifier.entrada(i++))
+        BurbujaMas(Icons.Rounded.Add, "Añadir cómic", "Archivo .cbz, .zip o .pdf de tu móvil", Modifier.entrada(i++), onClick = onAdd)
+        BurbujaMas(Icons.Rounded.AddCircle, "Añadir carpeta", "Una carpeta de imágenes (o con capítulos)", Modifier.entrada(i++), onClick = onAddFolder)
+
+        GrupoMas("Biblioteca", Modifier.entrada(i++))
         val pendientes = Descargas.cola.size
-        FilaAjuste(
+        BurbujaMas(
             Iconos.Descargar, "Cola de descargas",
             when {
                 pendientes == 0 -> "Sin descargas pendientes"
                 Descargas.pausado -> "En pausa · $pendientes pendientes"
                 else -> "$pendientes pendientes"
             },
-        ) { onRuta(Ruta.Descargas) }
-        FilaAjuste(Icons.Rounded.Menu, "Categorías", null) { onRuta(Ruta.Categorias) }
-        FilaAjuste(Icons.Rounded.Info, "Estadísticas", null) { onRuta(Ruta.Estadisticas) }
-        FilaAjuste(Icons.Rounded.Share, "Datos y almacenamiento", null) { onRuta(Ruta.Datos) }
-        Divisor()
-        FilaAjuste(Icons.Rounded.Settings, "Ajustes", null) { onRuta(Ruta.Ajustes) }
-        FilaAjuste(Icons.Rounded.Face, "Acerca de", null) { onRuta(Ruta.AcercaDe) }
+            Modifier.entrada(i++), destacado = pendientes > 0 && !Descargas.pausado,
+            onClick = { onRuta(Ruta.Descargas) },
+        )
+        BurbujaMas(Icons.Rounded.Menu, "Categorías", null, Modifier.entrada(i++), onClick = { onRuta(Ruta.Categorias) })
+        BurbujaMas(Icons.Rounded.Info, "Estadísticas", null, Modifier.entrada(i++), onClick = { onRuta(Ruta.Estadisticas) })
+        BurbujaMas(Icons.Rounded.Share, "Datos y almacenamiento", null, Modifier.entrada(i++), onClick = { onRuta(Ruta.Datos) })
+
+        GrupoMas("App", Modifier.entrada(i++))
+        BurbujaMas(Icons.Rounded.Settings, "Ajustes", null, Modifier.entrada(i++), onClick = { onRuta(Ruta.Ajustes) })
+        BurbujaMas(Icons.Rounded.Face, "Acerca de", null, Modifier.entrada(i), onClick = { onRuta(Ruta.AcercaDe) })
+    }
+}
+
+@Composable
+private fun GrupoMas(titulo: String, modifier: Modifier) {
+    LText(
+        titulo, LectorType.Section.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
+        modifier.padding(start = 28.dp, end = 24.dp, top = 22.dp, bottom = 6.dp),
+    )
+}
+
+/** Burbuja de apartado (como la raíz de Ajustes): 64 dp+, esquinas de 22 dp, icono en círculo tonal de acento. */
+@Composable
+private fun BurbujaMas(
+    icono: ImageVector, titulo: String, detalle: String?, modifier: Modifier,
+    destacado: Boolean = false, onClick: () -> Unit,
+    final: (@Composable () -> Unit)? = null,
+) {
+    val acento = MaterialTheme.colorScheme.primary
+    val fondoIcono by animateColorAsState(if (destacado) acento else acento.copy(alpha = 0.18f), Muelles.efectos(), label = "icMas")
+    val tintaIcono by animateColorAsState(if (destacado) MaterialTheme.colorScheme.onPrimary else acento, Muelles.efectos(), label = "icMasT")
+    Row(
+        modifier.padding(horizontal = 20.dp, vertical = 5.dp).fillMaxWidth().heightIn(min = 68.dp).clip(SuaveShape(22.dp))
+            .background(LectorColors.Card).pressableCon(0.97f, onClick).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(fondoIcono), Alignment.Center) {
+            Icon(icono, null, tint = tintaIcono, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            LText(titulo, LectorType.Body.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold), maxLines = 1)
+            if (detalle != null) LText(detalle, LectorType.Label, color = LectorColors.Muted, maxLines = 2)
+        }
+        Spacer(Modifier.width(8.dp))
+        if (final != null) final() else Icon(Icons.Rounded.KeyboardArrowRight, null, tint = LectorColors.Muted)
     }
 }
 
