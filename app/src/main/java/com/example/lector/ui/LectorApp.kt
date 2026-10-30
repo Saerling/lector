@@ -166,6 +166,12 @@ fun Inicio(
                     if (destino.endsWith("|autorec")) PruebaAuto.abrirRecomendacion = true
                     if (destino.endsWith("|capitulo")) PruebaAuto.probarCapitulo = true
                 }
+                // Capturas del emulador: «probar-pantalla:Library» abre esa pestaña; «probar-pantalla:Ajustes», esa ruta.
+                if (destino?.startsWith("probar-pantalla:") == true && depurable) {
+                    val n = destino.removePrefix("probar-pantalla:")
+                    runCatching { LectorTab.valueOf(n) }.getOrNull()?.let { ruta = null; detalleId = null; onTab(it) }
+                        ?: runCatching { Ruta.valueOf(n) }.getOrNull()?.let { ruta = it }
+                }
                 // Pruebas de las copias en el emulador: restaurar un archivo y crear una copia, midiendo el tiempo.
                 if (destino?.startsWith("probar-restaurar:") == true && depurable) {
                     val ruta = destino.removePrefix("probar-restaurar:")

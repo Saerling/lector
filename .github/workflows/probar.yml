@@ -52,4 +52,5 @@ jobs:
           name: prueba-emulador
           path: |
             captura-*.png
+            captura-*.mp4
             logcat-*.txt

@@ -166,6 +166,21 @@ probar_copias() {
 }
 probar_copias
 
+# ---- Capturas de cada pantalla (con la biblioteca enorme restaurada) y vídeo de las transiciones ----
+for pant in Home Library Updates History More Ajustes Apariencia Estadisticas AcercaDe Search; do
+  adb shell am start -n com.example.lector/.MainActivity --es destino "probar-pantalla:$pant"
+  sleep 3
+  adb exec-out screencap -p > "captura-$ETIQUETA-pantalla-$pant.png"
+done
+# Transición: abrir la biblioteca y tocar la primera portada (debe crecer desde ella) y volver.
+adb shell am start -n com.example.lector/.MainActivity --es destino "probar-pantalla:Library"; sleep 3
+adb shell screenrecord --time-limit 8 --size 540x1200 /sdcard/transicion.mp4 &
+REC=$!; sleep 1
+adb shell input tap 200 700; sleep 3
+adb shell input keyevent KEYCODE_BACK; sleep 3
+wait $REC 2>/dev/null; sleep 1
+adb pull /sdcard/transicion.mp4 "captura-$ETIQUETA-transicion.mp4" >/dev/null 2>&1
+
 # ---- Actualización de la app: la última versión de GitHub se lee, se descarga y se instala ENCIMA (sin desinstalar) ----
 adb shell am force-stop com.example.lector; adb logcat -c
 adb shell am start -n com.example.lector/.MainActivity --es destino "probar-version"
