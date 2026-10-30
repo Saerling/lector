@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.lector.ext.*
 import eu.kanade.tachiyomi.source.model.Filter
@@ -207,27 +208,47 @@ fun ExtDetalleScreen(ext: ExtManager, pkg: String, onBack: () -> Unit) {
             LText("Esta extensión ya no está instalada.", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
             return@PaginaAjustes
         }
-        Row(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconoExt(e.pkg, null, Modifier.size(72.dp))
-            Spacer(Modifier.width(20.dp))
-            Column {
-                LText(e.nombre, LectorType.Hero, maxLines = 2)
-                LText("${bandera(e.lang)} ${nombreIdioma(e.lang)}", LectorType.Body, color = LectorColors.Muted)
+        val acento = MaterialTheme.colorScheme.primary
+        // Tarjeta héroe: icono grande, nombre, píldoras de estado y las acciones principales como botones expresivos.
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                .clip(SuaveShape(30.dp)).background(LectorColors.Card).padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            IconoExt(e.pkg, null, Modifier.size(96.dp))
+            Spacer(Modifier.height(14.dp))
+            LText(e.nombre, LectorType.Hero.copy(fontSize = 28.sp, lineHeight = 32.sp), maxLines = 2)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PildoraExplorar("${bandera(e.lang)} ${nombreIdioma(e.lang)}")
+                PildoraExplorar("v${e.versionName}")
+                if (e.confiable) PildoraExplorar("De confianza", acento, acento.copy(alpha = 0.16f))
+                else PildoraExplorar("Sin confianza", LectorColors.Error, LectorColors.Error.copy(alpha = 0.14f))
+            }
+            Spacer(Modifier.height(18.dp))
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                e.actualizacion?.let { a ->
+                    BotonExpresivo("Actualizar a ${a.versionName}", Icons.Rounded.Refresh, { ext.instalar(a) }, Modifier.fillMaxWidth(), estilo = EstiloBoton.RELLENO)
+                }
+                if (!e.confiable) {
+                    BotonExpresivo(
+                        "Confiar", Icons.Rounded.Check, { ext.confiar(e) }, Modifier.fillMaxWidth(),
+                        estilo = if (e.actualizacion == null) EstiloBoton.RELLENO else EstiloBoton.TONAL,
+                    )
+                } else {
+                    BotonExpresivo("Dejar de confiar", Icons.Rounded.Close, { ext.dejarDeConfiar(e) }, Modifier.fillMaxWidth())
+                }
             }
         }
-        Dato("Paquete", e.pkg)
-        Dato("Versión", e.versionName)
-        Dato("Listado", e.repoSigla?.let { "@$it" } ?: "—")
-        Dato("Estado", if (e.confiable) "De confianza" else "Sin confianza")
-        (e.errorCarga ?: ext.erroresCarga[e.pkg])?.let { Dato("Problema", it) }
-        Divisor()
-        e.actualizacion?.let { a ->
-            FilaAjuste(Icons.Rounded.Refresh, "Actualizar a ${a.versionName}", null) { ext.instalar(a) }
-        }
-        if (!e.confiable) {
-            FilaAjuste(Icons.Rounded.Check, "Confiar en esta extensión", "Permite usar sus fuentes") { ext.confiar(e) }
-        } else {
-            FilaAjuste(Icons.Rounded.Close, "Dejar de confiar", "Sus fuentes dejarán de aparecer") { ext.dejarDeConfiar(e) }
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                .clip(SuaveShape(26.dp)).background(LectorColors.Card).padding(vertical = 10.dp)
+        ) {
+            Dato("Paquete", e.pkg)
+            Dato("Versión", e.versionName)
+            Dato("Listado", e.repoSigla?.let { "@$it" } ?: "—")
+            Dato("Estado", if (e.confiable) "De confianza" else "Sin confianza")
+            (e.errorCarga ?: ext.erroresCarga[e.pkg])?.let { Dato("Problema", it) }
         }
         FilaAjuste(Icons.Rounded.Info, "Información de la app", "Permisos y ajustes de Android") {
             runCatching {
@@ -240,11 +261,19 @@ fun ExtDetalleScreen(ext: ExtManager, pkg: String, onBack: () -> Unit) {
         FilaAjuste(Icons.Rounded.Delete, "Desinstalar", null) { ext.desinstalar(e.pkg) }
         Divisor()
         val fuentes = ext.disponibles.firstOrNull { it.pkg == e.pkg }?.fuentes.orEmpty()
-        TituloSeccion("Fuentes (${fuentes.size})")
+        SeccionExplorar("Fuentes", fuentes.size)
         fuentes.forEach { f ->
-            Column(Modifier.padding(horizontal = 24.dp, vertical = 6.dp)) {
-                LText(f.nombre, LectorType.Section.copy(fontSize = 16.sp), maxLines = 1)
-                LText("${nombreIdioma(f.lang)}  ·  ${f.baseUrl}", LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clip(SuaveShape(20.dp)).background(LectorColors.Card).padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LText(bandera(f.lang), LectorType.Section.copy(fontSize = 20.sp))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    LText(f.nombre, LectorType.Section.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+                    LText("${nombreIdioma(f.lang)}  ·  ${f.baseUrl}", LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+                }
             }
         }
         if (configurables.isNotEmpty()) {
@@ -265,9 +294,9 @@ fun ExtDetalleScreen(ext: ExtManager, pkg: String, onBack: () -> Unit) {
 
 @Composable
 private fun Dato(etiqueta: String, valor: String) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp)) {
-        LText(etiqueta, LectorType.Body, Modifier.width(96.dp), color = LectorColors.Muted)
-        LText(valor, LectorType.Body, Modifier.weight(1f))
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 7.dp)) {
+        LText(etiqueta, LectorType.Label.copy(fontSize = 13.sp), Modifier.width(92.dp), color = LectorColors.Muted)
+        LText(valor, LectorType.Body.copy(fontWeight = FontWeight.Bold), Modifier.weight(1f))
     }
 }
 
@@ -442,66 +471,79 @@ private fun NavegarFuente(
         return
     }
 
+    val acento = MaterialTheme.colorScheme.primary
     Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Cabecera: atrás y acciones redondas arriba; debajo, el icono de la fuente y su nombre en grande.
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             BotonAtras(onBack)
-            Spacer(Modifier.width(14.dp))
-            LText(f.nombre, LectorType.Display.copy(fontSize = 26.sp), Modifier.weight(1f), maxLines = 1)
+            Spacer(Modifier.weight(1f))
             // WebView del sitio, siempre a mano (como el icono de Komikku en la barra).
             if (f.baseUrl.isNotBlank()) {
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    Modifier.height(44.dp).pressable { webAbierta = true }.clip(CircleShape).background(LectorColors.PillFill)
-                        .padding(horizontal = 14.dp),
-                    Alignment.Center,
-                ) { LText("WebView", LectorType.Body) }
+                BotonExpresivo("WebView", Icons.Rounded.Share, { webAbierta = true }, alto = 44.dp)
             }
             if (onAjustes != null) {
                 Spacer(Modifier.width(8.dp))
-                Box(Modifier.size(44.dp).pressable(onAjustes).clip(CircleShape).background(LectorColors.PillFill), Alignment.Center) {
-                    Icon(Icons.Rounded.Settings, "Ajustes de la fuente", tint = LectorColors.Text)
+                BotonRedondoTema(Icons.Rounded.Settings, "Ajustes de la fuente", onAjustes)
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconoExt(f.pkg, null, Modifier.size(56.dp))
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                LText(f.nombre, LectorType.Display.copy(fontSize = 30.sp, lineHeight = 34.sp), maxLines = 1)
+                val idioma = remember(f.lang) { "${bandera(f.lang)} ${nombreIdioma(f.lang)}" }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PildoraExplorar(idioma)
+                    if (lista.isNotEmpty()) PildoraExplorar("${lista.size} títulos", acento, acento.copy(alpha = 0.16f))
                 }
             }
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ChipSel("Populares", modo == 0) { modo = 0 }
-            ChipSel("Recientes", modo == 1) { modo = 1 }
-            ChipSel("Más reciente", false) { masReciente() }
-            if (filtros != null) ChipSel(if (aplicados != null) "Filtros ✓" else "Filtros", aplicados != null) { panel = true }
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChipExplorar("Populares", modo == 0, Icons.Rounded.Favorite) { modo = 0 }
+            ChipExplorar("Recientes", modo == 1, Icons.Rounded.DateRange) { modo = 1 }
+            ChipExplorar("Más reciente", false, Icons.Rounded.KeyboardArrowUp) { masReciente() }
+            if (filtros != null) ChipExplorar("Filtros", aplicados != null, Icons.Rounded.List) { panel = true }
             // Filtro / Ordenar / Mostrar del catálogo (como la hoja de la biblioteca).
             val activos = almacen.explorarEnBiblioteca != com.example.lector.Tri.IGNORAR || almacen.explorarOrden != 0 || almacen.explorarDescendente
-            ChipSel(if (activos) "Vista ✓" else "Vista", activos) { hojaVista = true }
+            ChipExplorar("Vista", activos, Icons.Rounded.Settings) { hojaVista = true }
         }
         // Búsquedas guardadas (TachiyomiSY/Komikku): tocar = repetirla · mantener pulsado = borrarla.
         val guardadas = ext.busquedas(f.id)
         if (guardadas.isNotEmpty() || (modo == 2 && (enviada.isNotBlank() || aplicados != null))) {
             Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 6.dp),
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(top = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 guardadas.forEach { b ->
-                    ChipSel("★ ${b.nombre}", enviada == b.consulta && modo == 2, onLongClick = {
+                    ChipExplorar(b.nombre, enviada == b.consulta && modo == 2, Icons.Rounded.Star, onLongClick = {
                         ext.borrarBusqueda(f.id, b.nombre); Avisos.mostrar("Búsqueda «${b.nombre}» borrada")
                     }) { aplicarGuardada(b) }
                 }
                 if (modo == 2 && (enviada.isNotBlank() || aplicados != null)) {
-                    ChipSel("+ Guardar búsqueda", false) { guardar = true }
+                    ChipExplorar("Guardar búsqueda", false, Icons.Rounded.Add) { guardar = true }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { CampoBusqueda(consulta, { consulta = it }, "Buscar en ${f.nombre}") }
-            Spacer(Modifier.width(10.dp))
-            PillButton("Ir", Icons.Rounded.Search, { if (consulta.isNotBlank()) { enviada = consulta.trim(); modo = 2 } })
+            Spacer(Modifier.width(8.dp))
+            BotonExpresivo(null, Icons.Rounded.Search, { if (consulta.isNotBlank()) { enviada = consulta.trim(); modo = 2 } }, estilo = EstiloBoton.RELLENO)
         }
         error?.let {
-            Column(Modifier.padding(horizontal = 24.dp)) {
-                LText(it, LectorType.Label, color = LectorColors.Error)
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp)
+                    .clip(SuaveShape(24.dp)).background(LectorColors.Error.copy(alpha = 0.1f)).padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Warning, null, tint = LectorColors.Error, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(10.dp))
+                    LText(it, LectorType.Label, Modifier.weight(1f), color = LectorColors.Error, maxLines = 4)
+                }
                 if (f.baseUrl.isNotBlank()) {
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PillButton("Abrir en WebView", Icons.Rounded.ArrowForward, { webAbierta = true })
-                        PillButton("Reintentar", Icons.Rounded.Refresh, { error = null; recarga++ })
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BotonExpresivo("Abrir en WebView", Icons.Rounded.ArrowForward, { webAbierta = true }, estilo = EstiloBoton.RELLENO, alto = 42.dp)
+                        BotonExpresivo("Reintentar", Icons.Rounded.Refresh, { error = null; recarga++ }, alto = 42.dp)
                     }
                 }
             }
@@ -543,6 +585,12 @@ private fun NavegarFuente(
             )
         }
         val vista = almacen.vistaExplorar
+        val cabeceras = remember(f.id, recarga) { motor.cabeceras(f) }
+        val degradadoPortada = remember {
+            androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to Color.Transparent, 0.45f to Color(0x66000000), 1f to Color(0xF2000000),
+            )
+        }
         val enLista = vista == com.example.lector.VistaExplorar.LISTA
         // Filtro «en la biblioteca» y orden (sobre lo ya cargado; «orden de la fuente» = como lo da la fuente).
         val filtroBiblio = almacen.explorarEnBiblioteca
@@ -593,53 +641,79 @@ private fun NavegarFuente(
                 else -> GridCells.Adaptive(if (vista == com.example.lector.VistaExplorar.PORTADAS) 96.dp else 108.dp)
             },
             state = rejilla,
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 40.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 40.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(if (enLista) 10.dp else 16.dp),
         ) {
             // Mientras llega la primera página: esqueletos con la ola, que se revelan en las portadas reales.
-            if (cargando && lista.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { BonesRejilla() }
+            if (cargando && lista.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { BonesRejilla(filas = 4) }
             itemsIndexed(visibles, key = { _, m -> m.url }) { i, m ->
                 val esta = "${f.id}|${m.url}" in enBiblioteca
                 // Mantener pulsado = añadir o quitar de la biblioteca (como en Komikku).
                 val mod = Modifier.entrada(i % 12).origenTransicion().press3D().pressable(onLongClick = { alternarEnBiblioteca(ctx, almacen, f, m) }) { onManga(m) }
-                if (enLista) Row(mod, verticalAlignment = Alignment.CenterVertically) {
-                    ImagenRemota(m.portadaUrl, Modifier.width(52.dp).aspectRatio(2f / 3f).clip(SuaveShape(10.dp)), motor.cabeceras(f), fuenteId = f.id)
+                if (enLista) Row(
+                    mod.fillMaxWidth().clip(SuaveShape(20.dp)).background(LectorColors.Card).padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ImagenRemota(m.portadaUrl, Modifier.width(56.dp).aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), cabeceras, fuenteId = f.id)
                     Spacer(Modifier.width(14.dp))
-                    LText(m.titulo, LectorType.Body, Modifier.weight(1f), maxLines = 2)
-                    if (esta) EnBiblioteca()
+                    Column(Modifier.weight(1f)) {
+                        LText(m.titulo, LectorType.Body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), maxLines = 2)
+                        if (esta) {
+                            Spacer(Modifier.height(6.dp))
+                            EnBiblioteca()
+                        }
+                    }
+                    Icon(Icons.Rounded.KeyboardArrowRight, null, tint = LectorColors.Muted)
                 } else if (vista == com.example.lector.VistaExplorar.CUADRICULA) Column(mod) {
                     Box {
                         ImagenRemota(
-                            m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(14.dp)).alpha(if (esta) 0.55f else 1f),
-                            motor.cabeceras(f), fuenteId = f.id
+                            m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(16.dp)).alpha(if (esta) 0.55f else 1f),
+                            cabeceras, fuenteId = f.id
                         )
                         if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                     }
-                    Spacer(Modifier.height(6.dp))
-                    LText(m.titulo, LectorType.Label, maxLines = 2)
-                } else Box(mod.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(14.dp))) {
+                    Spacer(Modifier.height(8.dp))
+                    LText(m.titulo, LectorType.Label.copy(fontSize = 13.sp, lineHeight = 17.sp), maxLines = 2)
+                } else Box(mod.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(16.dp))) {
                     // Compacta (título sobre la portada) o solo portadas.
-                    ImagenRemota(m.portadaUrl, Modifier.fillMaxSize().alpha(if (esta) 0.55f else 1f), motor.cabeceras(f), fuenteId = f.id)
+                    ImagenRemota(m.portadaUrl, Modifier.fillMaxSize().alpha(if (esta) 0.55f else 1f), cabeceras, fuenteId = f.id)
                     if (vista == com.example.lector.VistaExplorar.COMPACTA) {
                         Box(
                             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000))))
-                                .padding(start = 8.dp, end = 8.dp, top = 22.dp, bottom = 8.dp),
-                        ) { LText(m.titulo, LectorType.Label, color = Color.White, maxLines = 2) }
+                                .background(degradadoPortada)
+                                .padding(start = 10.dp, end = 10.dp, top = 44.dp, bottom = 10.dp),
+                        ) {
+                            LText(
+                                m.titulo, LectorType.Body.copy(fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold),
+                                color = Color.White, maxLines = 2,
+                            )
+                        }
                     }
                     if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                 }
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), Alignment.Center) {
+                Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), Alignment.Center) {
                     when {
-                        cargando -> IndicadorCarga(Modifier.size(24.dp))
-                        hay && lista.isNotEmpty() -> PillButton(if (error != null) "Reintentar" else "Cargar más", Icons.Rounded.Add, {
-                            error = null
-                            scope.launch { cargarMas() }
-                        })
-                        !cargando && lista.isEmpty() && error == null -> LText("Sin resultados", LectorType.Label, color = LectorColors.Muted)
+                        cargando && lista.isNotEmpty() -> IndicadorCarga(Modifier.size(32.dp))
+                        cargando -> {}
+                        hay && lista.isNotEmpty() -> BotonExpresivo(
+                            if (error != null) "Reintentar" else "Cargar más", if (error != null) Icons.Rounded.Refresh else Icons.Rounded.Add, {
+                                error = null
+                                scope.launch { cargarMas() }
+                            },
+                        )
+                        !cargando && lista.isEmpty() && error == null -> Column(
+                            Modifier.padding(top = 40.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(Modifier.size(96.dp).clip(SuaveShape(34.dp)).background(acento.copy(alpha = 0.16f)), Alignment.Center) {
+                                Icon(Icons.Rounded.Search, null, tint = acento, modifier = Modifier.size(44.dp))
+                            }
+                            Spacer(Modifier.height(16.dp))
+                            LText("Sin resultados", LectorType.Body.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold))
+                            LText("Prueba con otra búsqueda o quita filtros", LectorType.Label, color = LectorColors.Muted)
+                        }
                     }
                 }
             }

@@ -4,9 +4,16 @@ import androidx.compose.ui.focus.onFocusChanged
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.LruCache
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -26,7 +33,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +45,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -50,12 +61,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
@@ -98,77 +106,82 @@ fun ExplorarScreen(
     val acento = MaterialTheme.colorScheme.primary
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        // Cabecera grande: título enorme, resumen debajo y acciones en botones redondos tonales.
         Row(
-            Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+            Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 18.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            LText("Explorar", LectorType.Display, Modifier.weight(1f))
-            if (sub == 1) {
-                if (reordenar) {
-                    IconButton(onClick = { reordenar = false }) { Icon(Icons.Rounded.Close, "Terminar", tint = LectorColors.Text) }
-                } else {
-                    IconButton(onClick = { dialogoNovedades = true }) { Icon(Icons.Rounded.Add, "Añadir fuente", tint = LectorColors.Text) }
-                    IconButton(onClick = { reordenar = true }) { Icon(Icons.Rounded.Menu, "Ordenar", tint = LectorColors.Text) }
+            Column(Modifier.weight(1f)) {
+                LText("Explorar", LectorType.Display.copy(fontSize = 40.sp, lineHeight = 44.sp), maxLines = 1)
+                val nFuentes = ext.fuentes.size
+                val nExt = ext.instaladas.size
+                val pendientes = remember(ext.instaladas) { ext.instaladas.count { it.actualizacion != null } }
+                val resumen = remember(nFuentes, nExt, pendientes) {
+                    "$nFuentes fuentes · $nExt extensiones" + if (pendientes > 0) " · $pendientes por actualizar" else ""
                 }
+                LText(resumen, LectorType.Label.copy(fontSize = 13.sp), color = LectorColors.Muted, maxLines = 1)
             }
-            if (sub == 2) {
-                IconButton(onClick = { buscando = !buscando; if (!buscando) consulta = "" }) {
-                    Icon(Icons.Rounded.Search, "Buscar", tint = LectorColors.Text)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (sub == 1) {
+                    if (reordenar) {
+                        BotonCabecera(Icons.Rounded.Check, "Terminar", activo = true) { reordenar = false }
+                    } else {
+                        BotonCabecera(Icons.Rounded.Add, "Añadir fuente") { dialogoNovedades = true }
+                        BotonCabecera(Icons.Rounded.Menu, "Ordenar") { reordenar = true }
+                    }
                 }
-            }
-            if (sub == 0) IconButton(onClick = onBuscarGlobal) { Icon(Icons.Rounded.Search, "Búsqueda global", tint = LectorColors.Text) }
-            if (sub == 0 || sub == 2) {
-                val forma = SuaveShape(8.dp)
-                val color = if (ext.mostrarNsfw) acento else LectorColors.Muted
-                Box(
-                    Modifier.padding(horizontal = 8.dp).size(30.dp).pressable { ext.alternarNsfw() }
-                        .clip(forma).border(2.dp, color, forma),
-                    Alignment.Center
-                ) { LText("18", LectorType.Body.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp), color = color) }
-                Box {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "Más", tint = LectorColors.Text) }
-                    MenuShiori(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text("Búsqueda global") }, onClick = { menu = false; onBuscarGlobal() })
-                        DropdownMenuItem(text = { Text("Listados de extensiones") }, onClick = { menu = false; onRuta(Ruta.ListadosExt) })
-                        DropdownMenuItem(text = { Text("Idiomas") }, onClick = { menu = false; dialogoIdiomas = true })
-                        DropdownMenuItem(text = { Text("Actualizar lista") }, onClick = { menu = false; ext.actualizarLista() })
+                if (sub == 2) {
+                    BotonCabecera(if (buscando) Icons.Rounded.Close else Icons.Rounded.Search, "Buscar", activo = buscando) {
+                        buscando = !buscando; if (!buscando) consulta = ""
+                    }
+                }
+                if (sub == 0) BotonCabecera(Icons.Rounded.Search, "Búsqueda global") { onBuscarGlobal() }
+                if (sub == 0 || sub == 2) {
+                    val on = ext.mostrarNsfw
+                    val fondo by animateColorAsState(if (on) acento.copy(alpha = 0.2f) else LectorColors.PillFill, Muelles.efectos(), label = "nsfw")
+                    val color by animateColorAsState(if (on) acento else LectorColors.Muted, Muelles.efectos(), label = "nsfwTinta")
+                    Box(
+                        Modifier.height(44.dp).pressable { Tacto.tic(); ext.alternarNsfw() }.clip(CircleShape)
+                            .background(fondo).padding(horizontal = 12.dp),
+                        Alignment.Center
+                    ) { LText("18+", LectorType.Body.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp), color = color) }
+                    Box {
+                        BotonCabecera(Icons.Rounded.MoreVert, "Más") { menu = true }
+                        MenuShiori(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(text = { Text("Búsqueda global") }, onClick = { menu = false; onBuscarGlobal() })
+                            DropdownMenuItem(text = { Text("Listados de extensiones") }, onClick = { menu = false; onRuta(Ruta.ListadosExt) })
+                            DropdownMenuItem(text = { Text("Idiomas") }, onClick = { menu = false; dialogoIdiomas = true })
+                            DropdownMenuItem(text = { Text("Actualizar lista") }, onClick = { menu = false; ext.actualizarLista() })
+                        }
                     }
                 }
             }
         }
 
-        // Pestañas en píldora: el indicador se desliza de una a otra.
-        BoxWithConstraints(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                .clip(CircleShape).background(LectorColors.Card).padding(4.dp)
-        ) {
-            val titulos = listOf("Fuentes", "Novedades", "Extensiones", "Migrar")
-            val ancho = maxWidth / titulos.size
-            val x by animateDpAsState(ancho * sub, spring(dampingRatio = 0.75f, stiffness = 400f), label = "tabExplorar")
-            Box(Modifier.offset(x = x).width(ancho).height(40.dp).clip(CircleShape).background(acento.copy(alpha = 0.22f)))
-            Row(Modifier.fillMaxWidth()) {
-                titulos.forEachIndexed { i, titulo ->
-                    val color by animateColorAsState(if (i == sub) acento else LectorColors.Text, label = "tabColor")
-                    Box(
-                        Modifier.weight(1f).height(40.dp).clip(CircleShape)
-                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                                sub = i; consulta = ""; buscando = false; reordenar = false
-                            },
-                        Alignment.Center
-                    ) { LText(titulo, LectorType.Body.copy(fontSize = 14.sp), color = color, maxLines = 1) }
-                }
-            }
-        }
+        PestanasExplorar(sub) { i -> sub = i; consulta = ""; buscando = false; reordenar = false }
 
         Box(Modifier.weight(1f)) {
-            when (sub) {
-                0 -> FuentesTab(ext, consulta, { consulta = it }, onFuente) { sub = 2 }
-                1 -> NovedadesTab(ext, reordenar, onManga, onFuente) { dialogoNovedades = true }
-                2 -> ExtensionesTab(
-                    ext, consulta, buscando, { consulta = it }, onExt,
-                    onConfiar = { porConfiar = it }, onRepos = { onRuta(Ruta.ListadosExt) }
-                )
-                else -> MigrarTab(ext, almacen, onMigrar)
+            AnimatedContent(
+                targetState = sub,
+                transitionSpec = {
+                    if (Mov.reducido) fadeIn(tween(120)) togetherWith fadeOut(tween(100))
+                    else {
+                        val dir = if (targetState > initialState) 1 else -1
+                        (slideInHorizontally(Muelles.espacial()) { it / 5 * dir } + fadeIn(Muelles.efectosLento())) togetherWith
+                            (slideOutHorizontally(Muelles.espacial()) { -it / 5 * dir } + fadeOut(tween(140)))
+                    }
+                },
+                label = "subExplorar",
+            ) { pestana ->
+                when (pestana) {
+                    0 -> FuentesTab(ext, consulta, { consulta = it }, onFuente) { sub = 2 }
+                    1 -> NovedadesTab(ext, reordenar, onManga, onFuente) { dialogoNovedades = true }
+                    2 -> ExtensionesTab(
+                        ext, consulta, buscando, { consulta = it }, onExt,
+                        onConfiar = { porConfiar = it }, onRepos = { onRuta(Ruta.ListadosExt) }
+                    )
+                    else -> MigrarTab(ext, almacen, onMigrar)
+                }
             }
         }
     }
@@ -213,6 +226,59 @@ fun ExplorarScreen(
     }
 }
 
+/**
+ * Sub-pestañas en una píldora: el indicador de acento se desliza con muelles y se estira (el borde que va delante
+ * llega antes que el de detrás), como un líquido. Se dibuja en la fase de dibujo: no recompone en cada fotograma.
+ */
+@Composable
+private fun PestanasExplorar(elegida: Int, onElegir: (Int) -> Unit) {
+    val titulos = remember { listOf("Fuentes", "Novedades", "Extensiones", "Migrar") }
+    val acento = MaterialTheme.colorScheme.primary
+    val izq = remember { Animatable(elegida.toFloat()) }
+    val der = remember { Animatable(elegida + 1f) }
+    LaunchedEffect(elegida) {
+        val haciaDerecha = elegida > izq.targetValue
+        if (Mov.reducido) {
+            launch { izq.animateTo(elegida.toFloat(), tween(120)) }
+            launch { der.animateTo(elegida + 1f, tween(120)) }
+        } else {
+            val rapido = spring<Float>(0.72f, 700f)
+            val lento = spring<Float>(0.8f, 240f)
+            launch { izq.animateTo(elegida.toFloat(), if (haciaDerecha) lento else rapido) }
+            launch { der.animateTo(elegida + 1f, if (haciaDerecha) rapido else lento) }
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 14.dp, bottom = 8.dp)
+            .clip(CircleShape).background(LectorColors.Card).padding(5.dp).height(44.dp)
+            .drawBehind {
+                val w = size.width / titulos.size
+                val l = w * izq.value
+                val r = w * der.value
+                drawRoundRect(acento, Offset(l, 0f), Size((r - l).coerceAtLeast(0f), size.height), CornerRadius(size.height / 2f))
+            }
+    ) {
+        titulos.forEachIndexed { i, titulo ->
+            val activa = i == elegida
+            val color by animateColorAsState(
+                if (activa) MaterialTheme.colorScheme.onPrimary else LectorColors.Muted, Muelles.efectos(), label = "tabColor"
+            )
+            Box(
+                Modifier.weight(1f).fillMaxHeight().clip(CircleShape)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                        if (!activa) { Tacto.tic(); onElegir(i) }
+                    },
+                Alignment.Center
+            ) {
+                LText(
+                    titulo, LectorType.Body.copy(fontSize = 13.sp, fontWeight = if (activa) FontWeight.Bold else FontWeight.SemiBold),
+                    color = color, maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
 // ───────────────────────── Fuentes ─────────────────────────
 
 @Composable
@@ -221,60 +287,123 @@ private fun FuentesTab(
     onFuente: (FuenteUI) -> Unit, irExtensiones: () -> Unit,
 ) {
     val todas = ext.fuentes
-    val visibles = todas.filter {
-        (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas &&
-            (consulta.isBlank() || it.nombre.contains(consulta.trim(), ignoreCase = true))
+    val q = consulta.trim()
+    // Con cientos de fuentes: los filtros y agrupaciones solo se rehacen cuando cambia lo que los afecta.
+    val visibles = remember(todas, ext.mostrarNsfw, ext.idiomas, q) {
+        todas.filter {
+            (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas &&
+                (q.isEmpty() || it.nombre.contains(q, ignoreCase = true))
+        }
     }
-    val ancladas = visibles.filter { it.id.toString() in ext.fijadas }
-    val usadas = ext.recientes.mapNotNull { r -> visibles.firstOrNull { it.id.toString() == r } }.take(1)
-    val resto = visibles.filterNot { it.id.toString() in ext.fijadas }
-        .groupBy { it.lang }.toSortedMap(compareBy<String> { nombreIdioma(it) })
+    val fijadas = ext.fijadas
+    val ancladas = remember(visibles, fijadas) { visibles.filter { it.id.toString() in fijadas } }
+    val recientes = ext.recientes
+    val usadas = remember(visibles, recientes) {
+        val porId = visibles.associateBy { it.id.toString() }
+        recientes.mapNotNull { porId[it] }.take(1)
+    }
+    val resto = remember(visibles, fijadas) {
+        visibles.filterNot { it.id.toString() in fijadas }
+            .groupBy { it.lang }.toSortedMap(compareBy<String> { nombreIdioma(it) })
+    }
 
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) { CampoBusqueda(consulta, onConsulta, "Buscar fuentes") }
+        Box(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) { CampoBusqueda(consulta, onConsulta, "Buscar fuentes") }
         if (todas.isEmpty()) {
             Vacio(
                 "Todavía no hay fuentes. Instala una extensión, pulsa «Confiar» y sus fuentes aparecerán aquí.",
-                "Ir a Extensiones", irExtensiones
+                "Ir a Extensiones", irExtensiones, Icons.Rounded.Build,
             )
+        } else if (visibles.isEmpty()) {
+            Vacio("Ninguna fuente coincide con «$q».", icono = Icons.Rounded.Search)
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 190.dp)) {
                 if (usadas.isNotEmpty()) {
-                    item { TituloSeccion("Usado recientemente") }
-                    items(usadas) { FilaFuente(it, ext, onFuente) }
+                    item(key = "t_rec", contentType = "titulo") { SeccionExplorar("Seguir explorando") }
+                    items(usadas, key = { "r${it.id}" }, contentType = { "reciente" }) { f ->
+                        TarjetaReciente(f, f.id.toString() in fijadas, { ext.alternarFijada(f.id) }) { onFuente(f) }
+                    }
                 }
                 if (ancladas.isNotEmpty()) {
-                    item { TituloSeccion("Ancladas") }
-                    items(ancladas) { FilaFuente(it, ext, onFuente) }
+                    item(key = "t_anc", contentType = "titulo") { SeccionExplorar("Ancladas", ancladas.size, acentuado = true) }
+                    items(ancladas, key = { "a${it.id}" }, contentType = { "fuente" }) { FilaFuente(it, true, ext, onFuente) }
                 }
                 resto.forEach { (lang, lista) ->
-                    item { TituloSeccion(nombreIdioma(lang)) }
-                    items(lista) { FilaFuente(it, ext, onFuente) }
+                    item(key = "t_$lang", contentType = "titulo") { SeccionExplorar(nombreIdioma(lang), lista.size) }
+                    items(lista, key = { "f${it.id}" }, contentType = { "fuente" }) { FilaFuente(it, false, ext, onFuente) }
                 }
             }
         }
     }
 }
 
+/** La última fuente usada: una tarjeta grande teñida de acento, con su icono enorme y un botón para entrar. */
 @Composable
-private fun FilaFuente(f: FuenteUI, ext: ExtManager, onFuente: (FuenteUI) -> Unit) {
-    val fijada = f.id.toString() in ext.fijadas
+private fun TarjetaReciente(f: FuenteUI, fijada: Boolean, onFijar: () -> Unit, onAbrir: () -> Unit) {
+    val acento = MaterialTheme.colorScheme.primary
+    val idioma = remember(f.lang) { "${bandera(f.lang)} ${nombreIdioma(f.lang)}" }
     Row(
-        Modifier.fillMaxWidth().clickable { onFuente(f) }.padding(start = 24.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).pressableCon(0.97f, onAbrir)
+            .clip(SuaveShape(28.dp)).background(acento.copy(alpha = 0.16f)).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconoExt(f.pkg, null, Modifier.size(48.dp))
+        IconoExt(f.pkg, null, Modifier.size(68.dp))
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            LText(f.nombre, LectorType.Section.copy(fontSize = 17.sp), maxLines = 1)
-            Subtitulo(listOf("${bandera(f.lang)} ${nombreIdioma(f.lang)}"), f.nsfw)
+            LText("Usada hace poco", LectorType.Label, color = acento, maxLines = 1)
+            LText(f.nombre, LectorType.Hero.copy(fontSize = 22.sp, lineHeight = 26.sp), maxLines = 2)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PildoraExplorar(idioma)
+                if (f.nsfw) PildoraExplorar("+18", Rojo, Rojo.copy(alpha = 0.14f))
+            }
         }
-        IconButton(onClick = { ext.alternarFijada(f.id) }) {
-            Icon(
-                Icons.Rounded.Star, if (fijada) "Desanclar" else "Anclar",
-                tint = if (fijada) MaterialTheme.colorScheme.primary else LectorColors.Muted
-            )
+        Spacer(Modifier.width(10.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(48.dp).clip(CircleShape).background(acento), Alignment.Center) {
+                Icon(Icons.Rounded.ArrowForward, "Abrir", tint = MaterialTheme.colorScheme.onPrimary)
+            }
+            BotonEstrella(fijada, onFijar)
         }
+    }
+}
+
+@Composable
+private fun FilaFuente(f: FuenteUI, fijada: Boolean, ext: ExtManager, onFuente: (FuenteUI) -> Unit) {
+    val idioma = remember(f.lang) { "${bandera(f.lang)} ${nombreIdioma(f.lang)}" }
+    TarjetaExplorar(onClick = { onFuente(f) }) {
+        IconoExt(f.pkg, null, Modifier.size(52.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            LText(f.nombre, LectorType.Section.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            Spacer(Modifier.height(5.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PildoraExplorar(idioma)
+                if (f.nsfw) PildoraExplorar("+18", Rojo, Rojo.copy(alpha = 0.14f))
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        BotonEstrella(fijada) { ext.alternarFijada(f.id) }
+    }
+}
+
+/** Anclar: un botón redondo que se llena de acento (con un pequeño salto) al anclar. */
+@Composable
+private fun BotonEstrella(fijada: Boolean, onClick: () -> Unit) {
+    val acento = MaterialTheme.colorScheme.primary
+    val fondo by animateColorAsState(if (fijada) acento else LectorColors.PillFill, Muelles.efectos(), label = "estrella")
+    val tinta by animateColorAsState(if (fijada) MaterialTheme.colorScheme.onPrimary else LectorColors.Muted, Muelles.efectos(), label = "estrellaTinta")
+    val escala by animateFloatAsState(
+        if (fijada) 1f else 0.86f, if (Mov.reducido) tween(100) else spring(0.45f, 600f), label = "estrellaEscala"
+    )
+    Box(
+        Modifier.size(42.dp).pressable { Tacto.tic(); onClick() }.clip(CircleShape).background(fondo),
+        Alignment.Center,
+    ) {
+        Icon(
+            Icons.Rounded.Star, if (fijada) "Desanclar" else "Anclar", tint = tinta,
+            modifier = Modifier.size(22.dp).graphicsLayer { scaleX = escala; scaleY = escala },
+        )
     }
 }
 
@@ -312,11 +441,14 @@ private fun NovedadesTab(
     onAnadir: () -> Unit,
 ) {
     val motor = Motor.actual
-    val todas = ext.novedades.mapNotNull { id -> ext.fuentes.firstOrNull { it.id == id } }
-    val lista = todas.filter { ext.mostrarNsfw || !it.nsfw }
+    val todas = remember(ext.novedades, ext.fuentes) {
+        val porId = ext.fuentes.associateBy { it.id }
+        ext.novedades.mapNotNull { porId[it] }
+    }
+    val lista = remember(todas, ext.mostrarNsfw) { todas.filter { ext.mostrarNsfw || !it.nsfw } }
     when {
-        todas.isEmpty() -> Vacio("Aquí salen las novedades de las fuentes que elijas.", "Añadir fuentes", onAnadir)
-        motor == null -> Vacio("El motor de fuentes no está disponible.")
+        todas.isEmpty() -> Vacio("Aquí salen las novedades de las fuentes que elijas.", "Añadir fuentes", onAnadir, Icons.Rounded.Notifications)
+        motor == null -> Vacio("El motor de fuentes no está disponible.", icono = Icons.Rounded.Warning)
         reordenar -> OrdenarNovedades(ext)
         else -> {
             var refrescando by remember { mutableStateOf(false) }
@@ -344,8 +476,8 @@ private fun NovedadesTab(
                     lista.flatMap { f -> listOf(f to null) + porFuente[f.id].orEmpty().map { f to it } } +
                         porFuente.filterKeys { id -> lista.none { it.id == id } }.flatMap { (id, bs) -> conFuente[id]?.let { f -> bs.map { f to it } }.orEmpty() }
                 }
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 190.dp)) {
-                    items(filas, key = { (f, b) -> if (b == null) "f${f.id}" else "b${f.id}|${b.nombre}" }) { (f, b) ->
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 190.dp)) {
+                    items(filas, key = { (f, b) -> if (b == null) "f${f.id}" else "b${f.id}|${b.nombre}" }, contentType = { "novedad" }) { (f, b) ->
                         NovedadesFuente(f, motor, onManga, onFuente, b, ext.busquedas(f.id).takeIf { b == null }.orEmpty(), enBiblio)
                     }
                 }
@@ -386,45 +518,64 @@ private fun NovedadesFuente(
                 else Avisos.mostrar("${f.nombre}: no se pudieron actualizar las novedades")
             }
     }
-    Column(Modifier.padding(bottom = 12.dp)) {
+    val acento = MaterialTheme.colorScheme.primary
+    val cabeceras = remember(f.id) { motor.cabeceras(f) }
+    // Cada fuente es una tarjeta: cabecera con icono y nombre grandes, y su carrusel de portadas dentro.
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+            .clip(SuaveShape(28.dp)).background(LectorColors.Card).padding(vertical = 14.dp)
+    ) {
         Row(
-            Modifier.fillMaxWidth().clickable { onFuente(f) }.padding(horizontal = 24.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().pressableCon(0.98f) { onFuente(f) }.padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconoExt(f.pkg, null, Modifier.size(42.dp))
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                LText(f.nombre, LectorType.Section.copy(fontSize = 22.sp), maxLines = 1)
-                LText(if (busqueda != null) "Búsqueda: ${busqueda.nombre}" else nombreIdioma(f.lang), LectorType.Body.copy(fontSize = 15.sp), color = LectorColors.Muted)
+                LText(f.nombre, LectorType.Section.copy(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+                if (busqueda != null) LText("Búsqueda: ${busqueda.nombre}", LectorType.Label, color = acento, maxLines = 1)
+                else LText(nombreIdioma(f.lang), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
             }
-            Icon(Icons.Rounded.KeyboardArrowRight, null, tint = LectorColors.Text, modifier = Modifier.size(32.dp))
+            Box(Modifier.size(40.dp).clip(CircleShape).background(acento.copy(alpha = 0.18f)), Alignment.Center) {
+                Icon(Icons.Rounded.KeyboardArrowRight, "Abrir", tint = acento, modifier = Modifier.size(26.dp))
+            }
         }
         // Las búsquedas guardadas de esta extensión, como al entrar en ella: tocar una la abre ya buscada.
         if (guardadas.isNotEmpty()) LazyRow(
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 10.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(guardadas, key = { it.nombre }) { b -> ChipSel(b.nombre, false) { BusquedaPendiente.guardada = b; onFuente(f) } }
+            items(guardadas, key = { it.nombre }) { b -> ChipExplorar(b.nombre, false, Icons.Rounded.Star) { BusquedaPendiente.guardada = b; onFuente(f) } }
         }
+        Spacer(Modifier.height(12.dp))
         val lst = estado
         when {
-            lst == null && fallo != null -> Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+            lst == null && fallo != null -> Row(
+                Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(SuaveShape(18.dp)).background(Rojo.copy(alpha = 0.1f))
+                    .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Warning, null, tint = Rojo, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
                 LText(fallo!!, LectorType.Label, Modifier.weight(1f), color = Rojo, maxLines = 2)
-                IconButton(onClick = { intento++ }) { Icon(Icons.Rounded.Refresh, "Reintentar", tint = LectorColors.Text) }
+                BotonExpresivo(null, Icons.Rounded.Refresh, { intento++ }, alto = 40.dp)
             }
-            lst == null -> BonesPortadas()
-            else -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            lst == null -> BonesCarrusel()
+            lst.isEmpty() -> LText("Nada nuevo por aquí", LectorType.Label, Modifier.padding(horizontal = 16.dp), color = LectorColors.Muted)
+            else -> LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(lst, key = { it.url }) { m ->
-                    Column(Modifier.width(124.dp).press3D().pressable { onManga(f, m) }) {
+                    Column(Modifier.width(118.dp).press3D().pressable { onManga(f, m) }) {
                         val esta = "${f.id}|${m.url}" in enBiblioteca
                         Box {
-                        ImagenRemota(
-                            m.portadaUrl,
-                            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)).graphicsLayer { alpha = if (esta) 0.38f else 1f },
-                            motor.cabeceras(f), fuenteId = f.id
-                        )
-                        if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
+                            ImagenRemota(
+                                m.portadaUrl,
+                                Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(16.dp)).graphicsLayer { alpha = if (esta) 0.38f else 1f },
+                                cabeceras, fuenteId = f.id
+                            )
+                            if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                         }
-                        Spacer(Modifier.height(6.dp))
-                        LText(m.titulo, LectorType.Body, maxLines = 3)
+                        Spacer(Modifier.height(8.dp))
+                        LText(m.titulo, LectorType.Label.copy(fontSize = 13.sp, lineHeight = 17.sp), maxLines = 2)
                     }
                 }
             }
@@ -439,24 +590,30 @@ private fun OrdenarNovedades(ext: ExtManager) {
     var arrastrando by remember { mutableStateOf<Long?>(null) }
     var desplaz by remember { mutableStateOf(0f) }
     val paso = with(LocalDensity.current) { (72 + 12).dp.toPx() }
+    val acento = MaterialTheme.colorScheme.primary
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp).padding(bottom = 190.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        LText("Arrastra para cambiar el orden", LectorType.Label, Modifier.padding(start = 8.dp), color = LectorColors.Muted)
         orden.toList().forEach { id ->
             val f = ext.fuentes.firstOrNull { it.id == id }
             key(id) {
+                val levantada = arrastrando == id
+                val escala by animateFloatAsState(if (levantada && !Mov.reducido) 1.04f else 1f, Muelles.espacialRapido(), label = "levantar")
+                val fondo by animateColorAsState(if (levantada) acento.copy(alpha = 0.2f) else LectorColors.Card, Muelles.efectos(), label = "fondoOrden")
                 Row(
                     Modifier.fillMaxWidth().height(72.dp)
-                        .zIndex(if (arrastrando == id) 1f else 0f)
-                        .offset { IntOffset(0, if (arrastrando == id) desplaz.roundToInt() else 0) }
-                        .clip(SuaveShape(20.dp)).background(LectorColors.CardHigh),
+                        .zIndex(if (levantada) 1f else 0f)
+                        .offset { IntOffset(0, if (levantada) desplaz.roundToInt() else 0) }
+                        .graphicsLayer { scaleX = escala; scaleY = escala }
+                        .clip(SuaveShape(22.dp)).background(fondo),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
-                        Modifier.padding(start = 12.dp).size(48.dp).pointerInput(id) {
+                        Modifier.padding(start = 12.dp).size(44.dp).clip(CircleShape).background(LectorColors.PillFill).pointerInput(id) {
                             detectDragGestures(
                                 onDragStart = { arrastrando = id; desplaz = 0f },
                                 onDragEnd = { arrastrando = null; desplaz = 0f; ext.fijarNovedades(orden.toList()) },
@@ -474,13 +631,15 @@ private fun OrdenarNovedades(ext: ExtManager) {
                         },
                         Alignment.Center,
                     ) { Icon(Icons.Rounded.Menu, "Arrastrar", tint = LectorColors.Text) }
-                    Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                        LText(f?.nombre ?: "Fuente no disponible", LectorType.Section.copy(fontSize = 17.sp), maxLines = 1)
+                    if (f != null) {
+                        Spacer(Modifier.width(10.dp))
+                        IconoExt(f.pkg, null, Modifier.size(40.dp))
+                    }
+                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        LText(f?.nombre ?: "Fuente no disponible", LectorType.Section.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold), maxLines = 1)
                         if (f != null) LText(nombreIdioma(f.lang), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
                     }
-                    IconButton(onClick = { orden.remove(id); ext.fijarNovedades(orden.toList()) }) {
-                        Icon(Icons.Rounded.Delete, "Quitar", tint = LectorColors.Text)
-                    }
+                    BotonExpresivo(null, Icons.Rounded.Delete, { orden.remove(id); ext.fijarNovedades(orden.toList()) }, Modifier.padding(end = 12.dp), alto = 44.dp)
                 }
             }
         }
@@ -491,9 +650,11 @@ private fun OrdenarNovedades(ext: ExtManager) {
 @Composable
 private fun DialogoNovedades(ext: ExtManager, onCerrar: () -> Unit) {
     var q by remember { mutableStateOf("") }
-    val todas = ext.fuentes
-        .filter { (ext.mostrarNsfw || !it.nsfw) && (q.isBlank() || it.nombre.contains(q.trim(), ignoreCase = true)) }
-        .sortedWith(compareBy({ it.nombre.lowercase() }, { it.lang }))
+    val todas = remember(ext.fuentes, ext.mostrarNsfw, q) {
+        ext.fuentes
+            .filter { (ext.mostrarNsfw || !it.nsfw) && (q.isBlank() || it.nombre.contains(q.trim(), ignoreCase = true)) }
+            .sortedWith(compareBy({ it.nombre.lowercase() }, { it.lang }))
+    }
     DialogoAlerta(
         onDismissRequest = onCerrar,
         title = { Text("Novedades") },
@@ -543,18 +704,23 @@ private fun ExtensionesTab(
     onDetalle: (ExtInstalada) -> Unit, onConfiar: (ExtInstalada) -> Unit, onRepos: () -> Unit,
 ) {
     val q = consulta.trim()
-    fun coincide(n: String) = q.isEmpty() || n.contains(q, ignoreCase = true)
-    val inst = ext.instaladas.filter { coincide(it.nombre) && (ext.mostrarNsfw || !it.nsfw) }
-    val pendientes = inst.filter { it.actualizacion != null }
-    val alDia = inst.filter { it.actualizacion == null }
-    val pkgsInstalados = ext.instaladas.map { it.pkg }.toSet()
-    val disp = ext.disponibles
-        .filter { it.pkg !in pkgsInstalados && coincide(it.nombre) && (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas }
-        .sortedBy { it.nombre.lowercase() }
-        .groupBy { it.lang }.toSortedMap(compareBy<String> { nombreIdioma(it) })
+    val instaladas = ext.instaladas
+    val inst = remember(instaladas, q, ext.mostrarNsfw) {
+        instaladas.filter { (q.isEmpty() || it.nombre.contains(q, ignoreCase = true)) && (ext.mostrarNsfw || !it.nsfw) }
+    }
+    val pendientes = remember(inst) { inst.filter { it.actualizacion != null } }
+    val alDia = remember(inst) { inst.filter { it.actualizacion == null } }
+    val disp = remember(ext.disponibles, instaladas, q, ext.mostrarNsfw, ext.idiomas) {
+        val pkgsInstalados = instaladas.mapTo(HashSet()) { it.pkg }
+        ext.disponibles
+            .filter { it.pkg !in pkgsInstalados && (q.isEmpty() || it.nombre.contains(q, ignoreCase = true)) && (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas }
+            .sortedBy { it.nombre.lowercase() }
+            .groupBy { it.lang }.toSortedMap(compareBy<String> { nombreIdioma(it) })
+    }
+    val acento = MaterialTheme.colorScheme.primary
 
     // «Confiar en todas»: las instaladas que aún no son de confianza (con una sola confirmación).
-    val sinConfianza = ext.instaladas.filter { !it.confiable }
+    val sinConfianza = remember(instaladas) { instaladas.filter { !it.confiable } }
     var confirmarTodas by remember { mutableStateOf(false) }
     if (confirmarTodas) {
         DialogoAlerta(
@@ -579,28 +745,45 @@ private fun ExtensionesTab(
     }
 
     Column(Modifier.fillMaxSize()) {
-        if (buscando) Box(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) { CampoBusqueda(consulta, onConsulta, "Buscar extensiones") }
-        if (ext.cargando) LinearProgressIndicator(Modifier.fillMaxWidth())
-        if (sinConfianza.isNotEmpty()) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                LText(
-                    "${sinConfianza.size} sin confianza", LectorType.Body, Modifier.weight(1f), color = LectorColors.Muted, maxLines = 1,
-                )
-                PillButton("Confiar en todas", Icons.Rounded.Check, { confirmarTodas = true })
-            }
-        }
+        if (buscando) Box(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) { CampoBusqueda(consulta, onConsulta, "Buscar extensiones") }
+        if (ext.cargando) LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp).height(4.dp).clip(CircleShape),
+            color = acento, trackColor = LectorColors.PillFill,
+        )
         val estadoLista = androidx.compose.foundation.lazy.rememberLazyListState()
         Box(Modifier.weight(1f)) {
-        LazyColumn(state = estadoLista, contentPadding = PaddingValues(bottom = 190.dp)) {
+        LazyColumn(state = estadoLista, contentPadding = PaddingValues(top = 4.dp, bottom = 190.dp)) {
+            if (sinConfianza.isNotEmpty()) {
+                item(key = "confianza", contentType = "Aviso") {
+                    // Banner teñido de acento: cuántas faltan por confiar y el botón lleno para hacerlo de golpe.
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+                            .clip(SuaveShape(26.dp)).background(acento.copy(alpha = 0.16f)).padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(acento.copy(alpha = 0.22f)), Alignment.Center) {
+                            Icon(Icons.Rounded.Lock, null, tint = acento, modifier = Modifier.size(22.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            LText("${sinConfianza.size} sin confianza", LectorType.Body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+                            LText("Sus fuentes no salen hasta confiar", LectorType.Label, color = LectorColors.Muted, maxLines = 2)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        BotonExpresivo("Confiar", Icons.Rounded.Check, { confirmarTodas = true }, estilo = EstiloBoton.RELLENO, alto = 40.dp)
+                    }
+                }
+            }
             if (ext.repos.none { it.activo }) {
-                item { Aviso("No tienes ningún listado de extensiones activo.", "Añadir listado", onRepos) }
+                item(key = "sinRepos", contentType = "Aviso") { Aviso("No tienes ningún listado de extensiones activo.", "Añadir listado", onRepos) }
             }
             if (ext.errores.isNotEmpty()) {
-                item {
-                    Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                item(key = "errores", contentType = "Aviso") {
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+                            .clip(SuaveShape(22.dp)).background(Rojo.copy(alpha = 0.1f)).padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         ext.errores.forEach { LText(it, LectorType.Label, color = Rojo) }
                     }
                 }
@@ -608,22 +791,25 @@ private fun ExtensionesTab(
             // contentType = nombre de la sección: es lo que enseña la burbuja de la barra de desplazamiento.
             if (pendientes.isNotEmpty()) {
                 item(contentType = "Actualizaciones") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f)) { TituloSeccion("Actualizaciones pendientes (${pendientes.size})") }
-                        if (pendientes.size > 1) Box(Modifier.padding(end = 20.dp, top = 10.dp)) {
-                            PillButton("Actualizar todas", Icons.Rounded.Refresh, { Tacto.confirmar(); ext.actualizarTodas() })
+                    Row(Modifier.padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { SeccionExplorar("Actualizaciones", pendientes.size, acentuado = true) }
+                        if (pendientes.size > 1) Box(Modifier.padding(top = 14.dp)) {
+                            BotonExpresivo(
+                                "Todas", Icons.Rounded.Refresh, { Tacto.confirmar(); ext.actualizarTodas() },
+                                estilo = EstiloBoton.RELLENO, alto = 38.dp,
+                            )
                         }
                     }
                 }
                 items(pendientes, contentType = { "Actualizaciones" }) { FilaInstalada(it, ext, onDetalle, onConfiar) }
             }
             if (alDia.isNotEmpty()) {
-                item(contentType = "Instalado") { TituloSeccion("Instalado") }
+                item(contentType = "Instalado") { SeccionExplorar("Instalado", alDia.size) }
                 items(alDia, contentType = { "Instalado" }) { FilaInstalada(it, ext, onDetalle, onConfiar) }
             }
             disp.forEach { (lang, lista) ->
                 val n = nombreIdioma(lang)
-                item(contentType = n) { TituloSeccion(n) }
+                item(contentType = n) { SeccionExplorar(n, lista.size) }
                 items(lista, contentType = { n }) { FilaDisponible(it, ext) }
             }
         }
@@ -634,59 +820,103 @@ private fun ExtensionesTab(
 
 @Composable
 private fun FilaInstalada(e: ExtInstalada, ext: ExtManager, onDetalle: (ExtInstalada) -> Unit, onConfiar: (ExtInstalada) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable { onDetalle(e) }.padding(start = 24.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconoExt(e.pkg, null, Modifier.size(48.dp))
-        Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f)) {
-            LText(e.nombre, LectorType.Section.copy(fontSize = 17.sp), maxLines = 1)
-            Subtitulo(
-                listOf("${bandera(e.lang)} ${nombreIdioma(e.lang)}", e.versionName + (e.repoSigla?.let { " @$it" } ?: "")),
-                e.nsfw
-            )
-            if (!e.confiable) LText("Sin confianza", LectorType.Label, color = Rojo)
+    val acento = MaterialTheme.colorScheme.primary
+    val idioma = remember(e.lang) { "${bandera(e.lang)} ${nombreIdioma(e.lang)}" }
+    TarjetaExplorar(onClick = { onDetalle(e) }) {
+        Box {
+            IconoExt(e.pkg, null, Modifier.size(52.dp))
+            // Insignia de actualización: un círculo de acento con la flecha, en la esquina del icono.
+            if (e.actualizacion != null) Box(
+                Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp).size(22.dp)
+                    .clip(CircleShape).background(LectorColors.Card).padding(2.dp).clip(CircleShape).background(acento),
+                Alignment.Center,
+            ) { Icon(Icons.Rounded.KeyboardArrowUp, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp)) }
         }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            LText(e.nombre, LectorType.Section.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            Spacer(Modifier.height(5.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!e.confiable) PildoraExplorar("Sin confianza", Rojo, Rojo.copy(alpha = 0.14f))
+                else PildoraExplorar(idioma)
+                if (e.nsfw) PildoraExplorar("+18", Rojo, Rojo.copy(alpha = 0.14f))
+                LText(
+                    e.versionName + (e.actualizacion?.let { " → ${it.versionName}" } ?: "") + (e.repoSigla?.let { " @$it" } ?: ""),
+                    LectorType.Label, color = if (e.actualizacion != null) acento else LectorColors.Muted, maxLines = 1,
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
         val pr = ext.progreso[e.pkg]
         when {
             pr != null -> EstadoProgreso(pr) { ext.limpiarError(e.pkg) }
-            !e.confiable -> Pildora("Confiar") { onConfiar(e) }
-            e.actualizacion != null -> Pildora("Actualizar") { e.actualizacion?.let { ext.instalar(it) } }
+            !e.confiable -> BotonExpresivo("Confiar", null, { onConfiar(e) }, alto = 38.dp)
+            e.actualizacion != null -> BotonExpresivo(
+                null, Icons.Rounded.Refresh, { e.actualizacion?.let { ext.instalar(it) } }, estilo = EstiloBoton.RELLENO, alto = 42.dp,
+            )
+            else -> Box(Modifier.size(40.dp).pressable { onDetalle(e) }.clip(CircleShape).background(LectorColors.PillFill), Alignment.Center) {
+                Icon(Icons.Rounded.Settings, "Ajustes", tint = LectorColors.Text, modifier = Modifier.size(20.dp))
+            }
         }
-        IconButton(onClick = { onDetalle(e) }) { Icon(Icons.Rounded.Settings, "Ajustes", tint = LectorColors.Text) }
     }
 }
 
 @Composable
 private fun FilaDisponible(d: ExtDisponible, ext: ExtManager) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconoExt(d.pkg, d.iconoUrl, Modifier.size(48.dp))
-        Spacer(Modifier.width(16.dp))
+    val idioma = remember(d.lang) { "${bandera(d.lang)} ${nombreIdioma(d.lang)}" }
+    TarjetaExplorar(onClick = null) {
+        IconoExt(d.pkg, d.iconoUrl, Modifier.size(52.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            LText(d.nombre, LectorType.Section.copy(fontSize = 17.sp), maxLines = 1)
-            Subtitulo(listOf("${bandera(d.lang)} ${nombreIdioma(d.lang)}", "${d.versionName} @${d.repoSigla}"), d.nsfw)
+            LText(d.nombre, LectorType.Section.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            Spacer(Modifier.height(5.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                PildoraExplorar(idioma)
+                if (d.nsfw) PildoraExplorar("+18", Rojo, Rojo.copy(alpha = 0.14f))
+                LText("${d.versionName} @${d.repoSigla}", LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+            }
         }
+        Spacer(Modifier.width(8.dp))
         val pr = ext.progreso[d.pkg]
         when {
             pr != null -> EstadoProgreso(pr) { ext.limpiarError(d.pkg) }
-            d.apkUrl.isBlank() -> LText("No disponible", LectorType.Label, color = LectorColors.Muted)
-            else -> Pildora("Instalar") { ext.instalar(d) }
+            d.apkUrl.isBlank() -> PildoraExplorar("No disponible")
+            else -> BotonExpresivo("Instalar", Icons.Rounded.Add, { Tacto.tic(); ext.instalar(d) }, alto = 38.dp)
         }
     }
 }
 
+/** Progreso de una instalación: píldora que se llena de acento con muelle; error en rojo y tocable. */
 @Composable
 private fun EstadoProgreso(pr: Progreso, alReintentar: () -> Unit) {
+    val acento = MaterialTheme.colorScheme.primary
     when (pr.fase) {
-        Fase.DESCARGANDO -> LText("Descargando ${pr.porcentaje}%", LectorType.Label, color = LectorColors.Muted)
-        Fase.INSTALANDO -> LText("Instalando…", LectorType.Label, color = LectorColors.Muted)
-        Fase.ERROR -> LText(
-            "Error · tocar", LectorType.Label, Modifier.clickable(onClick = alReintentar).padding(8.dp), color = Rojo
-        )
+        Fase.DESCARGANDO -> {
+            val fr by animateFloatAsState(
+                (pr.porcentaje / 100f).coerceIn(0.04f, 1f), if (Mov.reducido) tween(100) else Muelles.espacial(), label = "descarga"
+            )
+            Box(
+                Modifier.width(84.dp).height(36.dp).clip(CircleShape).background(acento.copy(alpha = 0.16f))
+                    .drawBehind { drawRoundRect(acento.copy(alpha = 0.45f), size = Size(size.width * fr, size.height), cornerRadius = CornerRadius(size.height / 2f)) },
+                Alignment.Center,
+            ) { LText("${pr.porcentaje}%", LectorType.Body.copy(fontWeight = FontWeight.Bold), color = LectorColors.Text) }
+        }
+        Fase.INSTALANDO -> Row(
+            Modifier.height(36.dp).clip(CircleShape).background(acento.copy(alpha = 0.16f)).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IndicadorCarga(Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            LText("Instalando", LectorType.Label, color = acento)
+        }
+        Fase.ERROR -> Row(
+            Modifier.height(36.dp).pressable(alReintentar).clip(CircleShape).background(Rojo.copy(alpha = 0.14f)).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.Refresh, null, tint = Rojo, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            LText("Error", LectorType.Label, color = Rojo)
+        }
     }
 }
 
@@ -697,28 +927,38 @@ private fun MigrarTab(ext: ExtManager, almacen: com.example.lector.Almacen?, onM
     // Como en Komikku: tus series agrupadas por fuente; elige una para pasarla a otra fuente.
     val series = remember(almacen?.version) { almacen?.cargar().orEmpty().filter { it.enLinea } }
     if (series.isEmpty()) {
-        Vacio("Aquí puedes mover tus series de una fuente a otra. Añade a la biblioteca algún manga de una fuente.")
+        Vacio("Aquí puedes mover tus series de una fuente a otra. Añade a la biblioteca algún manga de una fuente.", icono = Icons.Rounded.Share)
         return
     }
     val grupos = remember(series, ext.fuentes) {
-        series.groupBy { c -> ext.fuentes.firstOrNull { it.id == c.fuenteId }?.nombre ?: "Fuente no instalada" }
+        val porId = ext.fuentes.associateBy { it.id }
+        series.groupBy { c -> porId[c.fuenteId]?.nombre ?: "Fuente no instalada" }
             .toSortedMap(compareBy { it.lowercase() })
     }
+    val acento = MaterialTheme.colorScheme.primary
     androidx.compose.foundation.lazy.LazyColumn(contentPadding = PaddingValues(bottom = 190.dp)) {
+        item(key = "intro") {
+            LText(
+                "Elige una serie para buscarla en otra fuente y pasar tu progreso.", LectorType.Body,
+                Modifier.padding(start = 24.dp, end = 24.dp, top = 6.dp), color = LectorColors.Muted,
+            )
+        }
         grupos.forEach { (nombre, lista) ->
-            item(key = "g_$nombre") {
-                LText("$nombre (${lista.size})", LectorType.Section.copy(fontSize = 16.sp), Modifier.padding(start = 24.dp, end = 24.dp, top = 18.dp, bottom = 6.dp), color = LectorColors.Muted)
-            }
+            item(key = "g_$nombre") { SeccionExplorar(nombre, lista.size) }
             items(lista.size, key = { lista[it].id }) { i ->
                 val c = lista[i]
                 Row(
-                    Modifier.fillMaxWidth().pressable { onMigrar(c) }.padding(horizontal = 24.dp, vertical = 6.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).pressableCon(0.97f) { onMigrar(c) }
+                        .clip(SuaveShape(22.dp)).background(LectorColors.Card).padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ComicCover(c, almacen!!, Modifier.width(44.dp).aspectRatio(2f / 3f), SuaveShape(8.dp))
+                    ComicCover(c, almacen!!, Modifier.width(48.dp).aspectRatio(2f / 3f), SuaveShape(12.dp))
                     Spacer(Modifier.width(14.dp))
-                    LText(c.titulo, LectorType.Body, Modifier.weight(1f), maxLines = 2)
-                    Icon(Icons.Rounded.ArrowForward, "Migrar", tint = LectorColors.Muted)
+                    LText(c.titulo, LectorType.Body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), Modifier.weight(1f), maxLines = 2)
+                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.size(40.dp).clip(CircleShape).background(acento.copy(alpha = 0.18f)), Alignment.Center) {
+                        Icon(Icons.Rounded.ArrowForward, "Migrar", tint = acento, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }
@@ -727,28 +967,107 @@ private fun MigrarTab(ext: ExtManager, almacen: com.example.lector.Almacen?, onM
 
 // ───────────────────────── Piezas comunes ─────────────────────────
 
+/** Botón redondo de la cabecera de Explorar; con [activo] se llena de acento. */
 @Composable
-private fun Pildora(texto: String, onClick: () -> Unit) {
+private fun BotonCabecera(icono: ImageVector, desc: String, activo: Boolean = false, onClick: () -> Unit) {
     val acento = MaterialTheme.colorScheme.primary
-    Box(
-        Modifier.pressable(onClick).clip(CircleShape).background(acento.copy(alpha = 0.22f))
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) { LText(texto, LectorType.Body, color = acento) }
+    val fondo by animateColorAsState(if (activo) acento else LectorColors.PillFill, Muelles.efectos(), label = "botonCab")
+    val tinta by animateColorAsState(if (activo) MaterialTheme.colorScheme.onPrimary else LectorColors.Text, Muelles.efectos(), label = "tintaCab")
+    Box(Modifier.size(44.dp).pressable { Tacto.tic(); onClick() }.clip(CircleShape).background(fondo), Alignment.Center) {
+        Icon(icono, desc, tint = tinta, modifier = Modifier.size(22.dp))
+    }
 }
 
+/** Tarjeta de fila de Explorar (fuentes, extensiones): superficie Card, esquinas suaves y se aplasta al pulsar. */
 @Composable
-private fun Subtitulo(partes: List<String>, nsfw: Boolean) {
-    val texto = buildAnnotatedString {
-        append(partes.joinToString("  •  "))
-        if (nsfw) {
-            append("  •  ")
-            withStyle(SpanStyle(color = Rojo)) { append("+18") }
+internal fun TarjetaExplorar(onClick: (() -> Unit)?, content: @Composable RowScope.() -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+            .then(if (onClick != null) Modifier.pressableCon(0.97f, onClick) else Modifier)
+            .clip(SuaveShape(22.dp)).background(LectorColors.Card)
+            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+/** Píldora pequeña de datos (idioma, versión, +18). */
+@Composable
+internal fun PildoraExplorar(texto: String, color: Color = LectorColors.Muted, fondo: Color = LectorColors.PillFill) {
+    Box(Modifier.clip(CircleShape).background(fondo).padding(horizontal = 9.dp, vertical = 3.dp)) {
+        LText(texto, LectorType.Label.copy(fontSize = 11.sp, lineHeight = 14.sp), color = color, maxLines = 1)
+    }
+}
+
+/** Título de sección grande (20 sp negrita) con su recuento en una píldora (de acento si [acentuado]). */
+@Composable
+internal fun SeccionExplorar(texto: String, cantidad: Int? = null, acentuado: Boolean = false) {
+    val acento = MaterialTheme.colorScheme.primary
+    Row(
+        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LText(texto, LectorType.Section.copy(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold), Modifier.weight(1f, fill = false), maxLines = 1)
+        if (cantidad != null) {
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier.clip(CircleShape).background(if (acentuado) acento else LectorColors.PillFill)
+                    .padding(horizontal = 9.dp, vertical = 2.dp),
+            ) {
+                LText(
+                    "$cantidad", LectorType.Label.copy(fontWeight = FontWeight.Bold),
+                    color = if (acentuado) MaterialTheme.colorScheme.onPrimary else LectorColors.Muted, maxLines = 1,
+                )
+            }
         }
     }
-    Text(
-        texto, color = LectorColors.Muted, style = LectorType.Label.copy(fontSize = 13.sp),
-        maxLines = 1, overflow = TextOverflow.Ellipsis
+}
+
+/**
+ * Chip expresivo de Explorar: la esquina se redondea con muelle y se llena de acento al elegirlo
+ * (el resto, tonal). Con [onLongClick] admite mantener pulsado.
+ */
+@Composable
+internal fun ChipExplorar(
+    texto: String, seleccionado: Boolean, icono: ImageVector? = null,
+    onLongClick: (() -> Unit)? = null, onClick: () -> Unit,
+) {
+    val acento = MaterialTheme.colorScheme.primary
+    val radio by animateDpAsState(
+        if (seleccionado) 20.dp else 12.dp, if (Mov.reducido) tween(100) else Muelles.espacialRapido(), label = "radioChipExp",
     )
+    val fondo by animateColorAsState(if (seleccionado) acento else LectorColors.Card, Muelles.efectos(), label = "fondoChipExp")
+    val tinta by animateColorAsState(
+        if (seleccionado) MaterialTheme.colorScheme.onPrimary else LectorColors.Text, Muelles.efectos(), label = "tintaChipExp"
+    )
+    Row(
+        Modifier.pressable(onLongClick) { Tacto.tic(); onClick() }.clip(RoundedCornerShape(radio))
+            .background(fondo).height(38.dp).padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val ic = if (seleccionado) Icons.Rounded.Check else icono
+        if (ic != null) {
+            Icon(ic, null, tint = tinta, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(6.dp))
+        }
+        LText(texto, LectorType.Body, color = tinta, maxLines = 1)
+    }
+}
+
+/** Esqueleto de un carrusel de portadas dentro de una tarjeta (con la ola). */
+@Composable
+internal fun BonesCarrusel(ancho: androidx.compose.ui.unit.Dp = 118.dp) {
+    BonesHost(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            repeat(4) {
+                Column {
+                    Bone(ancho, ancho * 1.5f, forma = SuaveShape(16.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Bone(ancho * 0.7f, 12.dp, forma = SuaveShape(6.dp))
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -781,26 +1100,37 @@ internal fun CampoBusqueda(valor: String, alCambiar: (String) -> Unit, pista: St
     )
 }
 
+/** Vacío: icono grande en un círculo de acento, texto y botón expresivo. */
 @Composable
-private fun Vacio(texto: String, accion: String? = null, onAccion: (() -> Unit)? = null) {
+private fun Vacio(texto: String, accion: String? = null, onAccion: (() -> Unit)? = null, icono: ImageVector = Icons.Rounded.Search) {
+    val acento = MaterialTheme.colorScheme.primary
     Column(
         Modifier.fillMaxSize().padding(horizontal = 40.dp).padding(bottom = 120.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(texto, color = LectorColors.Muted, style = LectorType.Body, textAlign = TextAlign.Center)
+        Box(Modifier.size(104.dp).clip(SuaveShape(36.dp)).background(acento.copy(alpha = 0.16f)), Alignment.Center) {
+            Icon(icono, null, tint = acento, modifier = Modifier.size(48.dp))
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(texto, color = LectorColors.Muted, style = LectorType.Body.copy(fontSize = 15.sp, lineHeight = 21.sp), textAlign = TextAlign.Center)
         if (accion != null && onAccion != null) {
-            Spacer(Modifier.height(16.dp))
-            PillButton(accion, Icons.Rounded.KeyboardArrowRight, onAccion)
+            Spacer(Modifier.height(20.dp))
+            BotonExpresivo(accion, Icons.Rounded.KeyboardArrowRight, onAccion, estilo = EstiloBoton.RELLENO)
         }
     }
 }
 
 @Composable
 private fun Aviso(texto: String, accion: String, onAccion: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(24.dp)) {
-        LText(texto, LectorType.Body, color = LectorColors.Muted)
-        Spacer(Modifier.height(12.dp))
-        PillButton(accion, Icons.Rounded.Add, onAccion)
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+            .clip(SuaveShape(26.dp)).background(LectorColors.Card).padding(18.dp)
+    ) {
+        Icon(Icons.Rounded.Info, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+        Spacer(Modifier.height(10.dp))
+        LText(texto, LectorType.Body.copy(fontSize = 15.sp))
+        Spacer(Modifier.height(14.dp))
+        BotonExpresivo(accion, Icons.Rounded.Add, onAccion, estilo = EstiloBoton.RELLENO, alto = 44.dp)
     }
 }
 

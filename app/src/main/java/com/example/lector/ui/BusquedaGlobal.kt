@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
 import com.example.lector.Almacen
 import com.example.lector.ext.ExtManager
@@ -65,29 +66,47 @@ fun BusquedaGlobalScreen(
 
     val resultados = rememberResultadosGlobales(fuentes, enviada)
 
+    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
     Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             BotonAtras(onBack)
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                LText("Búsqueda global", LectorType.Display.copy(fontSize = 30.sp, lineHeight = 34.sp), maxLines = 1)
+                LText("${fuentes.size} fuentes", LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { CampoBusqueda(consulta, { consulta = it }, "Buscar en todas las fuentes") }
             Spacer(Modifier.width(8.dp))
-            BotonRedondoTema(Icons.Rounded.Search, "Buscar", { enviada = consulta.trim() })
+            BotonExpresivo(null, Icons.Rounded.Search, { enviada = consulta.trim() }, estilo = EstiloBoton.RELLENO)
         }
-        Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChipSel("Con resultados", soloConResultados) { soloConResultados = !soloConResultados }
-            ChipSel(if (almacen.globalSoloAncladas) "Solo ancladas" else "Todas las fuentes", almacen.globalSoloAncladas) {
+        Row(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChipExplorar("Con resultados", soloConResultados, Icons.Rounded.CheckCircle) { soloConResultados = !soloConResultados }
+            ChipExplorar(if (almacen.globalSoloAncladas) "Solo ancladas" else "Todas las fuentes", almacen.globalSoloAncladas, Icons.Rounded.Star) {
                 almacen.globalSoloAncladas = !almacen.globalSoloAncladas
             }
         }
         val terminadas = resultados.values.count { it !is EstadoBusqueda.Cargando }
         if (enviada.isNotBlank() && terminadas < fuentes.size) {
-            LText("Buscando… $terminadas de ${fuentes.size}", LectorType.Label, Modifier.padding(horizontal = 24.dp, vertical = 6.dp), color = LectorColors.Muted)
+            // Progreso de la búsqueda: barra fina de acento que avanza con muelle + recuento.
+            val fr by androidx.compose.animation.core.animateFloatAsState(
+                if (fuentes.isEmpty()) 0f else terminadas.toFloat() / fuentes.size,
+                if (Mov.reducido) androidx.compose.animation.core.tween(100) else Muelles.espacial(), label = "progresoGlobal",
+            )
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f).height(6.dp).clip(androidx.compose.foundation.shape.CircleShape).background(LectorColors.PillFill)) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(fr.coerceIn(0.02f, 1f)).clip(androidx.compose.foundation.shape.CircleShape).background(acento))
+                }
+                Spacer(Modifier.width(10.dp))
+                LText("$terminadas / ${fuentes.size}", LectorType.Label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = acento)
+            }
         }
         when {
             motor == null -> MensajeVacio("El motor de fuentes no está disponible.")
             fuentes.isEmpty() -> MensajeVacio("No hay fuentes. Instala una extensión y pulsa «Confiar» (o desactiva «Solo ancladas»).")
             enviada.isBlank() -> MensajeVacio("Escribe un título y pulsa buscar.")
-            else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 40.dp)) {
+            else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 40.dp)) {
                 items(fuentes, key = { it.id }) { f ->
                     val e = resultados[f.id] ?: EstadoBusqueda.Cargando
                     if (soloConResultados && (e !is EstadoBusqueda.Hecho || e.mangas.isEmpty())) return@items
@@ -194,30 +213,53 @@ internal fun FilaResultados(
 ) {
     val motor = Motor.actual
     val clave = destacar?.let { tituloComparable(it) }
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            LText(f.nombre, LectorType.Section.copy(fontSize = 17.sp), Modifier.weight(1f), maxLines = 1)
-            LText(bandera(f.lang), LectorType.Body)
+    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    val cabeceras = remember(f.id) { motor?.cabeceras(f).orEmpty() }
+    // Cada fuente es una tarjeta: cabecera con icono, nombre y recuento, y el carrusel de portadas dentro.
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+            .clip(SuaveShape(28.dp)).background(LectorColors.Card).padding(vertical = 14.dp)
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconoExt(f.pkg, null, Modifier.size(38.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                LText(f.nombre, LectorType.Section.copy(fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), maxLines = 1)
+                LText(bandera(f.lang), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+            }
+            when (e) {
+                EstadoBusqueda.Cargando -> IndicadorCarga(Modifier.size(22.dp))
+                is EstadoBusqueda.Hecho -> if (e.mangas.isNotEmpty()) Box(
+                    Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(acento).padding(horizontal = 10.dp, vertical = 3.dp)
+                ) {
+                    LText("${e.mangas.size}", LectorType.Label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary)
+                }
+                is EstadoBusqueda.Fallo -> Icon(Icons.Rounded.Warning, null, tint = LectorColors.Error, modifier = Modifier.size(20.dp))
+            }
         }
         when (e) {
-            EstadoBusqueda.Cargando -> Box(Modifier.fillMaxWidth().height(60.dp), Alignment.Center) { IndicadorCarga(Modifier.size(22.dp)) }
-            is EstadoBusqueda.Fallo -> LText(e.motivo, LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Error, maxLines = 2)
+            EstadoBusqueda.Cargando -> {
+                Spacer(Modifier.height(12.dp))
+                BonesCarrusel(104.dp)
+            }
+            is EstadoBusqueda.Fallo -> LText(e.motivo, LectorType.Label, Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp), color = LectorColors.Error, maxLines = 2)
             is EstadoBusqueda.Hecho -> if (e.mangas.isEmpty()) {
-                LText("Sin resultados", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
+                LText("Sin resultados", LectorType.Label, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), color = LectorColors.Muted)
             } else {
-                val lista = if (clave == null) e.mangas else e.mangas.sortedByDescending { tituloComparable(it.titulo) == clave }
-                LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val lista = remember(e.mangas, clave) { if (clave == null) e.mangas else e.mangas.sortedByDescending { tituloComparable(it.titulo) == clave } }
+                Spacer(Modifier.height(12.dp))
+                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(lista, key = { it.url }) { m ->
                         val esta = "${f.id}|${m.url}" in enBiblioteca
                         val igual = clave != null && tituloComparable(m.titulo) == clave
                         Column(Modifier.width(112.dp).origenTransicion().press3D().pressable(onLongClick = { onLargo(m) }) { onManga(m) }) {
                             Box {
-                                ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), motor?.cabeceras(f).orEmpty(), fuenteId = f.id)
+                                ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(16.dp)), cabeceras, fuenteId = f.id)
                                 if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                                 else if (igual) Insignia("Mismo título", Modifier.align(Alignment.TopStart).padding(6.dp))
                             }
-                            Spacer(Modifier.height(6.dp))
-                            LText(m.titulo, LectorType.Label, maxLines = 2)
+                            Spacer(Modifier.height(8.dp))
+                            LText(m.titulo, LectorType.Label.copy(fontSize = 13.sp, lineHeight = 17.sp), maxLines = 2)
                         }
                     }
                 }
@@ -229,19 +271,24 @@ internal fun FilaResultados(
 /** Insignia pequeña sobre una portada. */
 @Composable
 internal fun Insignia(texto: String, modifier: Modifier = Modifier) {
-    Box(modifier.clip(SuaveShape(8.dp)).background(LectorColors.Text).padding(horizontal = 6.dp, vertical = 2.dp)) {
-        LText(texto, LectorType.Label.copy(fontSize = 10.sp), color = LectorColors.Bg, maxLines = 1)
+    Box(modifier.clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xE6000000)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+        LText(texto, LectorType.Label.copy(fontSize = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = Color.White, maxLines = 1)
     }
 }
 
-/** Insignia «En biblioteca» sobre una portada de Explorar. */
+/** Insignia «En biblioteca» sobre una portada de Explorar: píldora de acento con un visto. */
 @Composable
 fun EnBiblioteca(modifier: Modifier = Modifier) {
-    Box(
-        modifier.clip(SuaveShape(8.dp)).background(androidx.compose.material3.MaterialTheme.colorScheme.primary)
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    val tinta = com.example.lector.textoSobre(acento)
+    Row(
+        modifier.clip(androidx.compose.foundation.shape.CircleShape).background(acento)
+            .padding(start = 5.dp, end = 8.dp, top = 3.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        LText("En biblioteca", LectorType.Label.copy(fontSize = 10.sp), color = com.example.lector.textoSobre(androidx.compose.material3.MaterialTheme.colorScheme.primary), maxLines = 1)
+        Icon(Icons.Rounded.Check, null, tint = tinta, modifier = Modifier.size(12.dp))
+        Spacer(Modifier.width(3.dp))
+        LText("En biblioteca", LectorType.Label.copy(fontSize = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = tinta, maxLines = 1)
     }
 }
 
