@@ -786,3 +786,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2bh. PASO 60 (0.51)
 - Búsqueda: sin filtros elegidos se pasan los de la fuente por defecto (getFilterList()), como Mihon/Komikku. Con FilterList() vacía, LectorTMO y otras fallaban con «Collection contains no element matching the predicate».
+
+## 2bi. PASO 61 (0.52)
+- Capturas del lector en el emulador (el gancho «|capitulo» ahora abre el capítulo en el lector): barras nuevas OK. Fallo hallado: páginas/portadas incrustadas («data:image/…;base64,…», BarManga) daban «Expected URL scheme http or https but was data» → datosIncrustados() las decodifica (imagenPagina e Imagenes.descargar).

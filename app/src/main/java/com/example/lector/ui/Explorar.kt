@@ -1235,6 +1235,7 @@ object Imagenes {
 
     /** Bytes de una imagen de internet: cliente de la fuente → cliente general → conexión simple. */
     private suspend fun descargar(url: String, cabeceras: Map<String, String>, fuenteId: Long?): ByteArray? {
+        com.example.lector.ext.datosIncrustados(url)?.let { return it } // portada incrustada («data:…»)
         val motor = com.example.lector.ext.Motor.actual
         if (fuenteId != null && fuenteId != 0L && motor != null) {
             runCatching { motor.bytesImagen(fuenteId, url) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }

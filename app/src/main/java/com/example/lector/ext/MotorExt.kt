@@ -168,7 +168,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
             semaforo(fuente.id).withPermit {
                 conReintentos {
                     if (pagina.imageUrl.isNullOrEmpty()) pagina.imageUrl = src.getImageUrl(pagina)
-                    ahorroDatos(pagina.imageUrl) ?: src.getImage(pagina).use { it.body.bytes() }
+                    datosIncrustados(pagina.imageUrl) ?: ahorroDatos(pagina.imageUrl) ?: src.getImage(pagina).use { it.body.bytes() }
                 }
             }
         }
@@ -402,4 +402,19 @@ object CorteRed : okhttp3.Interceptor {
         if (FuentesEnUso.abortado()) throw java.io.IOException("Cancelado: la fuente tardaba demasiado o gastaba demasiada memoria")
         return chain.proceed(chain.request())
     }
+}
+
+/**
+ * Imagen incrustada en la propia dirección («data:image/webp;base64,…»): algunas fuentes (p. ej. BarManga) la usan
+ * para la última página. OkHttp solo descarga http/https, así que se decodifica aquí, como hace Mihon.
+ */
+internal fun datosIncrustados(url: String?): ByteArray? {
+    if (url == null || !url.startsWith("data:", ignoreCase = true)) return null
+    val coma = url.indexOf(',').takeIf { it > 0 } ?: return null
+    val cabecera = url.substring(5, coma)
+    val datos = url.substring(coma + 1)
+    return runCatching {
+        if (cabecera.endsWith(";base64", ignoreCase = true)) android.util.Base64.decode(datos, android.util.Base64.DEFAULT)
+        else java.net.URLDecoder.decode(datos, "UTF-8").toByteArray()
+    }.getOrNull()
 }
