@@ -304,13 +304,18 @@ fun Visor(
 
     // Al cargar un capítulo: salta a la página que toca (la guardada, la última si se vuelve atrás, o la primera).
     var posicionado by remember(cap.clave) { mutableStateOf(false) }
+    // Última página vista de este capítulo: al recargar (WebView, Cloudflare) o recrear la pantalla se vuelve a ella.
+    var paginaVista by rememberSaveable(cap.clave) { mutableIntStateOf(-1) }
+    val destinoDescarga = remember(cap.clave) { intArrayOf(0) }
     LaunchedEffect(cap.clave, total) {
         val n = total ?: return@LaunchedEffect
         val pagina = when {
             irAlFinal -> n - 1
             primeraCarga -> paginaInicial.coerceIn(0, n - 1)
+            paginaVista >= 0 -> paginaVista.coerceIn(0, n - 1)
             else -> 0
         }
+        destinoDescarga[0] = pagina
         irAlFinal = false
         primeraCarga = false
         if (porScroll) { porScroll = false; posicionado = true; return@LaunchedEffect }
@@ -347,7 +352,8 @@ fun Visor(
     val actual = items.getOrNull(itemActual)
     val paginaReal = when (actual) {
         is ItemVisor.Pagina -> actual.ref.indice
-        is ItemVisor.Transicion -> if (actual.siguiente) (total ?: 1) - 1 else 0
+        // La unión con el capítulo anterior (Transicion(true, ci-1)) es el principio de este, no su final.
+        is ItemVisor.Transicion -> if (actual.siguiente && (actual.c < 0 || actual.c == ci)) (total ?: 1) - 1 else 0
         null -> 0
     }
 
@@ -359,7 +365,6 @@ fun Visor(
 
     // Progreso: se anota la página (con una pequeña espera) y el capítulo se da por leído en la última.
     val terminados = remember { mutableSetOf<Int>() }
-    var paginaVista by remember(cap.clave) { mutableIntStateOf(-1) }
     LaunchedEffect(cap.clave, paginaReal, total, posicionado) {
         val n = total ?: return@LaunchedEffect
         if (!posicionado) return@LaunchedEffect
@@ -398,7 +403,7 @@ fun Visor(
         val cupo = kotlinx.coroutines.sync.Semaphore(3)
         kotlinx.coroutines.coroutineScope {
             // Empieza por donde lees (no por la página 1) para no retrasar la que ves.
-            val desde = paginaReal.coerceIn(0, n - 1)
+            val desde = destinoDescarga[0].coerceIn(0, n - 1)
             for (p in (desde until n) + (0 until desde)) launch(Dispatchers.IO) { cupo.acquire(); try { runCatching { origen.bytes(p) } } finally { cupo.release() } }
         }
     }
@@ -477,8 +482,7 @@ fun Visor(
     LaunchedEffect(paginado) {
         if (modoPrevio[0] == paginado) return@LaunchedEffect
         modoPrevio[0] = paginado
-        val p = paginaVista
-        if (p < 0) return@LaunchedEffect
+        val p = paginaVista.takeIf { it >= 0 } ?: paginaReal
         posicionado = false
         snapshotFlow { items.any { it is ItemVisor.Pagina } }.first { it }
         androidx.compose.runtime.withFrameNanos { }
