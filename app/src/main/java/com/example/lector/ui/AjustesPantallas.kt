@@ -29,6 +29,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -740,8 +742,24 @@ fun AcercaDeScreen(onBack: () -> Unit) {
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
     }
     PaginaAjustes("Acerca de", onBack) {
-        Box(Modifier.fillMaxWidth().padding(vertical = 20.dp), Alignment.Center) { LogoApp(Modifier.size(120.dp)) }
-        Dato2("Versión", version)
+        // Cabecera viva: el logo «respira» sobre un halo del color de acento, con nombre y versión en píldora.
+        val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+        val ola = androidx.compose.animation.core.rememberInfiniteTransition(label = "halo")
+        val r by ola.animateFloat(0.85f, 1.1f, androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(2600, easing = EnfasisEasing), androidx.compose.animation.core.RepeatMode.Reverse), label = "r")
+        val radio = if (Mov.reducido) 1f else r
+        Column(Modifier.fillMaxWidth().padding(vertical = 24.dp).entrada(0), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(200.dp).drawBehind {
+                drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
+                    listOf(acento.copy(alpha = 0.35f), androidx.compose.ui.graphics.Color.Transparent),
+                    radius = size.minDimension / 2f * radio), radius = size.minDimension / 2f * radio)
+            }, Alignment.Center) { LogoApp(Modifier.size(120.dp).graphicsLayer { scaleX = 0.96f + (radio - 0.85f) * 0.16f; scaleY = scaleX }) }
+            LText("Shiori", LectorType.Display.copy(fontSize = 34.sp))
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.clip(SuaveShape(14.dp)).background(LectorColors.PillFill).padding(horizontal = 14.dp, vertical = 6.dp)) {
+                LText("Versión $version", LectorType.Label, color = LectorColors.Muted)
+            }
+        }
         val hay = com.example.lector.NuevaVersion.disponible
         FilaAjuste(
             Icons.Rounded.Refresh,

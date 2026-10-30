@@ -376,7 +376,10 @@ fun BibliotecaScreen(
                         }
                     } else {
                         val columnas = almacen.columnas
+                        val estadoRejilla = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+                        Box(Modifier.fillMaxSize()) {
                         LazyVerticalGrid(
+                            state = estadoRejilla,
                             columns = if (columnas == 0) GridCells.Adaptive(if (anchoPantalla > 600) 150.dp else 112.dp) else GridCells.Fixed(columnas),
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 190.dp),
@@ -391,6 +394,8 @@ fun BibliotecaScreen(
                                     onLargo = { alternar(c) }, onContinuar = { alLeer(c) },
                                 )
                             }
+                        }
+                        BarraDesplazamiento(estadoRejilla)
                         }
                     }
                 }

@@ -52,6 +52,7 @@ object Polvo {
         if (MovimientoReducido.activo) return
         val (img, rect) = capturar(id) ?: return
         Tacto.tic()
+        if (efectos.size >= 12) return // muchos a la vez (quitar en bloque): basta con los primeros
         efectos += Efecto(img, rect, false, id.hashCode(), System.currentTimeMillis())
     }
 
@@ -60,9 +61,10 @@ object Polvo {
         if (MovimientoReducido.activo) return
         val (img, rect) = capturar(id) ?: return
         ocultos[id] = true
-        efectos += Efecto(img, rect, true, id.hashCode(), System.currentTimeMillis())
-        kotlinx.coroutines.delay(DURACION)
-        ocultos.remove(id)
+        try {
+            efectos += Efecto(img, rect, true, id.hashCode(), System.currentTimeMillis())
+            kotlinx.coroutines.delay(DURACION)
+        } finally { ocultos.remove(id) } // aunque se salga antes de tiempo, el elemento vuelve a verse
     }
 }
 
@@ -99,11 +101,12 @@ fun CapaPolvo() {
         val viento = 90.dp.toPx()
         val subida = 70.dp.toPx()
         for (e in Polvo.efectos) {
+            if (ahora - e.inicio > Polvo.DURACION) continue
             val img = e.img
             val p0 = ((ahora - e.inicio).toFloat() / Polvo.DURACION).coerceIn(0f, 1f)
             val p = if (e.inverso) 1f - p0 else p0
             // Trozos de ~1/34 del ancho (mín. 6 px): bastante finos para parecer polvo, pocos para ir fluido.
-            val lado = maxOf(6, img.width / 34)
+            val lado = maxOf(6, img.width / 34, kotlin.math.sqrt(img.width * img.height / 1400f).toInt() + 1) // ≤ ~1400 trozos
             val cols = (img.width + lado - 1) / lado
             val filas = (img.height + lado - 1) / lado
             val ex = e.rect.width / img.width

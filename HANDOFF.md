@@ -741,3 +741,9 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 ## 2ax. PASO 50 (0.39) — Iteración 1: efectos visuales
 - ui/Polvo.kt: «Polvo» (desintegrar/reconstruir). Modifier.polvo(id) graba el elemento en una GraphicsLayer; Polvo.desintegrar(id) lo captura (toImageBitmap) y CapaPolvo (encima de todo, en LectorApp) lo dibuja troceado volando con el viento de izquierda a derecha (1,1 s); reconstruir lo hace al revés ocultando el real. Usado en: quitar del historial, quitar actualizaciones, quitar/añadir a la biblioteca desde la ficha (cabecera). Con MovimientoReducido no hace nada.
 - BonesRejilla: esqueletos con ola en el catálogo de una fuente mientras llega la primera página.
+
+## 2ay. PASO 51 (0.40) — Iteraciones 2 y 3 (revisadas por un revisor independiente)
+- Estadísticas: anillo animado (terminados / en curso / sin empezar) con total contando, tarjetas con entrada escalonada y barras de fuentes que crecen una tras otra. Acerca de: cabecera con halo de acento que «respira», nombre y versión en píldora.
+- Ficha a dos columnas en tablet (≥ 840 dp, como MangaScreenLargeImpl de Komikku): el contenido de la lista es la lambda `contenido(info, caps)`; la cabecera, el parallax y «Ver recomendaciones» siguen a la columna de información (listaCab).
+- BarraDesplazamiento generalizada (BarraBase) con versión para LazyGridState: barra rápida también en la biblioteca en cuadrícula.
+- Correcciones de la revisión: Polvo.reconstruir siempre vuelve a mostrar el elemento (finally), máx. 12 efectos y ≤ ~1400 trozos por efecto, ids de cabecera por manga, sin fotograma fantasma; el total del anillo ya no usa Odometro por fotograma.

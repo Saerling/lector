@@ -327,14 +327,14 @@ fun FichaMangaScreen(
     fun alternarBiblioteca() {
         if (f == null || motor == null || guardando) return
         if (enBiblioteca != null) {
-            scope.launch { Polvo.desintegrar("cabecera_ficha") } // se va «en polvo»
+            scope.launch { Polvo.desintegrar("cabecera_" + tituloFicha) } // se va «en polvo»
             almacen.quitarEnLinea(f.id, manga.url)
             alRecargar()
             Avisos.mostrar("Quitado de la biblioteca")
             return
         }
         // ¿Ya está en la biblioteca desde otra fuente? Entonces se pregunta antes (ver, migrar o añadir igualmente).
-        Duplicados.comprobar(almacen, f, manga, fi?.detalle?.titulo ?: manga.titulo) { anadirABiblioteca(); scope.launch { Polvo.reconstruir("cabecera_ficha") } }
+        Duplicados.comprobar(almacen, f, manga, fi?.detalle?.titulo ?: manga.titulo) { anadirABiblioteca(); scope.launch { Polvo.reconstruir("cabecera_" + tituloFicha) } }
     }
 
     if (f == null || motor == null) {
@@ -392,7 +392,11 @@ fun FichaMangaScreen(
     val filtrosCap = listOf(ext.capNoLeidos, ext.capDescargados, ext.capMarcados).count { it != com.example.lector.Tri.IGNORAR } + (if (ocultos.isNotEmpty()) 1 else 0)
 
     // Cuánto se ha desplazado la cabecera (se lee al dibujar, sin recomponer).
-    val scrollPx: () -> Float = { if (lista.firstVisibleItemIndex == 0) lista.firstVisibleItemScrollOffset.toFloat() else 99999f }
+    // En tablet la cabecera va en su propia columna: el parallax y la barra siguen a esa lista.
+    val dosColumnas = LocalConfiguration.current.screenWidthDp >= 840
+    val listaInfo = rememberLazyListState()
+    val listaCab = if (dosColumnas) listaInfo else lista
+    val scrollPx: () -> Float = { if (listaCab.firstVisibleItemIndex == 0) listaCab.firstVisibleItemScrollOffset.toFloat() else 99999f }
     // La mayoría de fuentes listan el capítulo más nuevo primero: el primero a leer es el último sin leer.
     val sig = remember(fi, leidosAhora) {
         fi?.let { x -> (x.capitulos.lastIndex downTo 0).firstOrNull { !ext.esLeido(f.id, x.capitulos[it].url) } ?: 0 } ?: 0
@@ -416,8 +420,10 @@ fun FichaMangaScreen(
             onRefresh = { Tacto.umbral(); refrescando = true; recarga++ },
             modifier = Modifier.fillMaxSize(),
         ) {
-        LazyColumn(Modifier.fillMaxSize(), state = lista, contentPadding = PaddingValues(bottom = if (enSeleccion) 130.dp else 60.dp)) {
-            item {
+        // Contenido de la ficha: [info] = cabecera y tarjetas; [caps] = lista de capítulos. En tablet (≥ 840 dp) van
+        // en dos columnas, como MangaScreenLargeImpl de Komikku; en el móvil, una sola lista.
+        val contenido: androidx.compose.foundation.lazy.LazyListScope.(Boolean, Boolean) -> Unit = { info, caps ->
+            if (info) item {
                 val lineas = listOfNotNull(
                     autor,
                     estadoPub?.let { estadoTexto(it) },
@@ -439,6 +445,7 @@ fun FichaMangaScreen(
                 )
             }
             if (fi != null) {
+                if (info) {
                 // Tarjetas deslizables: último capítulo y sinopsis.
                 item {
                     val ultimo = fi.capitulos.firstOrNull()
@@ -629,6 +636,8 @@ fun FichaMangaScreen(
                         }
                     }
                 }
+                }
+                if (caps) {
                 item {
                     Row(
                         Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 22.dp, bottom = 10.dp),
@@ -763,8 +772,9 @@ fun FichaMangaScreen(
                         }
                     }
                 }
+                }
             }
-            item {
+            if (caps) item {
                 Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) {
                     when {
                         cargando -> if (fi == null) BonesCapitulos() else CircularProgressIndicator(Modifier.size(28.dp))
@@ -780,6 +790,11 @@ fun FichaMangaScreen(
                 }
             }
         }
+        val relleno = PaddingValues(bottom = if (enSeleccion) 130.dp else 60.dp)
+        if (dosColumnas) Row(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.weight(0.45f).fillMaxHeight(), state = listaInfo, contentPadding = relleno) { contenido(true, false) }
+            LazyColumn(Modifier.weight(0.55f).fillMaxHeight().statusBarsPadding(), state = lista, contentPadding = relleno) { contenido(false, true) }
+        } else LazyColumn(Modifier.fillMaxSize(), state = lista, contentPadding = relleno) { contenido(true, true) }
         // Barra de desplazamiento rápido (como Komikku en la lista de capítulos).
         BarraDesplazamiento(lista)
         }
@@ -860,8 +875,8 @@ fun FichaMangaScreen(
                                 scope.launch {
                                     if (recomendaciones.isNullOrEmpty()) { Avisos.mostrar(if (recomendaciones == null) "Buscando recomendaciones…" else "No hay recomendaciones"); return@launch }
                                     repeat(30) {
-                                        lista.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "recs" }?.let { lista.animateScrollToItem(it.index); return@launch }
-                                        lista.scrollBy(900f)
+                                        listaCab.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "recs" }?.let { listaCab.animateScrollToItem(it.index); return@launch }
+                                        listaCab.scrollBy(900f)
                                     }
                                 }
                             }
@@ -1200,7 +1215,7 @@ private fun CabeceraFicha(
     val t by animateFloatAsState(if (entro) 1f else 0f, tween(600), label = "entradaFicha")
     val aparece by animateFloatAsState(if (portadaLista) 1f else 0f, tween(700), label = "portadaFicha")
     // clipToBounds: con el parallax la portada se corría hacia abajo y asomaba por debajo de la cabecera.
-    Box(Modifier.fillMaxWidth().height(560.dp).polvo("cabecera_ficha").clipToBounds()) {
+    Box(Modifier.fillMaxWidth().height(560.dp).polvo("cabecera_" + titulo).clipToBounds()) {
         ImagenRemota(
             portada,
             Modifier.fillMaxSize().graphicsLayer {

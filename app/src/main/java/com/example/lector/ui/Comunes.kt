@@ -234,24 +234,27 @@ fun HojaLector(onCerrar: () -> Unit, content: @Composable ColumnScope.() -> Unit
  * sección: el `contentType` del primer elemento visible, si es un texto. Solo la franja de la derecha recibe toques.
  */
 @Composable
-fun BarraDesplazamiento(estado: androidx.compose.foundation.lazy.LazyListState, modifier: Modifier = Modifier) {
+private fun BarraBase(
+    total0: () -> Int, vis0: () -> Int, primero0: () -> Int, seccion0: () -> String?, mov0: () -> Boolean,
+    ir0: suspend (Int) -> Unit, modifier: Modifier,
+) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var arrastrando by remember { mutableStateOf(false) }
     var alto by remember { mutableIntStateOf(1) }
-    val total by remember { androidx.compose.runtime.derivedStateOf { estado.layoutInfo.totalItemsCount } }
-    val visibles by remember { androidx.compose.runtime.derivedStateOf { estado.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1) } }
+    val total by remember { androidx.compose.runtime.derivedStateOf { total0() } }
+    val visibles by remember { androidx.compose.runtime.derivedStateOf { vis0().coerceAtLeast(1) } }
     val fraccion by remember {
         androidx.compose.runtime.derivedStateOf {
-            val t = estado.layoutInfo.totalItemsCount - estado.layoutInfo.visibleItemsInfo.size
-            if (t <= 0) 0f else (estado.firstVisibleItemIndex.toFloat() / t).coerceIn(0f, 1f)
+            val t = total0() - vis0()
+            if (t <= 0) 0f else (primero0().toFloat() / t).coerceIn(0f, 1f)
         }
     }
     val seccion by remember {
-        androidx.compose.runtime.derivedStateOf { estado.layoutInfo.visibleItemsInfo.firstOrNull()?.contentType as? String }
+        androidx.compose.runtime.derivedStateOf { seccion0() }
     }
     var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(estado.isScrollInProgress, arrastrando) {
-        if (estado.isScrollInProgress || arrastrando) visible = true
+    LaunchedEffect(mov0(), arrastrando) {
+        if (mov0() || arrastrando) visible = true
         else { kotlinx.coroutines.delay(1500); visible = false }
     }
     if (total <= visibles * 2) return // lista corta: no hace falta
@@ -272,7 +275,7 @@ fun BarraDesplazamiento(estado: androidx.compose.foundation.lazy.LazyListState, 
                         val h = altoPulgar.toPx()
                         val f = ((py - h / 2) / (alto - h).coerceAtLeast(1f)).coerceIn(0f, 1f)
                         val destino = (f * (total - visibles)).toInt().coerceIn(0, (total - 1).coerceAtLeast(0))
-                        scope.launch { estado.scrollToItem(destino) }
+                        scope.launch { ir0(destino) }
                     }
                     detectVerticalDragGestures(
                         onDragStart = { o -> arrastrando = true; ir(o.y) },
@@ -295,3 +298,18 @@ fun BarraDesplazamiento(estado: androidx.compose.foundation.lazy.LazyListState, 
         }
     }
 }
+
+@Composable
+fun BarraDesplazamiento(estado: androidx.compose.foundation.lazy.LazyListState, modifier: Modifier = Modifier) = BarraBase(
+    { estado.layoutInfo.totalItemsCount }, { estado.layoutInfo.visibleItemsInfo.size }, { estado.firstVisibleItemIndex },
+    { estado.layoutInfo.visibleItemsInfo.firstOrNull()?.contentType as? String }, { estado.isScrollInProgress },
+    { estado.scrollToItem(it) }, modifier,
+)
+
+/** La misma barra para cuadrículas (biblioteca en cuadrícula). */
+@Composable
+fun BarraDesplazamiento(estado: androidx.compose.foundation.lazy.grid.LazyGridState, modifier: Modifier = Modifier) = BarraBase(
+    { estado.layoutInfo.totalItemsCount }, { estado.layoutInfo.visibleItemsInfo.size }, { estado.firstVisibleItemIndex },
+    { estado.layoutInfo.visibleItemsInfo.firstOrNull()?.contentType as? String }, { estado.isScrollInProgress },
+    { estado.scrollToItem(it) }, modifier,
+)
