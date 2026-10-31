@@ -831,6 +831,27 @@ class ExtManager private constructor(private val app: Context) {
     var capMarcados by com.example.lector.prefEnum(prefs, "cap_marcados", com.example.lector.Tri.IGNORAR)
     var capOrden by com.example.lector.prefInt(prefs, "cap_orden", 0) // 0 fuente · 1 número · 2 fecha de subida
     var capDescendente by com.example.lector.prefBool(prefs, "cap_desc", true)
+
+    /** Filtro y orden de capítulos de UN manga (como Komikku): si no tiene propio, usa el predeterminado de arriba. */
+    data class FiltroCaps(
+        val noLeidos: com.example.lector.Tri, val descargados: com.example.lector.Tri, val marcados: com.example.lector.Tri,
+        val orden: Int, val descendente: Boolean,
+    )
+    private val prefsFiltros by lazy { app.getSharedPreferences("filtros_caps", android.content.Context.MODE_PRIVATE) }
+    fun filtroCapsPredeterminado() = FiltroCaps(capNoLeidos, capDescargados, capMarcados, capOrden, capDescendente)
+    fun filtroCapsDe(fuenteId: Long, url: String): FiltroCaps {
+        val t = prefsFiltros.getString("$fuenteId|$url", null)?.split(',') ?: return filtroCapsPredeterminado()
+        return runCatching {
+            FiltroCaps(com.example.lector.Tri.valueOf(t[0]), com.example.lector.Tri.valueOf(t[1]), com.example.lector.Tri.valueOf(t[2]), t[3].toInt(), t[4].toBoolean())
+        }.getOrElse { filtroCapsPredeterminado() }
+    }
+    fun guardarFiltroCaps(fuenteId: Long, url: String, f: FiltroCaps) {
+        prefsFiltros.edit().putString("$fuenteId|$url", "${f.noLeidos},${f.descargados},${f.marcados},${f.orden},${f.descendente}").apply()
+    }
+    /** «Usar como predeterminado»: lo de este manga pasa a ser lo que tendrán los mangas sin filtro propio. */
+    fun filtroCapsComoPredeterminado(f: FiltroCaps) {
+        capNoLeidos = f.noLeidos; capDescargados = f.descargados; capMarcados = f.marcados; capOrden = f.orden; capDescendente = f.descendente
+    }
     var capVerNumero by com.example.lector.prefBool(prefs, "cap_ver_numero", false) // "Capítulo N" en vez del nombre
 
     // ---- Búsquedas guardadas de cada fuente (TachiyomiSY/Komikku) ----

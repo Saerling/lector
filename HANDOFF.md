@@ -789,3 +789,7 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2bi. PASO 61 (0.52)
 - Capturas del lector en el emulador (el gancho «|capitulo» ahora abre el capítulo en el lector): barras nuevas OK. Fallo hallado: páginas/portadas incrustadas («data:image/…;base64,…», BarManga) daban «Expected URL scheme http or https but was data» → datosIncrustados() las decodifica (imagenPagina e Imagenes.descargar).
+
+## 2bj. PASO 62 (0.53)
+- Al leer se respetan los filtros y el tipo de orden de la lista de capítulos (como Mihon/Komikku): leerCap pasa al lector solo los capítulos visibles, en orden de lectura; si el capítulo no está en la lista filtrada, se usa la lista completa.
+- Filtro y orden de capítulos POR MANGA (ExtManager.FiltroCaps, prefs «filtros_caps» por fuenteId|url); los globales cap* quedan como predeterminado para mangas sin filtro propio, con botón «Usar como predeterminado» en Ordenar.

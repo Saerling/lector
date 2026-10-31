@@ -376,22 +376,25 @@ fun FichaMangaScreen(
     val marcadosAhora = ext.marcados
     val versionDesc = Descargas.version.value + almacen.version
     val ocultos = ext.gruposOcultos(f.id, manga.url)
-    val visibles = remember(fi, leidosAhora, marcadosAhora, versionDesc, ext.capNoLeidos, ext.capDescargados, ext.capMarcados, ext.capOrden, ext.capDescendente, ocultos) {
+    // Filtro y orden de capítulos propios de este manga (no afecta a los demás).
+    var filtroCaps by remember(f?.id, manga.url) { mutableStateOf(f?.let { ext.filtroCapsDe(it.id, manga.url) } ?: ext.filtroCapsPredeterminado()) }
+    fun cambiarFiltroCaps(nuevo: com.example.lector.ext.ExtManager.FiltroCaps) { filtroCaps = nuevo; f?.let { ext.guardarFiltroCaps(it.id, manga.url, nuevo) } }
+    val visibles = remember(fi, leidosAhora, marcadosAhora, versionDesc, filtroCaps, ocultos) {
         val base = fi?.capitulos?.withIndex()?.toList().orEmpty()
         val filtrados = base.filter { iv ->
             (iv.value.scanlator == null || iv.value.scanlator !in ocultos) &&
-            ext.capNoLeidos.deja(!ext.esLeido(f.id, iv.value.url)) &&
-                ext.capDescargados.deja(almacen.estaDescargado(f.id, iv.value.url)) &&
-                ext.capMarcados.deja(ext.esMarcado(f.id, iv.value.url))
+            filtroCaps.noLeidos.deja(!ext.esLeido(f.id, iv.value.url)) &&
+                filtroCaps.descargados.deja(almacen.estaDescargado(f.id, iv.value.url)) &&
+                filtroCaps.marcados.deja(ext.esMarcado(f.id, iv.value.url))
         }
-        val desc = ext.capDescendente
-        when (ext.capOrden) {
+        val desc = filtroCaps.descendente
+        when (filtroCaps.orden) {
             1 -> if (desc) filtrados.sortedByDescending { it.value.numero } else filtrados.sortedBy { it.value.numero }
             2 -> if (desc) filtrados.sortedByDescending { it.value.fecha } else filtrados.sortedBy { it.value.fecha }
             else -> if (desc) filtrados else filtrados.asReversed()
         }
     }
-    val filtrosCap = listOf(ext.capNoLeidos, ext.capDescargados, ext.capMarcados).count { it != com.example.lector.Tri.IGNORAR } + (if (ocultos.isNotEmpty()) 1 else 0)
+    val filtrosCap = listOf(filtroCaps.noLeidos, filtroCaps.descargados, filtroCaps.marcados).count { it != com.example.lector.Tri.IGNORAR } + (if (ocultos.isNotEmpty()) 1 else 0)
 
     // Cuánto se ha desplazado la cabecera (se lee al dibujar, sin recomponer).
     // En tablet la cabecera va en su propia columna: el parallax y la barra siguen a esa lista.
@@ -400,6 +403,18 @@ fun FichaMangaScreen(
     val listaCab = if (dosColumnas) listaInfo else lista
     val scrollPx: () -> Float = { if (listaCab.firstVisibleItemIndex == 0) listaCab.firstVisibleItemScrollOffset.toFloat() else 99999f }
     // La mayoría de fuentes listan el capítulo más nuevo primero: el primero a leer es el último sin leer.
+    // Al leer se respetan los filtros y el tipo de orden de la lista (como Mihon/Komikku): el lector recibe solo esos
+    // capítulos, en orden de lectura (del primero al último), aunque la lista se vea de más nuevo a más viejo.
+    // Se pasa con la convención de onLeer: lo más nuevo primero.
+    val paraLeer = remember(visibles, filtroCaps) {
+        (if (filtroCaps.descendente) visibles else visibles.asReversed()).map { it.value }
+    }
+    fun leerCap(c: CapituloFuente, pagina: Int) {
+        val todos = fi?.capitulos ?: return
+        val i = paraLeer.indexOfFirst { it.url == c.url }
+        if (i >= 0 && paraLeer.size > 1) onLeer(paraLeer, i, pagina)
+        else onLeer(todos, todos.indexOfFirst { it.url == c.url }.coerceAtLeast(0), pagina)
+    }
     val sig = remember(fi, leidosAhora) {
         fi?.let { x -> (x.capitulos.lastIndex downTo 0).firstOrNull { !ext.esLeido(f.id, x.capitulos[it].url) } ?: 0 } ?: 0
     }
@@ -446,7 +461,7 @@ fun FichaMangaScreen(
                     onCargada = { portadaLista = true; if (conTema) paleta = temaDe(it) },
                     enBiblioteca = enBiblioteca != null,
                     textoLeer = textoLeer, puedeLeer = fi != null && fi.capitulos.isNotEmpty(),
-                    onLeer = { fi?.let { onLeer(it.capitulos, sig, paginaSig) } },
+                    onLeer = { fi?.capitulos?.getOrNull(sig)?.let { leerCap(it, paginaSig) } },
                     onCorazon = { alternarBiblioteca() },
                     onPildora = { if (enBiblioteca != null) dialogoCats = true else alternarBiblioteca() },
                     onWeb = abrirNavegador,
@@ -471,7 +486,7 @@ fun FichaMangaScreen(
                 // Último capítulo: tarjeta ancha con portada pequeña y botón de acento.
                 val ultimo = fi.capitulos.firstOrNull()
                 if (ultimo != null) item(key = "ultimo", contentType = "ultimo") {
-                    val leerUltimo = { onLeer(fi.capitulos, 0, ext.paginaDe(f.id, fi.capitulos[0].url)) }
+                    val leerUltimo = { leerCap(fi.capitulos[0], ext.paginaDe(f.id, fi.capitulos[0].url)) }
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp).entrada(1)
                             .press3D(4f, 0.98f).pressable(leerUltimo)
@@ -725,7 +740,7 @@ fun FichaMangaScreen(
                                     onLongClick = { seleccion = if (seleccionado) seleccion - c.url else seleccion + c.url },
                                 ) {
                                     if (enSeleccion) seleccion = if (seleccionado) seleccion - c.url else seleccion + c.url
-                                    else onLeer(fi.capitulos, i, paginaGuardada)
+                                    else leerCap(c, paginaGuardada)
                                 }
                                 .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -852,7 +867,7 @@ fun FichaMangaScreen(
                         Box(
                             Modifier.size(44.dp)
                                 .graphicsLayer { alpha = ((scrollPx() - 560f) / 160f).coerceIn(0f, 1f) }
-                                .pressable { if (scrollPx() > 560f) onLeer(fi.capitulos, sig, paginaSig) }
+                                .pressable { if (scrollPx() > 560f) fi.capitulos.getOrNull(sig)?.let { leerCap(it, paginaSig) } }
                                 .clip(CircleShape).background(acento),
                             Alignment.Center,
                         ) { Icon(Icons.Rounded.PlayArrow, if (hayLeidos) "Reanudar" else "Leer", tint = TintaBtn) }
@@ -987,9 +1002,9 @@ fun FichaMangaScreen(
             Column(Modifier.fillMaxWidth().padding(bottom = 28.dp)) {
                 when (pestanaHoja) {
                     0 -> {
-                        FilaTri("No leídos", ext.capNoLeidos) { ext.capNoLeidos = it }
-                        FilaTri("Descargados", ext.capDescargados) { ext.capDescargados = it }
-                        FilaTri("Marcados", ext.capMarcados) { ext.capMarcados = it }
+                        FilaTri("No leídos", filtroCaps.noLeidos) { cambiarFiltroCaps(filtroCaps.copy(noLeidos = it)) }
+                        FilaTri("Descargados", filtroCaps.descargados) { cambiarFiltroCaps(filtroCaps.copy(descargados = it)) }
+                        FilaTri("Marcados", filtroCaps.marcados) { cambiarFiltroCaps(filtroCaps.copy(marcados = it)) }
                         // Grupos de traducción (como Komikku): toca uno para ocultar sus capítulos en este manga.
                         val grupos = fi?.capitulos?.mapNotNull { it.scanlator }?.distinct()?.sorted().orEmpty()
                         if (grupos.size > 1) {
@@ -1000,9 +1015,18 @@ fun FichaMangaScreen(
                             LText("Encendido = se muestra. Apaga un grupo para ocultar sus capítulos.", LectorType.Label, Modifier.padding(horizontal = 24.dp, vertical = 6.dp), color = LectorColors.Muted)
                         }
                     }
-                    1 -> (0..2).forEach { o ->
-                        FilaOrden(nombreOrdenCap(o), ext.capOrden == o, !ext.capDescendente) {
-                            if (ext.capOrden == o) ext.capDescendente = !ext.capDescendente else ext.capOrden = o
+                    1 -> Column {
+                        (0..2).forEach { o ->
+                            FilaOrden(nombreOrdenCap(o), filtroCaps.orden == o, !filtroCaps.descendente) {
+                                cambiarFiltroCaps(if (filtroCaps.orden == o) filtroCaps.copy(descendente = !filtroCaps.descendente) else filtroCaps.copy(orden = o))
+                            }
+                        }
+                        // Como Komikku: el filtro y el orden son de este manga; esto los copia a los que no tengan propio.
+                        Spacer(Modifier.height(8.dp))
+                        Box(Modifier.padding(horizontal = 20.dp)) {
+                            BotonExpresivo("Usar como predeterminado", Icons.Rounded.Check, {
+                                ext.filtroCapsComoPredeterminado(filtroCaps); Avisos.mostrar("Filtro y orden predeterminados guardados")
+                            }, estilo = EstiloBoton.TONAL)
                         }
                     }
                     else -> {
