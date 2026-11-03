@@ -25,30 +25,23 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lector.textoSobre
+import com.example.lector.ui.mochy.revealOnAppear
 import kotlinx.coroutines.delay
 
 /**
- * Entrada escalonada (como las listas del video): cada elemento aparece con fundido, subida y un poco de escala,
- * uno tras otro. Solo ocurre la primera vez; al volver a hacer scroll ya no se repite.
+ * Entrada escalonada: el revealOnAppear de Mochy (ui/mochy/RevealOnAppear.kt), fundido y subida de 20 dp la
+ * primera vez que aparece; el elemento [indice] espera [pasoMs] por cada uno de delante (hasta 6). Solo ocurre una
+ * vez (el estado de «ya visto» se guarda con rememberSaveable); con el movimiento reducido no se anima.
  */
 @Composable
 fun Modifier.entrada(indice: Int, pasoMs: Int = 60): Modifier {
-    var visible by rememberSaveable { mutableStateOf(MovimientoReducido.activo) }
-    LaunchedEffect(Unit) {
-        if (!visible) {
-            delay((indice.coerceIn(0, 6) * pasoMs).toLong())
-            visible = true
-        }
-    }
-    val t by animateFloatAsState(
-        if (visible) 1f else 0f,
-        tween(520, easing = EnfasisEasing), label = "entrada" // tiempos de RevealOnAppear de Mochy
+    if (MovimientoReducido.activo) return this
+    val visto = com.example.lector.ui.mochy.rememberRevealSeenState()
+    return this.revealOnAppear(
+        key = "entrada",
+        seenState = visto,
+        delayMillis = indice.coerceIn(0, 6) * pasoMs,
     )
-    val subida = with(androidx.compose.ui.platform.LocalDensity.current) { 20.dp.toPx() }
-    return this.graphicsLayer {
-        alpha = t
-        translationY = (1f - t) * subida
-    }
 }
 
 /** Colores que salen de una portada: un fondo muy oscuro del mismo tono y un acento claro. */

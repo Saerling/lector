@@ -70,13 +70,16 @@ object LectorColors {
     val Error: Color = Color(0xFFE57373)
 }
 
-/** Tipografía: Inter SemiBold con el interletrado cerrado de musicfy; los títulos grandes en negrita. */
+/**
+ * Tipografía: los estilos de Mochy (ui/mochy/MochyType.kt, Inter SemiBold con -0.05 em) con los nombres de Shiori.
+ * Display es el título de página de Mochy (34 sp, negrita, -0.04 em).
+ */
 object LectorType {
-    private val cerrado = (-0.05).em
-    val Display = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.ExtraBold, fontSize = 36.sp, lineHeight = 40.sp, letterSpacing = (-0.04).em)
-    val Hero = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.Bold, fontSize = 26.sp, lineHeight = 30.sp, letterSpacing = (-0.03).em)
-    val Section = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp, letterSpacing = cerrado)
-    val Body = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 20.sp, letterSpacing = cerrado)
-    val Label = TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = cerrado)
+    private val m = com.example.lector.ui.mochy.AppTypography
+    val Display = m.displaySmall.copy(fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 40.sp, letterSpacing = (-0.04).em)
+    val Hero = m.headlineSmall.copy(fontWeight = FontWeight.Bold)
+    val Section = m.titleMedium
+    val Body = m.bodyMedium
+    val Label = m.labelMedium
     val Mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
 }

@@ -1,5 +1,22 @@
 package com.example.lector.ui
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import com.example.lector.ui.mochy.AppSwitch
+import com.example.lector.ui.mochy.AppTypography
+import com.example.lector.ui.mochy.SettingsGroup
+import com.example.lector.ui.mochy.SettingsGroupStyle
+import com.example.lector.ui.mochy.SettingsItem
+import kotlinx.coroutines.withTimeoutOrNull
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -157,56 +174,40 @@ fun PaginaAjustes(titulo: String, onBack: () -> Unit, content: @Composable Colum
     }
 }
 
-/** Tarjeta de una fila de ajustes (#141416, 20 dp de radio, 8 dp entre filas), como el estilo «clásico» de musicfy. */
+/*
+ * Filas de ajustes: el SettingsGroup de Mochy (ui/mochy/SettingsGroup.kt), estilo «Classic» (tarjeta de 20 dp de
+ * radio y 8 dp entre filas), una fila por grupo. El margen lateral de 16 dp es el que ya daban estas filas.
+ */
 @Composable
-private fun TarjetaFila(onClick: (() -> Unit)?, onLongClick: (() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
-    val forma = SuaveShape(20.dp)
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp)
-            .then(if (onClick != null) Modifier.pressableCon(0.98f, onLongClick, onClick) else Modifier)
-            .clip(forma).background(LectorColors.Card)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        content = content,
-    )
-}
-
-/** Icono de fila: círculo claro de 32 dp con el glifo oscuro. */
-@Composable
-private fun IconoFila(icon: ImageVector) {
-    Box(Modifier.size(32.dp).clip(CircleShape).background(LectorColors.IconoFila), Alignment.Center) {
-        Icon(icon, null, tint = LectorColors.IconoFilaGlifo, modifier = Modifier.size(18.dp))
-    }
-    Spacer(Modifier.width(16.dp))
-}
-
-@Composable
-private fun TextosFila(titulo: String, detalle: String?, modifier: Modifier) {
-    Column(modifier) {
-        LText(titulo, LectorType.Section)
-        if (detalle != null) {
-            Spacer(Modifier.height(1.dp))
-            LText(detalle, LectorType.Label, color = LectorColors.Muted)
-        }
+private fun TarjetaFila(item: SettingsItem) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        SettingsGroup(items = listOf(item), style = SettingsGroupStyle.Classic)
     }
 }
 
 /** Fila de ajustes: tarjeta con icono en círculo, título y detalle. */
 @Composable
 fun FilaAjuste(icon: ImageVector?, titulo: String, detalle: String? = null, onClick: () -> Unit) {
-    TarjetaFila(onClick) {
-        if (icon != null) IconoFila(icon)
-        TextosFila(titulo, detalle, Modifier.weight(1f))
-    }
+    TarjetaFila(
+        SettingsItem(
+            icon = icon?.let { rememberVectorPainter(it) },
+            title = { androidx.compose.material3.Text(titulo) },
+            descriptionText = detalle,
+            onClick = onClick,
+        )
+    )
 }
 
 @Composable
 fun FilaSwitch(titulo: String, detalle: String? = null, activado: Boolean, onChange: (Boolean) -> Unit) {
-    TarjetaFila({ onChange(!activado) }) {
-        TextosFila(titulo, detalle, Modifier.weight(1f))
-        Spacer(Modifier.width(12.dp))
-        Interruptor(activado, onChange)
-    }
+    TarjetaFila(
+        SettingsItem(
+            title = { androidx.compose.material3.Text(titulo) },
+            descriptionText = detalle,
+            trailingContent = { Interruptor(activado, onChange) },
+            onClick = { onChange(!activado) },
+        )
+    )
 }
 
 @Composable
@@ -232,36 +233,24 @@ fun Marca(marcada: Boolean) {
     ) { if (marcada) Box(Modifier.size(8.dp).clip(CircleShape).background(LectorColors.Bg)) }
 }
 
-/**
- * Interruptor de musicfy: pista de 52×32 con borde gris cuando está apagado; encendido, pista gris y botón blanco.
- */
+/** Interruptor: el AppSwitch de Mochy (ui/mochy/AppSwitch.kt), con el toque háptico de Shiori. */
 @Composable
 fun Interruptor(activado: Boolean, onChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier) {
-    // Interruptor Expressive: apagado, botón pequeño gris en pista con borde; encendido, pista de acento y botón
-    // grande con un visto. El botón crece, se mueve y cambia de color con muelles.
-    val acento = MaterialTheme.colorScheme.primary
-    val gris = LectorColors.Muted
-    val pista by animateColorAsState(if (activado) acento else Color.Transparent, Muelles.efectos(), label = "pista")
-    val borde by animateColorAsState(if (activado) Color.Transparent else gris, Muelles.efectos(), label = "borde")
-    val boton by animateColorAsState(if (activado) MaterialTheme.colorScheme.onPrimary else gris, Muelles.efectos(), label = "boton")
-    val tam by animateDpAsState(if (activado) 24.dp else 16.dp, Muelles.espacialRapido(), label = "tam")
-    val x by animateDpAsState(if (activado) 52.dp - 24.dp - 4.dp else 4.dp, Muelles.espacialRapido(), label = "x")
-    Box(
-        modifier.size(52.dp, 32.dp)
-            .then(if (onChange != null) Modifier.toggleable(activado, role = Role.Switch, onValueChange = { Tacto.alternar(it); onChange(it) }) else Modifier)
-            .clip(CircleShape).background(pista).border(2.dp, borde, CircleShape),
-    ) {
-        Box(Modifier.align(Alignment.CenterStart).offset(x = x + (24.dp - tam) / 2).size(tam).clip(CircleShape).background(boton), Alignment.Center) {
-            if (activado) Icon(Icons.Rounded.Check, null, tint = acento, modifier = Modifier.size(16.dp))
-        }
-    }
+    AppSwitch(
+        checked = activado,
+        onCheckedChange = onChange?.let { cambiar -> { v: Boolean -> Tacto.alternar(v); cambiar(v) } },
+        modifier = modifier,
+    )
 }
 
+/** Título de un grupo de ajustes, como el de SettingsGroup de Mochy (labelLarge en el color de acento). */
 @Composable
 fun TituloSeccion(texto: String) {
-    LText(
-        texto.uppercase(), LectorType.Label.copy(letterSpacing = 0.06.em),
-        Modifier.padding(start = 28.dp, end = 24.dp, top = 18.dp, bottom = 8.dp), color = LectorColors.Muted,
+    androidx.compose.material3.Text(
+        text = texto,
+        style = AppTypography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 16.dp).padding(start = 4.dp, bottom = 8.dp, top = 8.dp + 10.dp),
     )
 }
 
@@ -271,27 +260,75 @@ fun Divisor() {
 }
 
 /**
- * Chip de selección (los FilterChip de musicfy): esquina de 8 dp que se redondea a 20 dp con un rebote al
- * elegirlo, y un visto delante cuando está elegido.
+ * Chip de selección: el FilterChip de ChipsRow de Mochy (ui/mochy/ChipsRow.kt), esquina de 8 dp que se redondea a
+ * 20 dp con un rebote al elegirlo y un visto delante. Mantener pulsado llama a [onLongClick].
  */
 @Composable
 fun ChipSel(texto: String, seleccionado: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    val radio by animateDpAsState(
-        if (seleccionado) 20.dp else 8.dp, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "radioChip",
+    val isSelected = seleccionado
+    val cornerRadius by animateDpAsState(
+        targetValue = if (isSelected) 20.dp else 8.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "corner_radius"
     )
-    val forma = RoundedCornerShape(radio)
-    Row(
-        Modifier.pressable(onLongClick) { Tacto.tic(); onClick() }.clip(forma)
-            .background(if (seleccionado) LectorColors.PillFill else LectorColors.Card)
-            .animateContentSize(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium))
-            .height(36.dp).padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (seleccionado) {
-            Icon(Icons.Rounded.Check, null, tint = LectorColors.Text, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
+    val largo by rememberUpdatedState(onLongClick)
+    FilterChip(
+        label = { androidx.compose.material3.Text(texto) },
+        selected = isSelected,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = LectorColors.Card,
+            labelColor = LectorColors.Text,
+            selectedContainerColor = LectorColors.PillFill,
+            selectedLabelColor = LectorColors.Text,
+            selectedLeadingIconColor = LectorColors.Text,
+        ),
+        onClick = { Tacto.tic(); onClick() },
+        leadingIcon = if (isSelected) {
+            {
+                Icon(
+                    imageVector = Icons.Filled.Done,
+                    contentDescription = null,
+                    modifier = Modifier.size(FilterChipDefaults.IconSize),
+                )
+            }
+        } else {
+            null
+        },
+        shape = RoundedCornerShape(cornerRadius),
+        border = null,
+        modifier = Modifier
+            .then(if (onLongClick != null) Modifier.pulsacionLarga { largo?.invoke() } else Modifier)
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+    )
+}
+
+/**
+ * Mantener pulsado sin quitarle el toque al FilterChip: se mira en la pasada inicial y, si se cumple el tiempo,
+ * se consume el resto del gesto para que el chip no lo cuente además como un toque.
+ */
+private fun Modifier.pulsacionLarga(alMantener: () -> Unit): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val suelta = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            waitForUpOrCancellation(PointerEventPass.Initial)
         }
-        LText(texto, LectorType.Body, color = LectorColors.Text, maxLines = 1)
+        if (suelta == null) {
+            Tacto.tic()
+            alMantener()
+            while (true) {
+                val ev = awaitPointerEvent(PointerEventPass.Initial)
+                ev.changes.forEach { it.consume() }
+                if (ev.changes.none { it.pressed }) break
+            }
+        }
     }
 }
 
