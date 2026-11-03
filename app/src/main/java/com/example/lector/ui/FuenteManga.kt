@@ -86,6 +86,9 @@ import com.example.lector.Almacen
 import com.example.lector.ext.*
 import com.example.lector.Cbz
 import com.example.lector.EntradaHistorial
+import com.example.lector.ui.mochy.ChapterSwipeAction
+import com.example.lector.ui.mochy.ChapterSwipeBox
+import com.example.lector.ui.mochy.EstadoCapituloSwipe
 import com.example.lector.Descargas
 import com.example.lector.Tinte
 import com.example.lector.colorFondo
@@ -710,21 +713,39 @@ fun FichaMangaScreen(
                     val marcado = ext.esMarcado(f.id, c.url)
                     val seleccionado = c.url in seleccion
                     val numero = numeroTexto(c.numero).ifEmpty { "#" }
-                    // Deslizar → leído / no leído · deslizar ← marcado / no marcado.
-                    val accionLeido = AccionDeslizar(
-                        if (leido) Iconos.OjoTachado else Icons.Rounded.Check,
-                        if (leido) "Marcar como no leído" else "Marcar como leído",
-                        acento,
+                    // Deslizar la fila (los gestos de Mochy): cada lado hace lo elegido en Personalización → Gestos.
+                    ChapterSwipeBox(
+                        estado = EstadoCapituloSwipe(
+                            leido = leido, marcado = marcado,
+                            descargado = estado is EstadoDescarga.Listo, descargando = estado is EstadoDescarga.Descargando,
+                        ),
+                        onAction = { accion ->
+                            when (accion) {
+                                ChapterSwipeAction.NONE -> Unit
+                                ChapterSwipeAction.MARK_READ -> {
+                                    if (leido) ext.desmarcarLeido(f.id, c.url) else ext.marcarLeido(f.id, c.url)
+                                    progreso()
+                                }
+                                ChapterSwipeAction.BOOKMARK -> ext.alternarMarcado(f.id, c.url)
+                                ChapterSwipeAction.DOWNLOAD -> when (estado) {
+                                    is EstadoDescarga.Libre -> Descargas.encolar(ctx, f, manga.url, tituloFicha, listOf(c))
+                                    is EstadoDescarga.Descargando -> Descargas.cancelar(ctx, clave)
+                                    is EstadoDescarga.Listo -> {
+                                        almacen.borrarDescarga(f.id, c.url)
+                                        Descargas.version.value++
+                                    }
+                                }
+                                ChapterSwipeAction.MARK_PREVIOUS_READ -> {
+                                    val todos = fi?.capitulos.orEmpty()
+                                    val idx = todos.indexOfFirst { it.url == c.url }
+                                    if (idx >= 0) ext.marcarLeidos(f.id, todos.drop(idx + 1).map { it.url })
+                                    progreso()
+                                }
+                            }
+                        },
+                        modifier = Modifier.entrada(pos),
+                        enabled = !enSeleccion,
                     ) {
-                        if (leido) ext.desmarcarLeido(f.id, c.url) else ext.marcarLeido(f.id, c.url)
-                        progreso()
-                    }
-                    val accionMarca = AccionDeslizar(
-                        if (marcado) Iconos.MarcaBorde else Iconos.Marca,
-                        if (marcado) "Quitar marca" else "Marcar capítulo",
-                        ColorMarca,
-                    ) { ext.alternarMarcado(f.id, c.url) }
-                    FilaDeslizable(if (enSeleccion) null else accionLeido, if (enSeleccion) null else accionMarca, Modifier.entrada(pos)) {
                         // Fila limpia: punto de acento = sin leer; leído = texto apagado y un visto pequeño.
                         val fondoSel by animateColorAsState(
                             if (seleccionado) acento.copy(alpha = 0.18f) else Color.Transparent,

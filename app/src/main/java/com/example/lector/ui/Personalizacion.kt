@@ -102,6 +102,12 @@ import com.example.lector.colorDePaleta
 import com.example.lector.ModoTema
 import com.example.lector.ModoVisor
 import com.example.lector.Vista
+import androidx.compose.animation.Crossfade
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.ui.text.style.TextAlign
+import com.example.lector.ui.mochy.ChapterSwipeAction
+import com.example.lector.ui.mochy.GestosCapitulos
+import com.example.lector.ui.mochy.SwipePreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -172,7 +178,8 @@ private enum class SeccionP(val titulo: String, val palabras: String) {
     FONDO("Fondo", "fondo aurora liso color vivo"),
     ANIMACION("Animación", "animacion animaciones velocidad movimiento rapido lento quitar"),
     INICIO("Animación de inicio", "inicio arranque agujero negro abrir"),
-    RESPUESTA("Respuesta", "luz tocar tactil portada color ficha");
+    RESPUESTA("Respuesta", "luz tocar tactil portada color ficha"),
+    GESTOS("Gestos", "gestos deslizar izquierda derecha capitulos marcar leido descargar");
 
     fun coincide(q: String): Boolean {
         val palabrasQ = normalizar(q).split(' ').filter { it.isNotBlank() }
@@ -267,6 +274,7 @@ private fun ContenidoSeccion(s: SeccionP, almacen: Almacen) {
                 LText("La ficha y el lector toman el color de la portada.", EstiloPie, color = LectorColors.Muted)
             }
         }
+        SeccionP.GESTOS -> SeccionGestos()
     }
 }
 
@@ -783,4 +791,144 @@ object MovimientoApp {
 
     fun elegirActivado(v: Boolean) { activado = v; prefs?.edit()?.putBoolean("animaciones", v)?.apply(); MovimientoReducido.actualizar() }
     fun elegirVelocidad(v: Float) { velocidad = v; prefs?.edit()?.putFloat("velocidad_anim", v)?.apply() }
+}
+
+// ───────────── Gestos (GestureSection / SwipeCard / ActionDropdown / ActionPicker de Mochy, GestureScreen.kt) ─────────────
+
+private val RellenoTarjetaGesto = 20.dp
+
+@Composable
+private fun SeccionGestos() {
+    GestosCapitulos.iniciar(androidx.compose.ui.platform.LocalContext.current)
+    Column {
+        LText(
+            "Gestos",
+            TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-0.05).em),
+        )
+        Spacer(Modifier.height(14.dp))
+        TarjetaDeslizar(
+            titulo = "Deslizar a la derecha",
+            subtitulo = "Lo que hace deslizar un capítulo hacia la derecha.",
+            haciaDerecha = true,
+            accion = GestosCapitulos.derecha,
+            alElegir = { GestosCapitulos.elegirDerecha(it) },
+        )
+        Spacer(Modifier.height(14.dp))
+        TarjetaDeslizar(
+            titulo = "Deslizar a la izquierda",
+            subtitulo = "Lo que hace deslizar un capítulo hacia la izquierda.",
+            haciaDerecha = false,
+            accion = GestosCapitulos.izquierda,
+            alElegir = { GestosCapitulos.elegirIzquierda(it) },
+        )
+    }
+}
+
+/** SwipeCard de Mochy: título, la demo en vivo y el selector. */
+@Composable
+private fun TarjetaDeslizar(
+    titulo: String,
+    subtitulo: String,
+    haciaDerecha: Boolean,
+    accion: ChapterSwipeAction,
+    alElegir: (ChapterSwipeAction) -> Unit,
+) {
+    var hoja by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().clip(FormaTarjeta).background(ColP.Tarjeta).padding(RellenoTarjetaGesto)) {
+        LText(
+            titulo,
+            TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.Bold, fontSize = 20.sp, letterSpacing = (-0.02).em),
+        )
+        LText(
+            subtitulo,
+            TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.Medium, fontSize = 13.sp),
+            Modifier.padding(top = 2.dp), color = LectorColors.Muted,
+        )
+        Spacer(Modifier.height(20.dp))
+        // the demo runs edge to edge, like the mock: the row slides off the card's side
+        SwipePreview(accion, haciaDerecha, Modifier.sangrarHorizontal(RellenoTarjetaGesto))
+        Spacer(Modifier.height(20.dp))
+        DesplegableAccion(accion) { hoja = true }
+    }
+    if (hoja) {
+        HojaLector(onCerrar = { hoja = false }) {
+            SelectorAccion(seleccionada = accion) { elegida ->
+                alElegir(elegida)
+                hoja = false
+            }
+        }
+    }
+}
+
+/** ActionDropdown de Mochy. */
+@Composable
+private fun DesplegableAccion(accion: ChapterSwipeAction, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(ColP.Fila)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
+    ) {
+        InsigniaAccion(accion)
+        Crossfade(targetState = accion, animationSpec = tween(if (Mov.reducido) 0 else 180), modifier = Modifier.weight(1f), label = "swipeAction") { mostrada ->
+            LText(
+                mostrada.title,
+                TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, letterSpacing = (-0.01).em, textAlign = TextAlign.Center),
+                Modifier.fillMaxWidth(), maxLines = 1,
+            )
+        }
+        Icon(Icons.Rounded.KeyboardArrowDown, null, tint = LectorColors.Muted, modifier = Modifier.size(20.dp))
+    }
+}
+
+/** ActionPicker de Mochy (en la hoja de Shiori). */
+@Composable
+private fun SelectorAccion(seleccionada: ChapterSwipeAction, alElegir: (ChapterSwipeAction) -> Unit) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+            .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+    ) {
+        ChapterSwipeAction.entries.forEach { opcion ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn56()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(ColP.Fila)
+                    .clickable { alElegir(opcion) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            ) {
+                InsigniaAccion(opcion)
+                Spacer(Modifier.width(12.dp))
+                LText(
+                    opcion.title,
+                    TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, letterSpacing = (-0.01).em),
+                    Modifier.weight(1f), maxLines = 1,
+                )
+                if (opcion == seleccionada) Icon(Icons.Rounded.Check, null, tint = LectorColors.Text, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+private fun Modifier.heightIn56() = this.then(Modifier.height(56.dp))
+
+// colored circle badge so each gesture option shows its pill color in the selector and sheet
+@Composable
+private fun InsigniaAccion(accion: ChapterSwipeAction) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(accion.color.copy(alpha = 0.22f)),
+    ) {
+        Icon(accion.icon, null, tint = accion.color, modifier = Modifier.size(16.dp))
+    }
 }
