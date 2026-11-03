@@ -36,6 +36,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.Constraints
 import kotlin.math.ceil
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import com.example.lector.ui.mochy.setAgslUniform
 
 /*
  * Cristal esmerilado (el aspecto de la barra de navegación y del mini reproductor de musicfy):
@@ -72,6 +74,83 @@ fun Modifier.raizCristal(estado: EstadoCristal): Modifier {
             capa.record { this@drawWithContent.drawContent() }
             drawLayer(capa)
         }
+}
+
+// ───── Liquid glass (estilo Apple) ─────
+// Sobre el fondo ya desenfocado, un shader AGSL (Android 13+) hace de lente: cerca del borde la imagen se curva hacia
+// dentro (refracción, con una pizca de aberración cromática), la saturación sube y un brillo especular recorre el
+// canto, más fuerte arriba a la izquierda (donde «da» la luz) y con un rebote tenue abajo a la derecha. Usa las
+// utilidades de AGSL de Mochy (ui/mochy/AgslShader.kt). En Android 12 queda el desenfoque y los brillos dibujados;
+// en 8–11, el tinte.
+private const val LIQUID_GLASS_SKSL = """
+uniform shader content;
+uniform float2 size;
+uniform float inset;
+uniform float radius;
+uniform float band;
+uniform float refract;
+uniform float sat;
+uniform float rim;
+
+float sdRound(float2 p, float2 c, float2 hs, float r) {
+    float2 q = abs(p - c) - (hs - r);
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+
+half4 main(float2 p) {
+    float2 lo = float2(inset);
+    float2 hi = size - float2(inset);
+    float2 c = (lo + hi) * 0.5;
+    float2 hs = max((hi - lo) * 0.5, float2(1.0));
+    float r = min(radius, min(hs.x, hs.y));
+    float d = sdRound(p, c, hs, r);
+    // Normal hacia fuera (gradiente de la distancia).
+    float e = 1.0;
+    float2 n = float2(sdRound(p + float2(e, 0.0), c, hs, r) - sdRound(p - float2(e, 0.0), c, hs, r),
+                      sdRound(p + float2(0.0, e), c, hs, r) - sdRound(p - float2(0.0, e), c, hs, r));
+    float nl = length(n);
+    n = nl > 0.0001 ? n / nl : float2(0.0);
+    // 0 en el borde, 1 ya dentro de la banda: la lente solo curva el canto.
+    float t = clamp(-d / band, 0.0, 1.0);
+    float k = (1.0 - t) * (1.0 - t);
+    float2 off = n * k * refract;
+    half4 col = content.eval(p + off);
+    half4 cr = content.eval(p + off * 1.12);
+    half4 cb = content.eval(p + off * 0.88);
+    col.r = cr.r;
+    col.b = cb.b;
+    // Más saturación (el «vibrancy» del cristal de Apple).
+    float l = dot(float3(col.rgb), float3(0.2126, 0.7152, 0.0722));
+    col.rgb = half3(mix(float3(l), float3(col.rgb), sat));
+    // Brillo especular en el canto: luz arriba a la izquierda y un reflejo menor abajo a la derecha.
+    float canto = 1.0 - smoothstep(0.0, band * 0.22, -d);
+    float2 luz = normalize(float2(-0.55, -0.85));
+    float dl = dot(n, luz);
+    float spec = max(dl, 0.0) + 0.45 * max(-dl, 0.0);
+    float brillo = rim * canto * (0.25 + 0.75 * spec) * step(d, 0.0);
+    col.rgb = col.rgb + half3(brillo) * col.a;
+    return col;
+}
+"""
+
+@androidx.annotation.RequiresApi(33)
+private class LenteLiquida {
+    val shader: Any = com.example.lector.ui.mochy.createAgslShader(LIQUID_GLASS_SKSL)
+
+    fun efecto(ancho: Float, alto: Float, margen: Float, densidad: Float, desenfoque: Float): androidx.compose.ui.graphics.RenderEffect {
+        val hsMin = (minOf(ancho, alto) - margen * 2f) / 2f
+        val s = shader
+        s.setAgslUniform("size", ancho, alto)
+        s.setAgslUniform("inset", margen)
+        s.setAgslUniform("radius", minOf(hsMin, 34f * densidad))
+        s.setAgslUniform("band", minOf(hsMin * 0.9f, 18f * densidad).coerceAtLeast(1f))
+        s.setAgslUniform("refract", 9f * densidad)
+        s.setAgslUniform("sat", if (TemaActual.oscuro) 1.45f else 1.25f)
+        s.setAgslUniform("rim", if (TemaActual.oscuro) 0.22f else 0.35f)
+        val lente = com.example.lector.ui.mochy.agslRenderEffect(s, "content")
+        val blur = android.graphics.RenderEffect.createBlurEffect(desenfoque, desenfoque, android.graphics.Shader.TileMode.CLAMP)
+        return android.graphics.RenderEffect.createChainEffect(lente, blur).asComposeRenderEffect()
+    }
 }
 
 /** Grano: un mosaico de 64×64 píxeles medio claros, medio oscuros, repetido. Se crea una vez. */
@@ -128,13 +207,21 @@ fun FondoCristal(
         Superficie.CRISTAL -> tinte
     }
     val margen = if (desenfoca) ceil(radioReal).toInt() else 0
+    // Liquid glass con lente (Android 13+); se crea una vez por pieza.
+    val lente = remember(estilo == Superficie.LIQUIDO && desenfoca) {
+        if (estilo == Superficie.LIQUIDO && desenfoca && Build.VERSION.SDK_INT >= 33) LenteLiquida() else null
+    }
     Box(modifier.clipToBounds()) {
         Box(
             Modifier.fillMaxSize()
                 .then(if (margen > 0) Modifier.sangrado(margen) else Modifier)
                 .onGloballyPositioned { pos.valor = it.positionInWindow() }
                 .graphicsLayer {
-                    if (desenfoca && radioReal > 0.5f) renderEffect = BlurEffect(radioReal, radioReal, TileMode.Clamp)
+                    if (desenfoca && radioReal > 0.5f) {
+                        renderEffect = if (lente != null && Build.VERSION.SDK_INT >= 33) {
+                            lente.efecto(size.width, size.height, margen.toFloat(), density, radioReal)
+                        } else BlurEffect(radioReal, radioReal, TileMode.Clamp)
+                    }
                     clip = true
                 }
                 .drawWithContent {
@@ -146,11 +233,12 @@ fun FondoCristal(
         // Liquid glass: brillo de superficie arriba y un reflejo tenue abajo, como una gota de cristal.
         if (estilo == Superficie.LIQUIDO) Box(
             Modifier.fillMaxSize().drawWithContent {
+                val f = if (lente != null) 0.6f else 1f
                 drawRect(
                     Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.13f else 0.35f),
+                        0f to Color.White.copy(alpha = (if (TemaActual.oscuro) 0.13f else 0.35f) * f),
                         0.45f to Color.Transparent,
-                        1f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.05f else 0.12f),
+                        1f to Color.White.copy(alpha = (if (TemaActual.oscuro) 0.05f else 0.12f) * f),
                     ),
                 )
             },
@@ -205,10 +293,12 @@ fun DrawScope.lineaCristal(radioEsquina: Float, alpha: Float = 1f) {
     if (Aspecto.superficie == Superficie.LIQUIDO) {
         // Borde de luz: más brillante arriba (donde «da» la luz) y casi nada abajo.
         drawRoundRect(
-            Brush.verticalGradient(
-                0f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.30f else 0.75f),
-                0.5f to Color.White.copy(alpha = 0.06f),
-                1f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.14f else 0.4f),
+            Brush.linearGradient(
+                0f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.42f else 0.85f),
+                0.32f to Color.White.copy(alpha = 0.08f),
+                0.68f to Color.White.copy(alpha = 0.04f),
+                1f to Color.White.copy(alpha = if (TemaActual.oscuro) 0.22f else 0.5f),
+                start = Offset.Zero, end = Offset(size.width, size.height),
             ),
             topLeft = Offset(m, m), size = Size(size.width - ancho, size.height - ancho),
             cornerRadius = CornerRadius((radioEsquina - m).coerceAtLeast(0f)), style = Stroke(ancho * 1.25f), alpha = alpha,

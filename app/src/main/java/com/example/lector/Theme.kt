@@ -113,53 +113,87 @@ object ColorPortada {
     }
 }
 
-// Negro puro (AMOLED) y grises neutros. El acento se pone aparte.
+// Paleta de Mochy (ui/theme/Theme.kt de Mochy Music): monocroma, sin color dinámico de Material You. Mochy deja
+// sin fijar los surfaceContainer*, outline, tertiary… y ahí Material pone sus grises violáceos; aquí van neutros.
 private val EsquemaPuro = darkColorScheme(
-    primary = Paletas.porDefecto.color,
-    onPrimary = Color.White,
+    primary = Color(0xFFE0E0E0),
+    onPrimary = Color.Black,
+    primaryContainer = Color(0xFF333333),
+    onPrimaryContainer = Color.White,
+    secondary = Color(0xFFB0B0B0),
+    onSecondary = Color.Black,
+    secondaryContainer = Color(0xFF2C2C2C),
+    onSecondaryContainer = Color.White,
+    tertiary = Color(0xFFB0B0B0),
+    onTertiary = Color.Black,
+    tertiaryContainer = Color(0xFF2C2C2C),
+    onTertiaryContainer = Color.White,
     background = Color.Black,
-    onBackground = Color(0xFFE6E1E5),
+    onBackground = Color.White,
     surface = Color.Black,
-    onSurface = Color(0xFFE6E1E5),
+    onSurface = Color.White,
     surfaceVariant = Color(0xFF1A1A1A),
     onSurfaceVariant = Color(0xFF9A9AA0),
+    surfaceTint = Color.Black,
+    surfaceBright = Color(0xFF2C2C2E),
+    surfaceDim = Color.Black,
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF0B0B0C),
     surfaceContainer = Color(0xFF141416),
+    surfaceContainerHigh = Color(0xFF161619),
+    surfaceContainerHighest = Color(0xFF2C2C2E),
+    outline = Color(0xFF3A3A3C),
+    outlineVariant = Color(0xFF232326),
+    inverseSurface = Color(0xFFE0E0E0),
+    inverseOnSurface = Color.Black,
+    inversePrimary = Color(0xFF333333),
+    error = Color(0xFFE57373),
+    onError = Color.Black,
+    scrim = Color.Black,
+)
+
+// Oscuro "normal": la misma paleta de Mochy con grises en vez de negro puro.
+private val EsquemaOscuro = EsquemaPuro.copy(
+    background = Color(0xFF0E0E10),
+    surface = Color(0xFF0E0E10),
+    surfaceDim = Color(0xFF0E0E10),
+    surfaceContainerLowest = Color(0xFF0E0E10),
+    surfaceContainerLow = Color(0xFF141416),
+    surfaceContainer = Color(0xFF1A1A1D),
     surfaceContainerHigh = Color(0xFF1E1E21),
     surfaceContainerHighest = Color(0xFF2C2C2E),
-    surfaceContainerLow = Color(0xFF0B0B0C),
-    secondaryContainer = Color(0xFF2C2C2E),
-    onSecondaryContainer = Color.White,
+    surfaceVariant = Color(0xFF1E1E21),
 )
 
-// Oscuro "normal": grises en vez de negro puro.
-private val EsquemaOscuro = darkColorScheme(
-    primary = Paletas.porDefecto.color,
-    onPrimary = Color.White,
-    background = Color(0xFF111114),
-    onBackground = Color(0xFFE6E1E5),
-    surface = Color(0xFF111114),
-    onSurface = Color(0xFFE6E1E5),
-    surfaceVariant = Color(0xFF26262C),
-    onSurfaceVariant = Color(0xFFCAC4D0),
-    surfaceContainer = Color(0xFF1C1C21),
-    surfaceContainerHigh = Color(0xFF26262C),
-    surfaceContainerHighest = Color(0xFF303037),
-    surfaceContainerLow = Color(0xFF17171B),
-)
-
+// Claro de Mochy (negro sobre blanco), con los grises de Shiori.
 private val EsquemaClaro = lightColorScheme(
-    primary = Paletas.porDefecto.color,
+    primary = Color.Black,
     onPrimary = Color.White,
+    primaryContainer = Color(0xFFE0E0E0),
+    onPrimaryContainer = Color.Black,
+    secondary = Color(0xFF333333),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFCCCCCC),
+    onSecondaryContainer = Color.Black,
+    tertiary = Color(0xFF333333),
+    onTertiary = Color.White,
     background = Color(0xFFF6F6F8),
     onBackground = Color(0xFF111114),
     surface = Color(0xFFF6F6F8),
     onSurface = Color(0xFF111114),
-    surfaceVariant = Color(0xFFE6E6EB),
+    surfaceVariant = Color(0xFFF0F0F0),
     onSurfaceVariant = Color(0xFF4A4A52),
+    surfaceTint = Color.White,
+    surfaceBright = Color.White,
+    surfaceDim = Color(0xFFE2E2E8),
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color.White,
     surfaceContainer = Color(0xFFEFEFF3),
-    surfaceContainerHigh = Color(0xFFE9E9EE),
+    surfaceContainerHigh = Color(0xFFF2F2F5),
     surfaceContainerHighest = Color(0xFFE2E2E8),
-    surfaceContainerLow = Color(0xFFFFFFFF),
+    outline = Color(0xFFB8B8BE),
+    outlineVariant = Color(0xFFDDDDE2),
+    error = Color(0xFFD32F2F),
 )
 
 // Como musicfy: Inter SemiBold en todo y el interletrado un poco cerrado (-0.05 em).
@@ -183,6 +217,8 @@ private fun Typography.conFuente(f: FontFamily) = copy(
     labelSmall = labelSmall.mf(f),
 )
 
+private val Tipografia = Typography().conFuente(Inter)
+
 @Composable
 fun LectorTheme(
     acento: Color = Paletas.porDefecto.color,
@@ -191,9 +227,11 @@ fun LectorTheme(
     content: @Composable () -> Unit,
 ) {
     val base = if (!oscuro) EsquemaClaro else if (puro) EsquemaPuro else EsquemaOscuro
+    // El acento elegido (por defecto el gris claro monocromo de Mochy) sustituye al primario; el resto no cambia.
+    val esquema = remember(base, acento) { base.copy(primary = acento, onPrimary = textoSobre(acento)) }
     MaterialTheme(
-        colorScheme = base.copy(primary = acento, onPrimary = textoSobre(acento)),
-        typography = Typography().conFuente(Inter),
+        colorScheme = esquema,
+        typography = Tipografia,
         content = content,
     )
 }

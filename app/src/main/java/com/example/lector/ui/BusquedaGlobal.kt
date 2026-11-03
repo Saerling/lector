@@ -22,6 +22,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.lector.ui.mochy.AppTypography
+import com.example.lector.ui.mochy.GlassState
+import com.example.lector.ui.mochy.glassRoot
+import com.example.lector.ui.mochy.rememberCollapseProgress
+import com.example.lector.ui.mochy.search.*
 import com.example.lector.Almacen
 import com.example.lector.ext.ExtManager
 import com.example.lector.ext.FuenteUI
@@ -53,7 +66,9 @@ fun BusquedaGlobalScreen(
 ) {
     val ctx = LocalContext.current
     val motor = Motor.actual
-    var consulta by rememberSaveable { mutableStateOf(consultaInicial) }
+    var consulta by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(consultaInicial, TextRange(consultaInicial.length)))
+    }
     var enviada by rememberSaveable { mutableStateOf(consultaInicial) }
     var soloConResultados by remember { mutableStateOf(false) }
     val fuentes = remember(ext.fuentes, almacen.globalSoloAncladas, ext.idiomas, ext.mostrarNsfw) {
@@ -66,53 +81,106 @@ fun BusquedaGlobalScreen(
 
     val resultados = rememberResultadosGlobales(fuentes, enviada)
 
-    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
-    Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            BotonAtras(onBack)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                LText("Búsqueda global", LectorType.Display.copy(fontSize = 30.sp, lineHeight = 34.sp), maxLines = 1)
-                LText("${fuentes.size} fuentes", LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+    // Como OnlineSearchResult de Mochy: la lista pasa por debajo de la barra de cristal y el título grande se pliega.
+    val focusManager = LocalFocusManager.current
+    val listState = rememberLazyListState()
+    val glassState = remember { GlassState() }
+    val collapse = rememberCollapseProgress(listState)
+    val progressProvider = remember(collapse) { { collapse.value } }
+    val enviar: (String) -> Unit = { texto -> enviada = texto.trim(); focusManager.clearFocus() }
+    val alto = searchTopBarHeight(withTitle = true, extra = 50.dp, titleBlockHeight = LibraryTitleBlockHeight)
+    val abajo = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    Box(Modifier.fillMaxSize().background(SearchColors.page(TemaActual.puro))) {
+        Box(
+            Modifier.fillMaxSize()
+                // recorded while scrolling too, so the bar's blur never drops out mid-scroll
+                .glassRoot(glassState, isActive = { progressProvider() > 0.01f })
+        ) {
+            when {
+                motor == null -> MensajeVacio("El motor de fuentes no está disponible.", modifier = Modifier.padding(top = alto))
+                fuentes.isEmpty() -> MensajeVacio(
+                    "No hay fuentes. Instala una extensión y pulsa «Confiar» (o desactiva «Solo ancladas»).",
+                    modifier = Modifier.padding(top = alto),
+                )
+                enviada.isBlank() -> MensajeVacio("Escribe un título y pulsa buscar.", modifier = Modifier.padding(top = alto))
+                else -> LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = alto, bottom = abajo + 40.dp),
+                ) {
+                    val terminadas = resultados.values.count { it !is EstadoBusqueda.Cargando }
+                    if (terminadas < fuentes.size) item(key = "progreso", contentType = "progreso") {
+                        ProgresoGlobal(terminadas, fuentes.size)
+                    }
+                    items(fuentes, key = { it.id }, contentType = { "fuente" }) { f ->
+                        val e = resultados[f.id] ?: EstadoBusqueda.Cargando
+                        if (soloConResultados && (e !is EstadoBusqueda.Hecho || e.mangas.isEmpty())) return@items
+                        FilaResultados(f, e, enBiblioteca, onManga = { m -> onManga(f, m) }) { m -> alternarEnBiblioteca(ctx, almacen, f, m) }
+                    }
+                }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { CampoBusqueda(consulta, { consulta = it }, "Buscar en todas las fuentes") }
-            Spacer(Modifier.width(8.dp))
-            BotonExpresivo(null, Icons.Rounded.Search, { enviada = consulta.trim() }, estilo = EstiloBoton.RELLENO)
-        }
-        Row(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChipExplorar("Con resultados", soloConResultados, Icons.Rounded.CheckCircle) { soloConResultados = !soloConResultados }
-            ChipExplorar(if (almacen.globalSoloAncladas) "Solo ancladas" else "Todas las fuentes", almacen.globalSoloAncladas, Icons.Rounded.Star) {
-                almacen.globalSoloAncladas = !almacen.globalSoloAncladas
-            }
-        }
-        val terminadas = resultados.values.count { it !is EstadoBusqueda.Cargando }
-        if (enviada.isNotBlank() && terminadas < fuentes.size) {
-            // Progreso de la búsqueda: barra fina de acento que avanza con muelle + recuento.
-            val fr by androidx.compose.animation.core.animateFloatAsState(
-                if (fuentes.isEmpty()) 0f else terminadas.toFloat() / fuentes.size,
-                if (Mov.reducido) androidx.compose.animation.core.tween(100) else Muelles.espacial(), label = "progresoGlobal",
+
+        SearchGlassTopBar(
+            glassState = glassState,
+            progressProvider = progressProvider,
+            pureBlack = TemaActual.puro,
+            title = "Búsqueda global",
+            subtitle = "${fuentes.size} fuentes",
+            titleBlockHeight = LibraryTitleBlockHeight,
+            trailing = {
+                SearchAvatarButton(Icons.Rounded.Search, "Buscar", onClick = { Tacto.tic(); enviar(consulta.text) })
+            },
+            below = {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = SearchHorizontalPadding),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SearchCategoryChip("Con resultados", soloConResultados) { Tacto.tic(); soloConResultados = !soloConResultados }
+                    SearchCategoryChip(if (almacen.globalSoloAncladas) "Solo ancladas" else "Todas las fuentes", almacen.globalSoloAncladas) {
+                        Tacto.tic()
+                        almacen.globalSoloAncladas = !almacen.globalSoloAncladas
+                    }
+                }
+            },
+        ) {
+            SearchField(
+                value = consulta,
+                onValueChange = { consulta = it },
+                onSearch = enviar,
+                placeholder = "Buscar en todas las fuentes",
+                leading = { SearchFieldGlyph(Icons.Rounded.ArrowBack, "Atrás", onBack) },
+                trailing = if (consulta.text.isNotEmpty()) {
+                    { SearchFieldGlyph(Icons.Rounded.Close, "Borrar") { consulta = TextFieldValue("") } }
+                } else {
+                    null
+                },
             )
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f).height(6.dp).clip(androidx.compose.foundation.shape.CircleShape).background(LectorColors.PillFill)) {
-                    Box(Modifier.fillMaxHeight().fillMaxWidth(fr.coerceIn(0.02f, 1f)).clip(androidx.compose.foundation.shape.CircleShape).background(acento))
-                }
-                Spacer(Modifier.width(10.dp))
-                LText("$terminadas / ${fuentes.size}", LectorType.Label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = acento)
-            }
         }
-        when {
-            motor == null -> MensajeVacio("El motor de fuentes no está disponible.")
-            fuentes.isEmpty() -> MensajeVacio("No hay fuentes. Instala una extensión y pulsa «Confiar» (o desactiva «Solo ancladas»).")
-            enviada.isBlank() -> MensajeVacio("Escribe un título y pulsa buscar.")
-            else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 40.dp)) {
-                items(fuentes, key = { it.id }) { f ->
-                    val e = resultados[f.id] ?: EstadoBusqueda.Cargando
-                    if (soloConResultados && (e !is EstadoBusqueda.Hecho || e.mangas.isEmpty())) return@items
-                    FilaResultados(f, e, enBiblioteca, onManga = { m -> onManga(f, m) }) { m -> alternarEnBiblioteca(ctx, almacen, f, m) }
-                }
-            }
+    }
+}
+
+/** Progreso de la búsqueda: los tres puntos de Mochy, el recuento y una línea fina que avanza con muelle. */
+@Composable
+private fun ProgresoGlobal(terminadas: Int, total: Int) {
+    val fr by androidx.compose.animation.core.animateFloatAsState(
+        if (total == 0) 0f else terminadas.toFloat() / total,
+        if (Mov.reducido) androidx.compose.animation.core.tween(100) else Muelles.espacial(), label = "progresoGlobal",
+    )
+    Column(Modifier.fillMaxWidth().padding(horizontal = SearchHorizontalPadding).padding(bottom = 14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SearchLoadingDots()
+            Spacer(Modifier.width(12.dp))
+            Text(
+                "Buscando · $terminadas de $total fuentes",
+                style = AppTypography.bodySmall.copy(fontSize = 12.sp),
+                color = SearchColors.Secondary, maxLines = 1,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Box(Modifier.fillMaxWidth().height(2.dp).clip(CircleShape).background(SearchColors.Divider)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(fr.coerceIn(0.02f, 1f)).clip(CircleShape).background(SearchColors.Primary))
         }
     }
 }
@@ -213,53 +281,68 @@ internal fun FilaResultados(
 ) {
     val motor = Motor.actual
     val clave = destacar?.let { tituloComparable(it) }
-    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
     val cabeceras = remember(f.id) { motor?.cabeceras(f).orEmpty() }
-    // Cada fuente es una tarjeta: cabecera con icono, nombre y recuento, y el carrusel de portadas dentro.
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
-            .clip(SuaveShape(28.dp)).background(LectorColors.Card).padding(vertical = 14.dp)
-    ) {
-        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconoExt(f.pkg, null, Modifier.size(38.dp))
+    // Cada fuente es una sección como las de OnlineSearchResult de Mochy: regla, cabecera grande y el carrusel debajo.
+    Column(Modifier.fillMaxWidth().padding(bottom = 22.dp)) {
+        SearchRule()
+        Spacer(Modifier.height(18.dp))
+        Row(Modifier.padding(horizontal = SearchHorizontalPadding), verticalAlignment = Alignment.CenterVertically) {
+            IconoExt(f.pkg, null, Modifier.size(36.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                LText(f.nombre, LectorType.Section.copy(fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), maxLines = 1)
-                LText(bandera(f.lang), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+                Text(
+                    f.nombre, style = AppTypography.titleLarge.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                    color = SearchColors.Primary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    bandera(f.lang), style = AppTypography.bodySmall.copy(fontSize = 12.sp),
+                    color = SearchColors.Secondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
             }
             when (e) {
-                EstadoBusqueda.Cargando -> IndicadorCarga(Modifier.size(22.dp))
-                is EstadoBusqueda.Hecho -> if (e.mangas.isNotEmpty()) Box(
-                    Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(acento).padding(horizontal = 10.dp, vertical = 3.dp)
-                ) {
-                    LText("${e.mangas.size}", LectorType.Label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary)
-                }
+                EstadoBusqueda.Cargando -> SearchLoadingDots()
+                is EstadoBusqueda.Hecho -> if (e.mangas.isNotEmpty()) SearchCount(e.mangas.size)
                 is EstadoBusqueda.Fallo -> Icon(Icons.Rounded.Warning, null, tint = LectorColors.Error, modifier = Modifier.size(20.dp))
             }
         }
         when (e) {
             EstadoBusqueda.Cargando -> {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
                 BonesCarrusel(104.dp)
             }
-            is EstadoBusqueda.Fallo -> LText(e.motivo, LectorType.Label, Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp), color = LectorColors.Error, maxLines = 2)
+            is EstadoBusqueda.Fallo -> Text(
+                e.motivo, style = AppTypography.bodySmall.copy(fontSize = 12.sp),
+                modifier = Modifier.padding(start = SearchHorizontalPadding, end = SearchHorizontalPadding, top = 10.dp),
+                color = LectorColors.Error, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
             is EstadoBusqueda.Hecho -> if (e.mangas.isEmpty()) {
-                LText("Sin resultados", LectorType.Label, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), color = LectorColors.Muted)
+                Text(
+                    "Sin resultados", style = AppTypography.bodySmall.copy(fontSize = 12.sp),
+                    modifier = Modifier.padding(start = SearchHorizontalPadding, end = SearchHorizontalPadding, top = 8.dp),
+                    color = SearchColors.Secondary,
+                )
             } else {
                 val lista = remember(e.mangas, clave) { if (clave == null) e.mangas else e.mangas.sortedByDescending { tituloComparable(it.titulo) == clave } }
-                Spacer(Modifier.height(12.dp))
-                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Spacer(Modifier.height(16.dp))
+                LazyRow(contentPadding = PaddingValues(horizontal = SearchHorizontalPadding), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(lista, key = { it.url }) { m ->
                         val esta = "${f.id}|${m.url}" in enBiblioteca
                         val igual = clave != null && tituloComparable(m.titulo) == clave
                         Column(Modifier.width(112.dp).origenTransicion().press3D().pressable(onLongClick = { onLargo(m) }) { onManga(m) }) {
                             Box {
-                                ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(FormaPortada), cabeceras, fuenteId = f.id)
+                                ImagenRemota(
+                                    m.portadaUrl,
+                                    Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(FormaPortada).background(SearchColors.TileHigh),
+                                    cabeceras, fuenteId = f.id,
+                                )
                                 if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                                 else if (igual) Insignia("Mismo título", Modifier.align(Alignment.TopStart).padding(6.dp))
                             }
                             Spacer(Modifier.height(8.dp))
-                            LText(m.titulo, LectorType.Label.copy(fontSize = 13.sp, lineHeight = 17.sp), maxLines = 2)
+                            Text(
+                                m.titulo, style = AppTypography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium),
+                                color = SearchColors.Primary, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }

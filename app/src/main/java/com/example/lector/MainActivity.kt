@@ -261,17 +261,16 @@ fun App(
     SideEffect { TemaActual.oscuro = oscuro; TemaActual.puro = puro }
     LaunchedEffect(oscuro) { alCambiarTema(oscuro) }
     LectorTheme(acento = colorDePaleta(almacen.paleta, oscuro), oscuro = oscuro, puro = puro) {
+      // Sin ripple de Material en toda la app (como Mochy, que pone indication = null): cada componente da su propia
+      // respuesta al toque (pressable, resaltable, pressBounce).
+      @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+      androidx.compose.runtime.CompositionLocalProvider(
+          androidx.compose.material3.LocalRippleConfiguration provides null,
+          androidx.compose.foundation.LocalIndication provides SinIndicacion,
+      ) {
         Box(Modifier.fillMaxSize().background(com.example.lector.ui.LectorColors.Bg)) {
-            // Mientras hay una hoja inferior abierta, la app se aleja un poco y redondea las esquinas (musicfy).
-            val alejar by androidx.compose.animation.core.animateFloatAsState(
-                if (com.example.lector.ui.Hojas.abiertas > 0) 1f else 0f,
-                androidx.compose.animation.core.spring(
-                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                    stiffness = androidx.compose.animation.core.Spring.StiffnessLow,
-                    visibilityThreshold = 0.0005f,
-                ),
-                label = "alejar",
-            )
+            // Mientras hay una hoja inferior abierta, la app se aleja (0,92) y redondea las esquinas (28 dp), como el
+            // PopupSheetHost de Mochy: se lee la presencia de la hoja al dibujar, así sigue al arrastre fotograma a fotograma.
             Box(
                 Modifier.fillMaxSize().graphicsLayer {
                     // Al arrancar, la app emerge del agujero: de 1,08 a 1 mientras se revela.
@@ -279,19 +278,34 @@ fun App(
                         val e = 1.08f - 0.08f * com.example.lector.ui.ArranqueRevelado.valor
                         scaleX = e; scaleY = e
                     }
+                    val alejar = com.example.lector.ui.Hojas.presencia
                     if (alejar > 0f) {
-                        val e = 1f - 0.08f * alejar
+                        val e = 1f - com.example.lector.ui.mochy.sheet.BackdropRecede * alejar
                         scaleX = e; scaleY = e
                         shape = androidx.compose.foundation.shape.RoundedCornerShape((28f * alejar).dp)
                         clip = true
                     }
+                    // While the sheet moves, the app behind is drawn once into a layer and the zoom moves that.
+                    compositingStrategy = if (alejar > 0f && alejar < 1f) androidx.compose.ui.graphics.CompositingStrategy.Offscreen
+                        else androidx.compose.ui.graphics.CompositingStrategy.Auto
                 },
             ) { Contenido(almacen, destino, alConsumirDestino) }
+            // Atenuado de las hojas (y la salida de las que se quitan desde fuera).
+            com.example.lector.ui.mochy.sheet.PopupSheetBackdrop()
             if (arranque) ArranqueOverlay { arranque = false }
             if (!bloqueada) com.example.lector.ui.DialogoActualizacion()
             if (bloqueada) PantallaBloqueo(alDesbloquear)
         }
+      }
     }
+}
+
+/** Indicación vacía: los clickable sin indicación propia no pintan nada (ni ripple ni velo). */
+private object SinIndicacion : androidx.compose.foundation.IndicationNodeFactory {
+    override fun create(interactionSource: androidx.compose.foundation.interaction.InteractionSource): androidx.compose.ui.node.DelegatableNode =
+        object : androidx.compose.ui.Modifier.Node() {}
+    override fun equals(other: Any?) = other === this
+    override fun hashCode() = 7
 }
 
 @Composable

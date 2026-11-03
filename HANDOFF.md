@@ -804,3 +804,7 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Componentes compartidos delegan en ese código: pressable/resaltable/press3D, SuaveShape, entrada (RevealOnAppear), Interruptor (AppSwitch), ChipSel (FilterChip), FilaAjuste/FilaSwitch/TituloSeccion (SettingsGroup), Avisos (TopToast), LectorType (Type de Mochy), FloatingNavBar (AppNavigation), PaginaAjustes (SubSettingsScaffold), Ajustes raíz (MochySettingsScreen).
 - Deslizamientos de Mochy en las filas de capítulos (SwipeActionsBox): acciones configurables en Personalización → Gestos (marcar leído, marcador, descargar/borrar, marcar anteriores, nada); GestosCapitulos en prefs «gestos».
 - Transiciones con los valores de Mochy (pestañas, capas, pila; detalle como página de portada).
+
+## 2bm. PASO 65 (0.56) — Interfaz de Mochy en todas las pantallas
+- ui/mochy/library, home, detail (ficha = álbum), search (búsqueda/Explorar), artist (catálogo de fuente = artista), sheet (hojas/menús/diálogos).
+- Material You retirado: paleta monocroma de Mochy en Theme.kt, sin ripple, cristal líquido (shader API 33+, blur 31-32, tinte <31).

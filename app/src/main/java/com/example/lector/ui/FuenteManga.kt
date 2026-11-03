@@ -89,6 +89,12 @@ import com.example.lector.EntradaHistorial
 import com.example.lector.ui.mochy.ChapterSwipeAction
 import com.example.lector.ui.mochy.ChapterSwipeBox
 import com.example.lector.ui.mochy.EstadoCapituloSwipe
+import com.example.lector.ui.mochy.GlassState
+import com.example.lector.ui.mochy.glassRoot
+import com.example.lector.ui.mochy.rememberRevealSeenState
+import com.example.lector.ui.mochy.revealOnAppear
+import com.example.lector.ui.mochy.detail.*
+import androidx.compose.ui.graphics.RectangleShape
 import com.example.lector.Descargas
 import com.example.lector.Tinte
 import com.example.lector.colorFondo
@@ -288,11 +294,10 @@ fun FichaMangaScreen(
 
     // Estética de la ficha: el fondo y el acento toman el tono de la portada (si "Tema según la portada" está activo).
     var paleta by remember { mutableStateOf<TemaPortada?>(null) }
-    var portadaLista by remember { mutableStateOf(false) }
     val conTema = almacen.colorPortada
     val acento = (if (conTema) paleta?.acento else null) ?: MaterialTheme.colorScheme.primary
     val fondoBase = LectorColors.Bg
-    val fondoAnim by animateColorAsState(
+    val fondoEstado = animateColorAsState(
         (if (conTema && TemaActual.oscuro) paleta?.fondo else null) ?: fondoBase, tween(800), label = "fondoFicha",
     )
 
@@ -404,7 +409,12 @@ fun FichaMangaScreen(
     val dosColumnas = LocalConfiguration.current.screenWidthDp >= 840
     val listaInfo = rememberLazyListState()
     val listaCab = if (dosColumnas) listaInfo else lista
-    val scrollPx: () -> Float = { if (listaCab.firstVisibleItemIndex == 0) listaCab.firstVisibleItemScrollOffset.toFloat() else 99999f }
+    // Mochy: la banda de la portada (60 % del alto) marca cuándo se pliega la barra; el cristal y las entradas.
+    val altoPortada = playlistCoverHeight()
+    val plegado = rememberPlaylistCollapse(listaCab, altoPortada)
+    val morph: () -> Float = { plegado.morph.value }
+    val glass = remember { GlassState() }
+    val revelados = rememberRevealSeenState()
     // La mayoría de fuentes listan el capítulo más nuevo primero: el primero a leer es el último sin leer.
     // Al leer se respetan los filtros y el tipo de orden de la lista (como Mihon/Komikku): el lector recibe solo esos
     // capítulos, en orden de lectura (del primero al último), aunque la lista se vea de más nuevo a más viejo.
@@ -433,7 +443,29 @@ fun FichaMangaScreen(
     }
     val enSeleccion = seleccion.isNotEmpty()
 
-    Box(Modifier.fillMaxSize().drawBehind { drawRect(fondoAnim) }) {
+    // La portada de la ficha (PlaylistDetailScaffold de Mochy): nítida a sangre detrás de la lista, la copia pequeña
+    // para el desenfoque antes de Android 12 y la miniatura que sale del botón atrás al plegar la barra.
+    val portadaUrl = fi?.detalle?.portadaUrl ?: manga.portadaUrl
+    val cabecerasImg = motor.cabeceras(f)
+    val comicLocal = comic?.takeIf { it.portadaPropia }
+    val portadaNitida: @Composable (Modifier) -> Unit = { m ->
+        if (comicLocal != null) ComicCover(comicLocal, almacen, m, RectangleShape)
+        else ImagenRemota(portadaUrl, m, cabecerasImg, maxLado = 900, fuenteId = f.id)
+    }
+    val portadaSuave: (@Composable (Modifier) -> Unit)? = if (comicLocal != null) null else { m ->
+        ImagenRemota(portadaUrl, m, cabecerasImg, maxLado = 160, fuenteId = f.id)
+    }
+    val portadaMini: @Composable (Modifier) -> Unit = { m ->
+        if (comicLocal != null) ComicCover(comicLocal, almacen, m, RectangleShape)
+        else ImagenRemota(portadaUrl, m, cabecerasImg, maxLado = 160, fuenteId = f.id)
+    }
+    // El tono de la portada (si «Tema según la portada» está activo), de la copia pequeña ya en memoria.
+    LaunchedEffect(portadaUrl, conTema) {
+        val u = portadaUrl ?: return@LaunchedEffect
+        Imagenes.cargar(u, cabecerasImg, 160, f.id)?.let { if (conTema) paleta = temaDe(it) }
+    }
+
+    Box(Modifier.fillMaxSize().drawBehind { drawRect(fondoEstado.value) }) {
         // Deslizar hacia abajo: vuelve a pedir la ficha y los capítulos a la fuente (lo normal es usar lo guardado).
         androidx.compose.material3.pulltorefresh.PullToRefreshBox(
             isRefreshing = refrescando,
@@ -444,233 +476,44 @@ fun FichaMangaScreen(
         // en dos columnas, como MangaScreenLargeImpl de Komikku; en el móvil, una sola lista.
         val contenido: androidx.compose.foundation.lazy.LazyListScope.(Boolean, Boolean) -> Unit = { info, caps ->
             if (info) item(key = "cabecera", contentType = "cabecera") {
-                val pildoras = listOfNotNull(
-                    autor?.takeIf { it.isNotBlank() }?.let { Icons.Rounded.Person to it },
-                    estadoPub?.let { Icons.Rounded.Info to estadoTexto(it) },
-                    Icons.Rounded.LocationOn to f.nombre,
-                    fi?.let { Icons.Rounded.List to "${it.capitulos.size} capítulos" },
-                )
                 val capSig = fi?.capitulos?.getOrNull(sig)
                 val textoLeer = when {
                     capSig == null -> "Leer"
                     hayLeidos -> numeroTexto(capSig.numero).takeIf { it.isNotEmpty() }?.let { "Continuar cap. $it" } ?: "Continuar"
                     else -> "Empezar a leer"
                 }
-                CabeceraFicha(
-                    fuenteId = f.id, portada = fi?.detalle?.portadaUrl ?: manga.portadaUrl, cabeceras = motor.cabeceras(f),
-                    comicLocal = comic?.takeIf { it.portadaPropia }, almacen = almacen,
-                    titulo = tituloFicha, pildoras = pildoras, acento = acento, fondo = fondoAnim,
-                    scroll = scrollPx, portadaLista = portadaLista,
-                    onCargada = { portadaLista = true; if (conTema) paleta = temaDe(it) },
-                    enBiblioteca = enBiblioteca != null,
-                    textoLeer = textoLeer, puedeLeer = fi != null && fi.capitulos.isNotEmpty(),
-                    onLeer = { fi?.capitulos?.getOrNull(sig)?.let { leerCap(it, paginaSig) } },
-                    onCorazon = { alternarBiblioteca() },
-                    onPildora = { if (enBiblioteca != null) dialogoCats = true else alternarBiblioteca() },
-                    onWeb = abrirNavegador,
-                    onPortada = { verPortada = true },
-                )
-            }
-            if (fi != null) {
-                if (info) {
-                // Sinopsis: tarjeta que se despliega en su sitio con muelle (mantener = texto completo en diálogo).
-                val sinopsis = descripcion?.takeIf { it.isNotBlank() }
-                if (sinopsis != null) item(key = "sinopsis", contentType = "sinopsis") {
-                    TarjetaSinopsis(sinopsis, acento, Modifier.padding(horizontal = 20.dp, vertical = 6.dp).entrada(0)) { descExpandida = true }
-                }
-                if (generos.isNotEmpty()) {
-                    item(key = "generos", contentType = "generos") {
-                        Row(
-                            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) { generos.forEach { g -> PildoraGenero(g, acento) { alGenero(g) } } }
+                // La línea del artista de Mochy = el autor (o la fuente si no hay autor); los datos, debajo.
+                val autores = autor?.split(',', ';')?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
+                val creadores = autores.ifEmpty { listOf(f.nombre) }.map { CreatorUi(it) }
+                val stats = listOfNotNull(
+                    estadoPub?.let { estadoTexto(it) },
+                    f.nombre.takeIf { autores.isNotEmpty() },
+                    fi?.let { "${it.capitulos.size} capítulos" },
+                ).joinToString(" · ")
+                PlaylistHeader(
+                    title = tituloFicha, creators = creadores, stats = stats,
+                    playLabel = textoLeer, playEnabled = fi != null && fi.capitulos.isNotEmpty(),
+                    onPlayClick = { fi?.capitulos?.getOrNull(sig)?.let { leerCap(it, paginaSig) } },
+                    description = descripcion?.takeIf { it.isNotBlank() },
+                    onDescriptionLongClick = { descExpandida = true },
+                    onCoverClick = { verPortada = true },
+                ) {
+                    CircleAction(
+                        if (enBiblioteca != null) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                        if (enBiblioteca != null) "Quitar de la biblioteca" else "Añadir a la biblioteca",
+                        onClick = { alternarBiblioteca() }, tint = if (enBiblioteca != null) acento else null,
+                    )
+                    if (enBiblioteca != null) {
+                        Spacer(Modifier.width(4.dp))
+                        CircleAction(Icons.Rounded.List, "Categorías", onClick = { dialogoCats = true })
                     }
-                }
-                // Último capítulo: tarjeta ancha con portada pequeña y botón de acento.
-                val ultimo = fi.capitulos.firstOrNull()
-                if (ultimo != null) item(key = "ultimo", contentType = "ultimo") {
-                    val leerUltimo = { leerCap(fi.capitulos[0], ext.paginaDe(f.id, fi.capitulos[0].url)) }
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp).entrada(1)
-                            .press3D(4f, 0.98f).pressable(leerUltimo)
-                            .clip(SuaveShape(26.dp)).background(LectorColors.Card).padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ImagenRemota(
-                            fi.detalle.portadaUrl ?: manga.portadaUrl,
-                            Modifier.width(48.dp).aspectRatio(2f / 3f).clip(formaPortada(0.75f)), motor.cabeceras(f), fuenteId = f.id,
-                        )
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            LText("ÚLTIMO CAPÍTULO", LectorType.Label.copy(letterSpacing = 1.2.sp, fontWeight = FontWeight.Bold), color = acento, maxLines = 1)
-                            Spacer(Modifier.height(2.dp))
-                            LText(nombreCapitulo(ultimo), LectorType.Section.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold), maxLines = 2)
-                            LText(
-                                listOfNotNull(fechaTexto(ultimo.fecha).takeIf { it.isNotEmpty() }, ultimo.scanlator?.takeIf { it.isNotBlank() })
-                                    .joinToString(" · ").ifEmpty { "${fi.capitulos.size} capítulos" },
-                                LectorType.Label, color = LectorColors.Muted, maxLines = 1,
-                            )
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Box(Modifier.size(48.dp).clip(SuaveShape(18.dp)).background(acento), Alignment.Center) {
-                            Icon(Icons.Rounded.PlayArrow, "Leer último capítulo", tint = tintaSobre(acento), modifier = Modifier.size(26.dp))
-                        }
-                    }
-                }
-                // Acciones: seguimiento, editar, migrar, compartir y buscar en otras fuentes.
-                item {
-                    Row(
-                        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ConAcento(acento) {
-                            if (comic != null) {
-                                val vinculado = remember(almacen.version) { almacen.seguimientoDe(comic.id) != null }
-                                ChipSel(if (vinculado) "AniList ✓" else "Seguimiento", vinculado) { seguimiento = true }
-                                ChipSel("MAL · Kitsu · MU", false) { otrosSeguimientos = true }
-                                ChipSel("Editar información", editado) { editarInfo = true }
-                                ChipSel("Migrar", false) { migrando = true }
-                            }
-                            if (urlWeb != null) ChipSel("Compartir", false) { compartirTexto(ctx, "$tituloFicha\n$urlWeb") }
-                            ChipSel("Buscar en otras fuentes", false) { alBuscarGlobal(tituloFicha) }
-                            if (enBiblioteca != null) ChipSel("Combinar", false) { combinando = true }
-                        }
-                    }
-                }
-                if (notas.isNotBlank()) item {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp).clip(SuaveShape(14.dp))
-                        .background(LectorColors.Card).pressable { editandoNotas = true }.padding(14.dp)) {
-                        LText("Notas", LectorType.Label, color = acento)
-                        LText(notas, LectorType.Body)
-                    }
-                }
-                // Entrada fusionada: chips con cada fuente unida (tocar = verla; mantener = separarla).
-                item {
-                    @Suppress("UNUSED_VARIABLE") val fv = ext.fusionVersion
-                    val esta = "${f.id}|${manga.url}"
-                    val principal = ext.principalDe(esta) ?: esta
-                    val grupo = listOf(principal) + ext.unidas(principal)
-                    if (grupo.size > 1) {
-                        Column(Modifier.padding(top = 12.dp)) {
-                            LText("Fuentes combinadas", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
-                            Spacer(Modifier.height(6.dp))
-                            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                grupo.forEach { k ->
-                                    val fid = k.substringBefore('|').toLongOrNull() ?: return@forEach
-                                    val url = k.substringAfter('|')
-                                    val fu = ext.fuentes.firstOrNull { it.id == fid }
-                                    ChipSel(fu?.nombre ?: "Fuente no instalada", k == esta, onLongClick = {
-                                        if (k != principal) { ext.separar(principal, k); Avisos.mostrar("Separada: vuelve a la biblioteca") }
-                                    }) {
-                                        val c = almacen.comicEnLinea(fid, url)
-                                        if (k != esta && fu != null) alAbrirOtro(fu, MangaFuente(url, c?.titulo ?: tituloFicha, c?.portadaUrl))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // Vista previa de las primeras páginas del primer capítulo (se cargan al pedirlas: no gasta datos sin querer).
-                if (fi.capitulos.isNotEmpty()) item {
-                    Column(Modifier.padding(top = 28.dp)) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                            LText("Vista previa", TituloApartado, Modifier.weight(1f))
-                            if (vistaPrevia == null && !cargandoVista) PillButton("Ver páginas", Icons.Rounded.ArrowForward, {
-                                cargandoVista = true
-                                scope.launch {
-                                    val primero = fi.capitulos.last()
-                                    val origen = OrigenFuente(almacen, motor, f, CacheFichas.conMemo(f.id, manga.url, primero))
-                                    vistaPrevia = withContext(Dispatchers.IO) {
-                                        val n = runCatching { origen.total() }.getOrDefault(0).coerceAtMost(8)
-                                        (0 until n).map { i -> runCatching { miniatura(origen.bytes(i)) }.getOrNull() }
-                                    }
-                                    cargandoVista = false
-                                }
-                            })
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        val vp = vistaPrevia
-                        when {
-                            cargandoVista -> BonesPortadas()
-                            vp != null && vp.isEmpty() -> LText("No se pudieron cargar las páginas.", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
-                            vp != null -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                items(vp.size) { i ->
-                                    Box(
-                                        Modifier.width(92.dp).aspectRatio(2f / 3f).clip(formaPortada(0.75f)).background(LectorColors.CardHigh)
-                                            .press3D().pressable { onLeer(fi.capitulos, fi.capitulos.lastIndex, i) },
-                                        Alignment.Center,
-                                    ) {
-                                        vp[i]?.let { androidx.compose.foundation.Image(it, "Página ${i + 1}", Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop) }
-                                            ?: LText("${i + 1}", LectorType.Label, color = LectorColors.Muted)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // Parecidos de la propia fuente: SIEMPRE hay un apartado (lo que dé la extensión o, si no, su mismo género).
-                item {
-                    val lista = parecidos
-                    Column(Modifier.padding(top = 28.dp)) {
-                        LText("Parecidos en ${f.nombre}", TituloApartado, Modifier.padding(horizontal = 24.dp))
-                        Spacer(Modifier.height(8.dp))
-                        when {
-                            lista == null -> BonesPortadas()
-                            lista.isEmpty() -> LText("Esta fuente no da parecidos para este manga.", LectorType.Label, Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted)
-                            else -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                items(lista, key = { it.url }) { m ->
-                                    Column(Modifier.width(96.dp).press3D().pressable { alAbrirOtro(f, m) }) {
-                                        ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(formaPortada(0.75f)), motor.cabeceras(f), fuenteId = f.id)
-                                        Spacer(Modifier.height(6.dp))
-                                        LText(m.titulo, LectorType.Label, maxLines = 2)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // Recomendaciones (AniList): tocar una la busca en la fuente de esta ficha y abre su ficha.
-                val recs = recomendaciones
-                if (!recs.isNullOrEmpty()) item(key = "recs") {
-                    Column(Modifier.padding(top = 28.dp)) {
-                        LText("Recomendaciones", TituloApartado, Modifier.padding(horizontal = 24.dp))
-                        Spacer(Modifier.height(8.dp))
-                        LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(recs, key = { it.id }) { r ->
-                                Column(Modifier.width(96.dp).press3D().pressable { abrirRecomendacion(r) }) {
-                                    Box {
-                                        ImagenRemota(r.portada, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(formaPortada(0.75f)))
-                                        if (abriendoRec == r.id) Box(
-                                            Modifier.matchParentSize().clip(SuaveShape(12.dp)).background(Color.Black.copy(alpha = 0.5f)),
-                                            Alignment.Center,
-                                        ) { IndicadorCarga(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) }
-                                    }
-                                    Spacer(Modifier.height(6.dp))
-                                    LText(r.titulo, LectorType.Label, maxLines = 2)
-                                }
-                            }
-                        }
-                    }
-                }
-                }
-                if (caps) {
-                item(key = "cabCaps", contentType = "cabCaps") {
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 30.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        LText("Capítulos", LectorType.Display.copy(fontSize = 24.sp, letterSpacing = (-0.6).sp))
-                        Spacer(Modifier.width(10.dp))
-                        Box(Modifier.clip(CircleShape).background(acento.copy(alpha = 0.18f)).padding(horizontal = 12.dp, vertical = 4.dp)) {
-                            Odometro(
-                                if (visibles.size != fi.capitulos.size) "${visibles.size}/${fi.capitulos.size}" else "${fi.capitulos.size}",
-                                LectorType.Label.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp), Modifier, acento,
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.width(4.dp))
+                    CircleAction(Icons.Rounded.ArrowForward, "Abrir en WebView", onClick = abrirNavegador)
+                    if (fi != null && fi.capitulos.isNotEmpty()) {
+                        Spacer(Modifier.width(4.dp))
                         // Menú de descargas en lote (como Komikku): siguiente, siguientes N, no leídos o todos.
                         Box {
-                            BotonTonalRedondo(Iconos.Descargar, "Descargar capítulos", acento, false, 44.dp) { menuDescarga = true }
+                            CircleAction(Iconos.Descargar, "Descargar capítulos", onClick = { menuDescarga = true })
                             MenuShiori(expanded = menuDescarga, onDismissRequest = { menuDescarga = false }) {
                                 // La lista llega con lo más nuevo primero: "siguientes" = desde el primero sin leer hacia los nuevos.
                                 val opciones = listOf(
@@ -690,12 +533,201 @@ fun FichaMangaScreen(
                                 }
                             }
                         }
-                        Spacer(Modifier.width(8.dp))
-                        BotonTonalRedondo(Icons.Rounded.List, "Filtrar y ordenar capítulos", acento, filtrosCap > 0, 44.dp) { hojaCaps = true }
+                    }
+                }
+            }
+            if (fi != null) {
+                if (info) {
+                if (generos.isNotEmpty()) {
+                    item(key = "generos", contentType = "generos") {
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = PlaylistInset, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) { generos.forEach { g -> PildoraGenero(g) { alGenero(g) } } }
+                    }
+                }
+                // Último capítulo: tarjeta ancha con portada pequeña y botón de acento.
+                val ultimo = fi.capitulos.firstOrNull()
+                if (ultimo != null) item(key = "ultimo", contentType = "ultimo") {
+                    val leerUltimo = { leerCap(fi.capitulos[0], ext.paginaDe(f.id, fi.capitulos[0].url)) }
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
+                            .revealOnAppear("ultimo", revelados, enabled = !Mov.reducido)
+                            .press3D(4f, 0.98f).pressable(leerUltimo)
+                            .clip(SuaveShape(22.dp)).background(LectorColors.Card).padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ImagenRemota(
+                            fi.detalle.portadaUrl ?: manga.portadaUrl,
+                            Modifier.width(39.dp).aspectRatio(2f / 3f).clip(formaPortada(0.6f)), motor.cabeceras(f), fuenteId = f.id,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("ÚLTIMO CAPÍTULO", style = ReceiptSmallStyle.copy(fontWeight = FontWeight.Bold, fontSize = 9.5.sp), color = acento, maxLines = 1)
+                            Spacer(Modifier.height(3.dp))
+                            Text(nombreCapitulo(ultimo), style = TrackTitleStyle, color = LectorColors.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                listOfNotNull(fechaTexto(ultimo.fecha).takeIf { it.isNotEmpty() }, ultimo.scanlator?.takeIf { it.isNotBlank() })
+                                    .joinToString(" · ").ifEmpty { "${fi.capitulos.size} capítulos" },
+                                style = TrackSubtitleStyle, color = LectorColors.Text.copy(alpha = 0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Box(Modifier.size(36.dp).clip(CircleShape).background(acento), Alignment.Center) {
+                            Icon(Icons.Rounded.PlayArrow, "Leer último capítulo", tint = tintaSobre(acento), modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+                // Acciones: seguimiento, editar, migrar, compartir y buscar en otras fuentes.
+                item {
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = PlaylistInset - 8.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ConAcento(acento) {
+                            if (comic != null) {
+                                val vinculado = remember(almacen.version) { almacen.seguimientoDe(comic.id) != null }
+                                ChipSel(if (vinculado) "AniList ✓" else "Seguimiento", vinculado) { seguimiento = true }
+                                ChipSel("MAL · Kitsu · MU", false) { otrosSeguimientos = true }
+                                ChipSel("Editar información", editado) { editarInfo = true }
+                                ChipSel("Migrar", false) { migrando = true }
+                            }
+                            if (urlWeb != null) ChipSel("Compartir", false) { compartirTexto(ctx, "$tituloFicha\n$urlWeb") }
+                            ChipSel("Buscar en otras fuentes", false) { alBuscarGlobal(tituloFicha) }
+                            if (enBiblioteca != null) ChipSel("Combinar", false) { combinando = true }
+                        }
+                    }
+                }
+                if (notas.isNotBlank()) item {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp).clip(SuaveShape(14.dp))
+                        .background(LectorColors.Card).pressable { editandoNotas = true }.padding(14.dp)) {
+                        Text("Notas", style = SectionTitleStyle.copy(fontSize = 13.sp), color = acento)
+                        Spacer(Modifier.height(2.dp))
+                        Text(notas, style = TrackTitleStyle.copy(fontWeight = FontWeight.Medium), color = LectorColors.Text.copy(alpha = 0.86f))
+                    }
+                }
+                // Entrada fusionada: chips con cada fuente unida (tocar = verla; mantener = separarla).
+                item {
+                    @Suppress("UNUSED_VARIABLE") val fv = ext.fusionVersion
+                    val esta = "${f.id}|${manga.url}"
+                    val principal = ext.principalDe(esta) ?: esta
+                    val grupo = listOf(principal) + ext.unidas(principal)
+                    if (grupo.size > 1) {
+                        Column(Modifier.padding(top = 12.dp)) {
+                            PlaylistSectionTitle("Fuentes combinadas", Modifier.padding(bottom = 4.dp))
+                            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = PlaylistInset - 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                grupo.forEach { k ->
+                                    val fid = k.substringBefore('|').toLongOrNull() ?: return@forEach
+                                    val url = k.substringAfter('|')
+                                    val fu = ext.fuentes.firstOrNull { it.id == fid }
+                                    ChipSel(fu?.nombre ?: "Fuente no instalada", k == esta, onLongClick = {
+                                        if (k != principal) { ext.separar(principal, k); Avisos.mostrar("Separada: vuelve a la biblioteca") }
+                                    }) {
+                                        val c = almacen.comicEnLinea(fid, url)
+                                        if (k != esta && fu != null) alAbrirOtro(fu, MangaFuente(url, c?.titulo ?: tituloFicha, c?.portadaUrl))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Vista previa de las primeras páginas del primer capítulo (se cargan al pedirlas: no gasta datos sin querer).
+                if (fi.capitulos.isNotEmpty()) item {
+                    Column(Modifier.padding(top = 28.dp)) {
+                        PlaylistSectionTitle("Vista previa", Modifier.padding(bottom = 8.dp), trailing = {
+                            if (vistaPrevia == null && !cargandoVista) PillButton("Ver páginas", Icons.Rounded.ArrowForward, {
+                                cargandoVista = true
+                                scope.launch {
+                                    val primero = fi.capitulos.last()
+                                    val origen = OrigenFuente(almacen, motor, f, CacheFichas.conMemo(f.id, manga.url, primero))
+                                    vistaPrevia = withContext(Dispatchers.IO) {
+                                        val n = runCatching { origen.total() }.getOrDefault(0).coerceAtMost(8)
+                                        (0 until n).map { i -> runCatching { miniatura(origen.bytes(i)) }.getOrNull() }
+                                    }
+                                    cargandoVista = false
+                                }
+                            })
+                        })
+                        val vp = vistaPrevia
+                        when {
+                            cargandoVista -> BonesPortadas()
+                            vp != null && vp.isEmpty() -> Text("No se pudieron cargar las páginas.", Modifier.padding(horizontal = PlaylistInset), style = PlaylistStatsStyle.copy(fontSize = 12.sp), color = LectorColors.Muted)
+                            vp != null -> LazyRow(contentPadding = PaddingValues(horizontal = PlaylistInset), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                items(vp.size) { i ->
+                                    Box(
+                                        Modifier.width(92.dp).aspectRatio(2f / 3f).clip(formaPortada(0.75f)).background(LectorColors.CardHigh)
+                                            .press3D().pressable { onLeer(fi.capitulos, fi.capitulos.lastIndex, i) },
+                                        Alignment.Center,
+                                    ) {
+                                        vp[i]?.let { androidx.compose.foundation.Image(it, "Página ${i + 1}", Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop) }
+                                            ?: LText("${i + 1}", LectorType.Label, color = LectorColors.Muted)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Parecidos de la propia fuente: SIEMPRE hay un apartado (lo que dé la extensión o, si no, su mismo género).
+                item {
+                    val lista = parecidos
+                    Column(Modifier.padding(top = 28.dp)) {
+                        PlaylistSectionTitle("Parecidos en ${f.nombre}", Modifier.padding(bottom = 8.dp))
+                        when {
+                            lista == null -> BonesPortadas()
+                            lista.isEmpty() -> Text("Esta fuente no da parecidos para este manga.", Modifier.padding(horizontal = PlaylistInset), style = PlaylistStatsStyle.copy(fontSize = 12.sp), color = LectorColors.Muted)
+                            else -> LazyRow(contentPadding = PaddingValues(horizontal = PlaylistInset), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(lista, key = { it.url }) { m ->
+                                    Column(Modifier.width(96.dp).press3D().pressable { alAbrirOtro(f, m) }) {
+                                        ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(formaPortada(0.75f)), motor.cabeceras(f), fuenteId = f.id)
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(m.titulo, style = TrackSubtitleStyle.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text.copy(alpha = 0.86f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Recomendaciones (AniList): tocar una la busca en la fuente de esta ficha y abre su ficha.
+                val recs = recomendaciones
+                if (!recs.isNullOrEmpty()) item(key = "recs") {
+                    Column(Modifier.padding(top = 28.dp)) {
+                        PlaylistSectionTitle("Recomendaciones", Modifier.padding(bottom = 8.dp))
+                        LazyRow(contentPadding = PaddingValues(horizontal = PlaylistInset), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            items(recs, key = { it.id }) { r ->
+                                Column(Modifier.width(96.dp).press3D().pressable { abrirRecomendacion(r) }) {
+                                    Box {
+                                        ImagenRemota(r.portada, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(formaPortada(0.75f)))
+                                        if (abriendoRec == r.id) Box(
+                                            Modifier.matchParentSize().clip(SuaveShape(12.dp)).background(Color.Black.copy(alpha = 0.5f)),
+                                            Alignment.Center,
+                                        ) { IndicadorCarga(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) }
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(r.titulo, style = TrackSubtitleStyle.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text.copy(alpha = 0.86f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
+                }
+                }
+                if (caps) {
+                item(key = "cabCaps", contentType = "cabCaps") {
+                    Column(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 4.dp)) {
+                        PlaylistSectionTitle("Capítulos", trailing = {
+                            Odometro(
+                                if (visibles.size != fi.capitulos.size) "${visibles.size}/${fi.capitulos.size}" else "${fi.capitulos.size}",
+                                PlaylistStatsStyle.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), Modifier, LectorColors.Text.copy(alpha = 0.62f),
+                            )
+                        })
+                        // El «añadidos últimamente ⌄» de Mochy: el orden actual; tocarlo abre Filtro / Ordenar / Mostrar.
+                        PlaylistSortControl(
+                            nombreOrdenCap(filtroCaps.orden) + (if (filtrosCap > 0) " · $filtrosCap ${if (filtrosCap == 1) "filtro" else "filtros"}" else ""),
+                            filtroCaps.descendente, { hojaCaps = true }, Modifier.padding(start = PlaylistInset - 2.dp),
+                        )
                     }
                 }
                 if (visibles.isEmpty()) item {
-                    LText("Ningún capítulo coincide con los filtros.", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
+                    Text("Ningún capítulo coincide con los filtros.", Modifier.padding(horizontal = PlaylistInset, vertical = 18.dp), style = TrackTitleStyle, color = LectorColors.Muted)
                 }
                 // La clave es el índice original del capítulo (único aunque la fuente repita direcciones).
                 itemsIndexedAnimados(visibles, key = { _, iv -> iv.index }, contentType = { _, _ -> 1 }) { pos, iv ->
@@ -712,7 +744,6 @@ fun FichaMangaScreen(
                     val leido = leidosAhora.let { ext.esLeido(f.id, c.url) }
                     val marcado = ext.esMarcado(f.id, c.url)
                     val seleccionado = c.url in seleccion
-                    val numero = numeroTexto(c.numero).ifEmpty { "#" }
                     // Deslizar la fila (los gestos de Mochy): cada lado hace lo elegido en Personalización → Gestos.
                     ChapterSwipeBox(
                         estado = EstadoCapituloSwipe(
@@ -743,117 +774,149 @@ fun FichaMangaScreen(
                                 }
                             }
                         },
-                        modifier = Modifier.entrada(pos),
+                        modifier = Modifier.revealOnAppear(
+                            key = "cap_$i", seenState = revelados, enabled = !Mov.reducido, delayMillis = minOf(pos, 8) * 28,
+                        ),
                         enabled = !enSeleccion,
                     ) {
-                        // Fila limpia: punto de acento = sin leer; leído = texto apagado y un visto pequeño.
-                        val fondoSel by animateColorAsState(
-                            if (seleccionado) acento.copy(alpha = 0.18f) else Color.Transparent,
-                            if (Mov.reducido) tween(100) else Muelles.efectos(), label = "selCap",
+                        // La fila de canción de Mochy: punto de acento a la izquierda = sin leer; leído = texto apagado.
+                        val alternar = { seleccion = if (seleccionado) seleccion - c.url else seleccion + c.url }
+                        PlaylistTrackRow(
+                            badge = numeroTexto(c.numero).ifEmpty { "#" },
+                            title = if (ext.capVerNumero && c.numero >= 0) "Capítulo ${numeroTexto(c.numero)}" else nombreCapitulo(c),
+                            subtitle = listOfNotNull(
+                                if (paginaGuardada > 0 && leido) "Pág: ${paginaGuardada + 1}" else null,
+                                fechaTexto(c.fecha).takeIf { it.isNotEmpty() }, c.scanlator,
+                            ).joinToString(" · "),
+                            read = leido, accent = acento,
+                            progressLabel = if (paginaGuardada > 0 && !leido) "Pág. ${paginaGuardada + 1}" else null,
+                            leading = if (marcado) { { Icon(Iconos.Marca, "Marcado", tint = ColorMarca, modifier = Modifier.size(14.dp)) } } else null,
+                            selected = seleccionado,
+                            onClick = { if (enSeleccion) alternar() else leerCap(c, paginaGuardada) },
+                            onLongClick = { Tacto.tic(); alternar() },
+                            trailing = {
+                                if (enSeleccion) PlaylistSelectTick(checked = seleccionado)
+                                else ConAcento(acento) {
+                                    BotonDescarga(estado, modifier = Modifier.clip(CircleShape).background(acento.copy(alpha = if (estado is EstadoDescarga.Libre) 0.1f else 0.18f)), onClick = {
+                                        when (estado) {
+                                            is EstadoDescarga.Libre -> Descargas.encolar(ctx, f, manga.url, tituloFicha, listOf(c))
+                                            is EstadoDescarga.Descargando -> Descargas.cancelar(ctx, clave)
+                                            is EstadoDescarga.Listo -> quitarDescarga = c
+                                        }
+                                    })
+                                }
+                            },
                         )
-                        val colorTitulo = if (leido && !seleccionado) LectorColors.Muted else LectorColors.Text
-                        Row(
-                            Modifier.fillMaxWidth().heightIn(min = 68.dp)
-                                .padding(horizontal = 8.dp)
-                                .clip(SuaveShape(20.dp))
-                                .drawBehind { drawRect(fondoSel) }
-                                .resaltable(
-                                    onLongClick = { seleccion = if (seleccionado) seleccion - c.url else seleccion + c.url },
-                                ) {
-                                    if (enSeleccion) seleccion = if (seleccionado) seleccion - c.url else seleccion + c.url
-                                    else leerCap(c, paginaGuardada)
-                                }
-                                .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(Modifier.size(28.dp), Alignment.Center) {
-                                when {
-                                    seleccionado -> Box(Modifier.size(24.dp).clip(CircleShape).background(acento), Alignment.Center) {
-                                        Icon(Icons.Rounded.Check, null, tint = tintaSobre(acento), modifier = Modifier.size(16.dp))
-                                    }
-                                    leido -> Icon(Icons.Rounded.Check, "Leído", tint = LectorColors.Muted.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
-                                    else -> Box(Modifier.size(9.dp).clip(CircleShape).background(acento))
-                                }
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (marcado) {
-                                        Icon(Iconos.Marca, "Marcado", tint = ColorMarca, modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                    }
-                                    LText(
-                                        if (ext.capVerNumero && c.numero >= 0) "Capítulo ${numeroTexto(c.numero)}" else nombreCapitulo(c),
-                                        LectorType.Section.copy(fontSize = 16.sp, fontWeight = if (leido) FontWeight.Medium else FontWeight.Bold),
-                                        Modifier.weight(1f, fill = false), maxLines = 2, color = colorTitulo,
-                                    )
-                                }
-                                Spacer(Modifier.height(2.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (paginaGuardada > 0 && !leido) {
-                                        LText(
-                                            "Pág. ${paginaGuardada + 1}", LectorType.Label.copy(fontWeight = FontWeight.Bold), maxLines = 1,
-                                            color = acento,
-                                            modifier = Modifier.clip(CircleShape).background(acento.copy(alpha = 0.16f)).padding(horizontal = 8.dp, vertical = 1.dp),
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                    }
-                                    val sub = listOfNotNull(
-                                        if (paginaGuardada > 0 && leido) "Pág: ${paginaGuardada + 1}" else null,
-                                        fechaTexto(c.fecha).takeIf { it.isNotEmpty() }, c.scanlator,
-                                    ).joinToString(" · ")
-                                    if (sub.isNotEmpty()) LText(sub, LectorType.Label, maxLines = 1, color = LectorColors.Muted)
-                                }
-                            }
-                            Spacer(Modifier.width(6.dp))
-                            if (!enSeleccion) ConAcento(acento) {
-                                BotonDescarga(estado, modifier = Modifier.clip(CircleShape).background(acento.copy(alpha = if (estado is EstadoDescarga.Libre) 0.12f else 0.2f)), onClick = {
-                                    when (estado) {
-                                        is EstadoDescarga.Libre -> Descargas.encolar(ctx, f, manga.url, tituloFicha, listOf(c))
-                                        is EstadoDescarga.Descargando -> Descargas.cancelar(ctx, clave)
-                                        is EstadoDescarga.Listo -> quitarDescarga = c
-                                    }
-                                })
-                            }
-                        }
                     }
+                }
+                // El pie de «recibo» de Mochy: N CAPÍTULOS · FIN · N LEÍDOS.
+                if (visibles.isNotEmpty()) item(key = "finCaps", contentType = "finCaps") {
+                    val nLeidos = remember(visibles, leidosAhora) { visibles.count { ext.esLeido(f.id, it.value.url) } }
+                    PlaylistEndOfLine(
+                        start = "${visibles.size} ${if (visibles.size == 1) "CAPÍTULO" else "CAPÍTULOS"}",
+                        end = "$nLeidos ${if (nLeidos == 1) "LEÍDO" else "LEÍDOS"}",
+                    )
                 }
                 }
             }
             if (caps) item {
-                Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) {
-                    when {
-                        cargando -> if (fi == null) BonesCapitulos() else IndicadorCarga(Modifier.size(28.dp))
-                        error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            LText(error!!, LectorType.Label, color = LectorColors.Error)
-                            Spacer(Modifier.height(10.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                PillButton("Reintentar", Icons.Rounded.Refresh, { recarga++ })
-                                PillButton("Abrir en WebView", Icons.Rounded.ArrowForward, abrirNavegador)
-                            }
+                when {
+                    cargando && fi == null -> PlaylistTrackBones()
+                    cargando -> Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { IndicadorCarga(Modifier.size(28.dp)) }
+                    error != null -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(error!!, style = PlaylistStatsStyle.copy(fontSize = 12.sp), color = LectorColors.Error, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            PillButton("Reintentar", Icons.Rounded.Refresh, { recarga++ })
+                            PillButton("Abrir en WebView", Icons.Rounded.ArrowForward, abrirNavegador)
                         }
                     }
                 }
             }
         }
         val relleno = PaddingValues(bottom = if (enSeleccion) 130.dp else 60.dp)
-        if (dosColumnas) Row(Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.weight(0.45f).fillMaxHeight(), state = listaInfo, contentPadding = relleno) { contenido(true, false) }
-            LazyColumn(Modifier.weight(0.55f).fillMaxHeight().statusBarsPadding(), state = lista, contentPadding = relleno) { contenido(false, true) }
-        } else LazyColumn(Modifier.fillMaxSize(), state = lista, contentPadding = relleno) { contenido(true, true) }
+        // El cristal de la barra de arriba toma la portada y la lista juntas (glassRoot de Mochy).
+        Box(Modifier.fillMaxSize().glassRoot(glass, isActive = { plegado.morph.value > 0.01f || enSeleccion })) {
+            if (dosColumnas) Row(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(0.45f).fillMaxHeight()) {
+                    PlaylistCoverBackdrop(portadaNitida, portadaSuave, altoPortada, { plegado.scrollProgress.value }, fondoEstado)
+                    LazyColumn(Modifier.fillMaxSize(), state = listaInfo, contentPadding = relleno) { contenido(true, false) }
+                }
+                LazyColumn(
+                    Modifier.weight(0.55f).fillMaxHeight().statusBarsPadding(), state = lista,
+                    contentPadding = PaddingValues(top = 56.dp, bottom = if (enSeleccion) 130.dp else 60.dp),
+                ) { contenido(false, true) }
+            } else {
+                PlaylistCoverBackdrop(portadaNitida, portadaSuave, altoPortada, { plegado.scrollProgress.value }, fondoEstado)
+                LazyColumn(Modifier.fillMaxSize(), state = lista, contentPadding = relleno) { contenido(true, true) }
+            }
+        }
         // Barra de desplazamiento rápido (como Komikku en la lista de capítulos).
         BarraDesplazamiento(lista)
         }
 
+        // La barra de arriba de Mochy: atrás con la portada pequeña al plegarse; eligiendo, la barra de elegir.
+        val modo = if (enSeleccion) PlaylistModeBar.Select(
+            count = seleccion.size,
+            allSelected = visibles.isNotEmpty() && visibles.all { it.value.url in seleccion },
+            onToggleAll = {
+                val todos = visibles.map { it.value.url }.toSet()
+                seleccion = if (seleccion.containsAll(todos)) emptySet() else todos
+            },
+            onMore = { seleccion = visibles.map { it.value.url }.toSet() - seleccion },
+            onClose = { seleccion = emptySet() },
+            moreIcon = Icons.Rounded.Refresh, moreDescription = "Invertir selección",
+        ) else null
+        PlaylistTopBar(
+            glassState = glass, morph = morph, miniCover = portadaMini, background = fondoEstado,
+            onBackClick = onBack, onBackLongClick = {},
+            onMiniCoverClick = { scope.launch { listaCab.animateScrollToItem(0) } },
+            mode = modo,
+        ) {
+            if (fi != null && fi.capitulos.isNotEmpty()) {
+                // Al bajar, el «Leer» de la cabecera sale de pantalla: aparece aquí con la barra plegada.
+                BarCircleButton(
+                    Icons.Rounded.PlayArrow, if (hayLeidos) "Reanudar" else "Leer", morph, filled = true,
+                    modifier = Modifier.graphicsLayer { alpha = morph().coerceIn(0f, 1f) },
+                    onClick = { if (morph() > 0.5f) fi.capitulos.getOrNull(sig)?.let { leerCap(it, paginaSig) } },
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            BarCircleButton(Icons.Rounded.ArrowForward, "Abrir en el navegador", morph, onClick = abrirNavegador)
+            Spacer(Modifier.width(8.dp))
+            Box {
+                BarCircleButton(Icons.Rounded.MoreVert, "Más", morph, onClick = { menuFicha = true })
+                MenuShiori(expanded = menuFicha, onDismissRequest = { menuFicha = false }) {
+                    @Composable fun op(t: String, accion: () -> Unit) = DropdownMenuItem(text = { Text(t) }, onClick = { menuFicha = false; accion() })
+                    op("Actualizar") { refrescando = true; recarga++ }
+                    if (enBiblioteca != null) {
+                        op("Editar categorías") { dialogoCats = true }
+                        op("Migrar") { migrando = true }
+                    }
+                    urlWeb?.let { u -> op("Compartir") { compartirTexto(ctx, "$tituloFicha\n$u") } }
+                    op("Notas") { editandoNotas = true }
+                    if (enBiblioteca != null) {
+                        op("Unir") { combinando = true }
+                        op("Editar información") { editarInfo = true }
+                    }
+                    op("Ver recomendaciones") {
+                        scope.launch {
+                            if (recomendaciones.isNullOrEmpty()) { Avisos.mostrar(if (recomendaciones == null) "Buscando recomendaciones…" else "No hay recomendaciones"); return@launch }
+                            repeat(30) {
+                                listaCab.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "recs" }?.let { listaCab.animateScrollToItem(it.index); return@launch }
+                                listaCab.scrollBy(900f)
+                            }
+                        }
+                    }
+                    op("Abrir carpeta") { abrirCarpeta(ctx, com.example.lector.CarpetaApp.descargas(ctx)) }
+                    op("Limpiar manga") { limpiar = true }
+                    if (ext.configurables(f.pkg).any { it.id == f.id }) op("Ajustes de la fuente") { ajustesFuente = true }
+                }
+            }
+        }
+
         if (enSeleccion) {
             val elegidos = fi?.capitulos?.filter { it.url in seleccion }.orEmpty()
-            Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(LectorColors.Bg).statusBarsPadding()) {
-                CabeceraSeleccion(
-                    seleccion.size, onCerrar = { seleccion = emptySet() },
-                    onTodo = { seleccion = visibles.map { it.value.url }.toSet() },
-                    onInvertir = { seleccion = visibles.map { it.value.url }.toSet() - seleccion },
-                )
-            }
             BarraAcciones(
                 visible = true, modifier = Modifier.align(Alignment.BottomCenter),
                 acciones = buildList {
@@ -879,62 +942,7 @@ fun FichaMangaScreen(
                     })
                 },
             )
-        } else {
-            BarraSuperior(
-                scrollPx, tituloFicha, onBack, fondo = fondoAnim,
-                trailing = {
-                    if (fi != null && fi.capitulos.isNotEmpty()) {
-                        // Al bajar, el "reanudar" de la cabecera sale de pantalla: aparece aquí.
-                        Box(
-                            Modifier.size(44.dp)
-                                .graphicsLayer { alpha = ((scrollPx() - 560f) / 160f).coerceIn(0f, 1f) }
-                                .pressable { if (scrollPx() > 560f) fi.capitulos.getOrNull(sig)?.let { leerCap(it, paginaSig) } }
-                                .clip(CircleShape).background(acento),
-                            Alignment.Center,
-                        ) { Icon(Icons.Rounded.PlayArrow, if (hayLeidos) "Reanudar" else "Leer", tint = TintaBtn) }
-                        Spacer(Modifier.width(10.dp))
-                    }
-                    Box(
-                        Modifier.size(44.dp).pressable(abrirNavegador).clip(CircleShape).background(LectorColors.SobreImagen),
-                        Alignment.Center,
-                    ) { Icon(Icons.Rounded.ArrowForward, "Abrir en el navegador", tint = LectorColors.Text) }
-                    Spacer(Modifier.width(10.dp))
-                    Box {
-                        Box(
-                            Modifier.size(44.dp).pressable { menuFicha = true }.clip(CircleShape).background(LectorColors.SobreImagen),
-                            Alignment.Center,
-                        ) { Icon(Icons.Rounded.MoreVert, "Más", tint = LectorColors.Text) }
-                        MenuShiori(expanded = menuFicha, onDismissRequest = { menuFicha = false }) {
-                            @Composable fun op(t: String, accion: () -> Unit) = DropdownMenuItem(text = { Text(t) }, onClick = { menuFicha = false; accion() })
-                            op("Actualizar") { refrescando = true; recarga++ }
-                            if (enBiblioteca != null) {
-                                op("Editar categorías") { dialogoCats = true }
-                                op("Migrar") { migrando = true }
-                            }
-                            urlWeb?.let { u -> op("Compartir") { compartirTexto(ctx, "$tituloFicha\n$u") } }
-                            op("Notas") { editandoNotas = true }
-                            if (enBiblioteca != null) {
-                                op("Unir") { combinando = true }
-                                op("Editar información") { editarInfo = true }
-                            }
-                            op("Ver recomendaciones") {
-                                scope.launch {
-                                    if (recomendaciones.isNullOrEmpty()) { Avisos.mostrar(if (recomendaciones == null) "Buscando recomendaciones…" else "No hay recomendaciones"); return@launch }
-                                    repeat(30) {
-                                        listaCab.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "recs" }?.let { listaCab.animateScrollToItem(it.index); return@launch }
-                                        listaCab.scrollBy(900f)
-                                    }
-                                }
-                            }
-                            op("Abrir carpeta") { abrirCarpeta(ctx, com.example.lector.CarpetaApp.descargas(ctx)) }
-                            op("Limpiar manga") { limpiar = true }
-                            if (ext.configurables(f.pkg).any { it.id == f.id }) op("Ajustes de la fuente") { ajustesFuente = true }
-                        }
-                    }
-                },
-            )
         }
-
         // WebView del sitio, encima de la ficha.
         CapaEncima(webUrl) { u ->
             Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
@@ -1217,9 +1225,6 @@ private val ColorMarca = Color(0xFF2DBE6C)
 /** Tinta legible sobre un color de acento (los acentos de la portada pueden ser claros u oscuros). */
 private fun tintaSobre(c: Color): Color = if (c.luminance() > 0.55f) TintaBtn else Color.White
 
-/** Títulos de los apartados de la ficha (20 sp Bold, como pide DISENO.md). */
-private val TituloApartado = LectorType.Section.copy(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold)
-
 /** Cambia el color de acento (MaterialTheme.primary) de lo que lleva dentro: botones de descarga, chips... */
 @Composable
 private fun ConAcento(acento: Color, content: @Composable () -> Unit) {
@@ -1228,177 +1233,14 @@ private fun ConAcento(acento: Color, content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = esquema, content = content)
 }
 
-/** Botón redondo tonal (acento al 18 %); «activo» lo llena un poco más. Al pulsar se cuadra con muelle. */
+/** Género como píldora (las de Mochy, tinta del tema al 10 %): tocarlo busca ese género en la fuente. */
 @Composable
-private fun BotonTonalRedondo(
-    icono: ImageVector, desc: String, acento: Color, activo: Boolean, tam: androidx.compose.ui.unit.Dp = 56.dp, onClick: () -> Unit,
-) {
-    val fuente = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val pulsado by fuente.collectIsPressedAsState()
-    val radio by animateFloatAsState(if (pulsado) 0.3f else 0.5f, if (Mov.reducido) tween(80) else Muelles.espacialRapido(), label = "radioTonal")
-    val fondo by animateColorAsState(acento.copy(alpha = if (activo) 0.32f else 0.16f), if (Mov.reducido) tween(100) else Muelles.efectos(), label = "fondoTonal")
+private fun PildoraGenero(texto: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(tam).clip(RoundedCornerShape(percent = (radio * 100).roundToInt())).drawBehind { drawRect(fondo) }
-            .clickable(fuente, null) { Tacto.tic(); onClick() },
+        Modifier.pressable(onClick).height(28.dp).clip(CircleShape).background(LectorColors.Text.copy(alpha = 0.1f))
+            .padding(horizontal = 12.dp),
         Alignment.Center,
-    ) { Icon(icono, desc, tint = if (activo) acento else LectorColors.Text, modifier = Modifier.size(tam * 0.44f)) }
-}
-
-/** Género como píldora tonal: tocarlo busca ese género en la fuente. */
-@Composable
-private fun PildoraGenero(texto: String, acento: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.pressable(onClick).clip(CircleShape).background(acento.copy(alpha = 0.13f))
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) { LText(texto, LectorType.Label.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold), color = LectorColors.Text, maxLines = 1) }
-}
-
-/** Píldora pequeña de metadatos (autor, estado, fuente, capítulos) sobre la cabecera. */
-@Composable
-private fun PildoraMeta(icono: ImageVector, texto: String, acento: Color) {
-    Row(
-        Modifier.clip(CircleShape).background(LectorColors.Text.copy(alpha = 0.09f)).padding(start = 10.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icono, null, tint = acento, modifier = Modifier.size(14.dp))
-        Spacer(Modifier.width(6.dp))
-        LText(texto, LectorType.Label.copy(fontSize = 12.5.sp), color = LectorColors.Text.copy(alpha = 0.86f), maxLines = 1)
-    }
-}
-
-/**
- * Sinopsis en tarjeta: 4 líneas y, al tocar, se despliega en su sitio con muelle (animateContentSize).
- * Mantener pulsado abre el texto completo en un diálogo.
- */
-@Composable
-private fun TarjetaSinopsis(texto: String, acento: Color, modifier: Modifier, alMantener: () -> Unit) {
-    var abierta by rememberSaveable { mutableStateOf(false) }
-    val giro by animateFloatAsState(if (abierta) 180f else 0f, if (Mov.reducido) tween(100) else Muelles.espacial(), label = "flechaSinopsis")
-    Column(
-        modifier.fillMaxWidth().pressable(onLongClick = alMantener) { abierta = !abierta }
-            .clip(SuaveShape(26.dp)).background(LectorColors.Card)
-            .animateContentSize(if (Mov.reducido) tween(120) else Muelles.espacial())
-            .padding(start = 20.dp, end = 14.dp, top = 16.dp, bottom = 14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            LText("Sinopsis", TituloApartado.copy(fontSize = 18.sp), Modifier.weight(1f), maxLines = 1)
-            Box(Modifier.size(32.dp).clip(CircleShape).background(acento.copy(alpha = 0.16f)), Alignment.Center) {
-                Icon(Icons.Rounded.KeyboardArrowDown, if (abierta) "Plegar" else "Desplegar", tint = acento,
-                    modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = giro })
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        LText(texto, LectorType.Body.copy(fontWeight = FontWeight.Normal, lineHeight = 21.sp), Modifier.padding(end = 6.dp),
-            color = LectorColors.Text.copy(alpha = 0.78f), maxLines = if (abierta) Int.MAX_VALUE else 4)
-    }
-}
-
-/**
- * Cabecera inmersiva de la ficha: la portada desenfocada a sangre detrás (RenderEffect en API 31+; antes, un velo
- * más fuerte), que hace parallax y se funde con el fondo; encima la portada nítida grande con sombra, título enorme,
- * metadatos en píldoras y la fila de acciones (Leer/Continuar relleno + botones tonales).
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CabeceraFicha(
-    portada: String?, cabeceras: Map<String, String>, comicLocal: com.example.lector.Comic?, almacen: Almacen,
-    titulo: String, pildoras: List<Pair<ImageVector, String>>, fuenteId: Long? = null,
-    acento: Color, fondo: Color, scroll: () -> Float, portadaLista: Boolean,
-    onCargada: (ImageBitmap) -> Unit,
-    enBiblioteca: Boolean, textoLeer: String, puedeLeer: Boolean,
-    onLeer: () -> Unit, onCorazon: () -> Unit, onPildora: () -> Unit, onWeb: () -> Unit, onPortada: () -> Unit = {},
-) {
-    var entro by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { entro = true }
-    val t by animateFloatAsState(if (entro) 1f else 0f, if (Mov.reducido) tween(120) else Muelles.espacialLento(), label = "entradaFicha")
-    val aparece by animateFloatAsState(if (portadaLista) 1f else 0f, Mov.entrada(700), label = "portadaFicha")
-    val conBlur = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
-    // clipToBounds: con el parallax el fondo se corría hacia abajo y asomaba por debajo de la cabecera.
-    Box(Modifier.fillMaxWidth().clipToBounds()) {
-        // Capa de fondo: imagen pequeña (maxLado bajo) desenfocada una sola vez; el scroll solo mueve la capa.
-        ImagenRemota(
-            portada,
-            Modifier.matchParentSize()
-                .graphicsLayer {
-                    val sc = scroll()
-                    translationY = sc * 0.45f
-                    scaleX = 1.18f; scaleY = 1.18f
-                    alpha = aparece * (1f - (sc / 1200f).coerceIn(0f, 1f) * 0.7f)
-                }
-                .then(if (conBlur) Modifier.blur(36.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Rectangle) else Modifier),
-            cabeceras, onCargada, maxLado = 160, fuenteId = fuenteId,
-        )
-        // Velo: oscurece arriba (barra de estado), aclara/oscurece al tono del fondo y funde abajo con él.
-        Box(
-            Modifier.matchParentSize().background(
-                Brush.verticalGradient(
-                    0f to Color.Black.copy(alpha = 0.35f),
-                    0.25f to fondo.copy(alpha = if (conBlur) 0.25f else 0.55f),
-                    0.62f to fondo.copy(alpha = if (conBlur) 0.72f else 0.85f),
-                    1f to fondo,
-                )
-            )
-        )
-        Column(
-            Modifier.fillMaxWidth().statusBarsPadding().padding(top = 64.dp, start = 20.dp, end = 20.dp, bottom = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            // Portada nítida: grande, squircle, sombra; crece al entrar y se encoge un poco al subir.
-            val forma = SuaveShape(18.dp)
-            Box(
-                Modifier.width(156.dp).aspectRatio(2f / 3f)
-                    .graphicsLayer {
-                        val sc = (scroll() / 1400f).coerceIn(0f, 0.12f)
-                        val e = 0.86f + 0.14f * t
-                        scaleX = e - sc; scaleY = e - sc
-                        alpha = t
-                        translationY = scroll() * 0.18f
-                    }
-                    .shadow(22.dp, forma, clip = false, ambientColor = Color.Black.copy(alpha = 0.45f), spotColor = Color.Black.copy(alpha = 0.55f))
-                    .press3D().pressable(onPortada).clip(forma).background(LectorColors.CardHigh),
-            ) {
-                if (comicLocal != null) ComicCover(comicLocal, almacen, Modifier.fillMaxSize(), forma)
-                else ImagenRemota(portada, Modifier.fillMaxSize(), cabeceras, fuenteId = fuenteId)
-            }
-            Spacer(Modifier.height(22.dp))
-            Column(
-                Modifier.fillMaxWidth().graphicsLayer { alpha = t; translationY = (1f - t) * 48f },
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                LText(
-                    titulo,
-                    LectorType.Display.copy(
-                        fontSize = 31.sp, lineHeight = 35.sp, letterSpacing = (-0.9).sp, fontWeight = FontWeight.ExtraBold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    ),
-                    maxLines = 3,
-                )
-                Spacer(Modifier.height(14.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) { pildoras.forEach { (ic, tx) -> PildoraMeta(ic, tx, acento) } }
-                Spacer(Modifier.height(22.dp))
-                // Acción principal a todo el ancho (cabe «Continuar cap. 123» en cualquier móvil) y las secundarias debajo.
-                ConAcento(acento) {
-                    BotonExpresivo(
-                        textoLeer, Icons.Rounded.PlayArrow, onLeer, Modifier.fillMaxWidth(),
-                        estilo = EstiloBoton.RELLENO, alto = 56.dp, habilitado = puedeLeer,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-                    BotonTonalRedondo(
-                        if (enBiblioteca) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                        if (enBiblioteca) "Quitar de la biblioteca" else "Añadir a la biblioteca",
-                        acento, enBiblioteca, onClick = onCorazon,
-                    )
-                    if (enBiblioteca) BotonTonalRedondo(Icons.Rounded.List, "Categorías", acento, false, onClick = onPildora)
-                    BotonTonalRedondo(Icons.Rounded.ArrowForward, "Abrir en WebView", acento, false, onClick = onWeb)
-                }
-            }
-        }
-    }
+    ) { Text(texto, style = PlaylistStatsStyle.copy(fontSize = 12.sp), color = LectorColors.Text.copy(alpha = 0.86f), maxLines = 1) }
 }
 
 // ───────────────────── Leer online ─────────────────────

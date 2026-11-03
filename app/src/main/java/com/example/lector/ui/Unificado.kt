@@ -28,12 +28,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.Icon
+import androidx.compose.material3.TextField
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.runtime.Composable
@@ -99,8 +106,9 @@ fun <T : Any> CapaEncima(valor: T?, content: @Composable (T) -> Unit) {
 }
 
 /**
- * Diálogo de Shiori con la firma de AlertDialog de Material (para sustituirlo sin tocar cada llamada): tarjeta
- * redondeada con borde fino, título grande y entrada animada.
+ * Diálogo de Shiori con la firma de AlertDialog de Material (para sustituirlo sin tocar cada llamada). Se pinta con
+ * el DefaultDialog de Mochy (ui/mochy/sheet/Dialog.kt): 24 dp de margen y de relleno, título headlineSmall, texto
+ * desplazable y los botones alineados a la derecha con el color primario.
  */
 @Composable
 fun DialogoAlerta(
@@ -113,55 +121,86 @@ fun DialogoAlerta(
     text: (@Composable () -> Unit)? = null,
     properties: DialogProperties = DialogProperties(),
 ) {
-    Dialog(onDismissRequest, DialogProperties(properties.dismissOnBackPress, properties.dismissOnClickOutside, properties.securePolicy, usePlatformDefaultWidth = false, decorFitsSystemWindows = properties.decorFitsSystemWindows)) {
-        val visible = remember { MutableTransitionState(false) }.apply { targetState = true }
-        AnimatedVisibility(visibleState = visible, enter = Mov.entraVentana()) {
-            Column(
-                modifier.padding(20.dp).widthIn(max = 480.dp).fillMaxWidth().clip(SuaveShape(30.dp)).background(LectorColors.Card)
-                    .border(1.dp, LectorColors.Linea, SuaveShape(30.dp)).padding(horizontal = 24.dp, vertical = 22.dp),
-            ) {
-                icon?.let { Box(Modifier.align(Alignment.CenterHorizontally)) { it() }; Spacer(Modifier.height(12.dp)) }
-                title?.let {
-                    CompositionLocalProvider(LocalContentColor provides LectorColors.Text) { ProvideTextStyle(LectorType.Section) { it() } }
-                    Spacer(Modifier.height(10.dp))
-                }
-                text?.let {
-                    Box(Modifier.weight(1f, fill = false)) {
-                        CompositionLocalProvider(LocalContentColor provides LectorColors.Muted) { ProvideTextStyle(LectorType.Body) { it() } }
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                    dismissButton?.let { CompositionLocalProvider(LocalContentColor provides LectorColors.Muted) { it() } }
-                    confirmButton()
+    com.example.lector.ui.mochy.sheet.DefaultDialog(
+        onDismiss = onDismissRequest,
+        modifier = modifier,
+        icon = icon,
+        title = title,
+        horizontalAlignment = Alignment.Start,
+        properties = DialogProperties(
+            properties.dismissOnBackPress, properties.dismissOnClickOutside, properties.securePolicy,
+            usePlatformDefaultWidth = false, decorFitsSystemWindows = properties.decorFitsSystemWindows,
+        ),
+        buttons = {
+            dismissButton?.let { CompositionLocalProvider(LocalContentColor provides LectorColors.Muted) { it() } }
+            confirmButton()
+        },
+    ) {
+        text?.let {
+            Box(Modifier.weight(1f, fill = false)) {
+                CompositionLocalProvider(LocalContentColor provides LectorColors.Muted) {
+                    ProvideTextStyle(MaterialTheme.typography.bodyMedium) { it() }
                 }
             }
         }
     }
 }
 
-/** Menú desplegable con la forma y el color de Shiori. */
+/**
+ * Menú de Shiori: en vez de un desplegable de Material sale como hoja de Mochy (PopupSheet), con cada opción en una
+ * píldora de su MenuItemRow (ver [com.example.lector.ui.mochy.sheet.FilasMenu]).
+ */
 @Composable
 fun MenuShiori(expanded: Boolean, onDismissRequest: () -> Unit, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    DropdownMenu(
-        expanded = expanded, onDismissRequest = onDismissRequest, modifier = modifier,
-        shape = SuaveShape(20.dp), containerColor = LectorColors.Card, content = content,
-    )
+    if (!expanded) return
+    com.example.lector.ui.mochy.sheet.PopupSheet(onClosed = onDismissRequest) {
+        Column(modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
+            com.example.lector.ui.mochy.sheet.FilasMenu(content)
+        }
+    }
 }
 
-/** Casilla con los colores del tema. */
+/** Casilla al estilo Mochy: cuadrado de 22 dp con esquinas de 7 dp que se rellena con el primario y un muelle. */
 @Composable
 fun CasillaShiori(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Checkbox(
-        checked, onCheckedChange, modifier, enabled,
-        colors = CheckboxDefaults.colors(
-            checkedColor = MaterialTheme.colorScheme.primary, uncheckedColor = LectorColors.Muted,
-            checkmarkColor = MaterialTheme.colorScheme.onPrimary,
-        ),
+    val acento = MaterialTheme.colorScheme.primary
+    val p by androidx.compose.animation.core.animateFloatAsState(
+        if (checked) 1f else 0f, Muelles.espacialRapido(), label = "casilla",
     )
+    val forma = SuaveShape(7.dp)
+    Box(
+        modifier
+            .then(
+                if (onCheckedChange != null) Modifier.toggleable(
+                    value = checked, enabled = enabled, role = Role.Checkbox,
+                    interactionSource = remember { MutableInteractionSource() }, indication = null,
+                    onValueChange = { Tacto.tic(); onCheckedChange(it) },
+                ) else Modifier,
+            )
+            .size(48.dp)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.38f },
+        Alignment.Center,
+    ) {
+        Box(
+            Modifier.size(22.dp).graphicsLayer { val e = 0.9f + 0.1f * p.coerceIn(0f, 1.1f); scaleX = e; scaleY = e }
+                .clip(forma)
+                .background(acento.copy(alpha = p.coerceIn(0f, 1f)))
+                .border(2.dp, LectorColors.Muted.copy(alpha = 1f - p.coerceIn(0f, 1f)), forma),
+            Alignment.Center,
+        ) {
+            if (p > 0.01f) Icon(
+                Icons.Rounded.Check, null, tint = com.example.lector.textoSobre(acento),
+                modifier = Modifier.size(16.dp).graphicsLayer { alpha = p.coerceIn(0f, 1f); val e = 0.6f + 0.4f * p; scaleX = e; scaleY = e },
+            )
+        }
+    }
 }
 
-/** Campo de texto con la forma y colores de Shiori (misma firma que OutlinedTextField). */
+/**
+ * Campo de texto (misma firma que OutlinedTextField). Como los de los diálogos de Mochy es un TextField con los
+ * colores de OutlinedTextFieldDefaults; Shiori le pone el fondo de fila de las hojas (MenuRowSurface), las esquinas de
+ * 16 dp de MenuItemRow y quita la línea inferior.
+ */
 @Composable
 fun CampoTextoShiori(
     value: String,
@@ -183,17 +222,21 @@ fun CampoTextoShiori(
     minLines: Int = 1,
 ) {
     val acento = MaterialTheme.colorScheme.primary
-    OutlinedTextField(
+    val fondo = com.example.lector.ui.mochy.sheet.MenuRowSurface
+    TextField(
         value = value, onValueChange = onValueChange, modifier = modifier, enabled = enabled,
         textStyle = textStyle.copy(color = LectorColors.Text), label = label, placeholder = placeholder,
         leadingIcon = leadingIcon, trailingIcon = trailingIcon, supportingText = supportingText, isError = isError,
         visualTransformation = visualTransformation, keyboardOptions = keyboardOptions, keyboardActions = keyboardActions,
         singleLine = singleLine, maxLines = maxLines, minLines = minLines,
-        shape = SuaveShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = acento, unfocusedBorderColor = LectorColors.Linea, cursorColor = acento,
-            focusedLabelColor = acento, unfocusedLabelColor = LectorColors.Muted,
-            focusedContainerColor = LectorColors.PillFill, unfocusedContainerColor = LectorColors.PillFill,
+            focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
+            disabledBorderColor = Color.Transparent, errorBorderColor = Color.Transparent,
+            cursorColor = acento, focusedLabelColor = acento, unfocusedLabelColor = LectorColors.Muted,
+            focusedPlaceholderColor = LectorColors.Pista, unfocusedPlaceholderColor = LectorColors.Pista,
+            focusedContainerColor = fondo, unfocusedContainerColor = fondo, disabledContainerColor = fondo,
+            errorContainerColor = fondo,
         ),
     )
 }

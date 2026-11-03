@@ -126,47 +126,24 @@ fun SectionHeader(title: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Carrusel con "snap"; la última portada queda cortada para sugerir scroll. */
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * Fila de portadas de Inicio: la HomeCardRow de Mochy Music (ui/mochy/home/HomeCards.kt) con sus HomeCoverCard,
+ * que entran en cascada la primera vez y se iluminan con el recuadro redondeado de Mochy al pulsar.
+ */
 @Composable
 fun CoverCarousel(items: List<Comic>, almacen: Almacen, onClick: (Comic) -> Unit, modifier: Modifier = Modifier) {
-    val state = rememberLazyListState()
-    LazyRow(
-        modifier, state = state,
-        contentPadding = PaddingValues(horizontal = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        flingBehavior = rememberSnapFlingBehavior(state)
-    ) {
-        itemsIndexed(items, key = { _, c -> c.id }) { i, c ->
-            val forma = FormaPortada
-            val progreso = c.progresoLectura()
-            val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
-            Column(Modifier.width(132.dp).entrada(i, 45).pressable { onClick(c) }) {
-                Box(
-                    Modifier.fillMaxWidth().aspectRatio(2f / 3f)
-                        .shadow(12.dp, forma, clip = false, ambientColor = Color.Black.copy(alpha = 0.35f), spotColor = Color.Black.copy(alpha = 0.35f))
-                        .origenTransicion().press3D()
-                ) {
-                    ComicCover(c, almacen, Modifier.fillMaxSize(), forma)
-                    // Degradado inferior + barra de progreso de acento sobre la portada.
-                    if (progreso > 0f) {
-                        Box(
-                            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(48.dp).clip(forma)
-                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))))
-                        )
-                        Box(
-                            Modifier.align(Alignment.BottomCenter).padding(horizontal = 10.dp, vertical = 10.dp)
-                                .fillMaxWidth().height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.28f))
-                        ) {
-                            Box(Modifier.fillMaxWidth(progreso.coerceIn(0f, 1f)).fillMaxHeight().clip(CircleShape).background(acento))
-                        }
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                LText(c.titulo, LectorType.Body.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), maxLines = 2)
-                LText(c.textoPagina(), LectorType.Label, color = LectorColors.Muted, maxLines = 1)
-            }
-        }
+    val visto = com.example.lector.ui.mochy.rememberRevealSeenState()
+    com.example.lector.ui.mochy.home.HomeCardRow(
+        rowKey = "portadas", items = items, revealSeen = visto, key = { it.id }, modifier = modifier,
+    ) { c ->
+        com.example.lector.ui.mochy.home.HomeCoverCard(
+            c, almacen,
+            Modifier.clickable(
+                interactionSource = null,
+                indication = com.example.lector.ui.mochy.home.HomeCardHighlight,
+                onClick = { onClick(c) },
+            ),
+        )
     }
 }
 
@@ -243,11 +220,13 @@ fun MiniReader(comic: Comic, almacen: Almacen, onClick: () -> Unit, modifier: Mo
     MiniReaderGenerico(
         comic.titulo, comic.textoPagina(), onClick, modifier,
         progreso = if (comic.paginas > 0) ((comic.ultimaPagina + if (comic.enLinea) 0 else 1).toFloat() / comic.paginas).coerceIn(0f, 1f) else null,
-    ) { m -> ComicCover(comic, almacen, m, CircleShape) }
+    ) { m -> ComicCover(comic, almacen, m, com.example.lector.ui.mochy.SmoothCornerShape(12.dp)) }
 
 /**
- * Mini lector de cristal (el mini reproductor de musicfy): mismo estadio de 64 dp que la barra, portada redonda
- * con un anillo de progreso, título y capítulo, y un botón redondo para seguir leyendo.
+ * Mini lector: el mini reproductor de Mochy Music (player/MorphingCover.kt + BottomSheet.kt) sin el morph:
+ * píldora de cristal de 64 dp con esquinas suaves de 20 dp que se inclina bajo el dedo, portada a la izquierda,
+ * título y capítulo, y el botón de Mochy (rebote + resalte redondo) para seguir leyendo. El progreso es una
+ * línea finísima en el borde de abajo.
  */
 @Composable
 fun MiniReaderGenerico(
@@ -255,42 +234,67 @@ fun MiniReaderGenerico(
     progreso: Float? = null,
     portada: @Composable (Modifier) -> Unit,
 ) {
-    val forma = CircleShape
-    val anillo = LectorColors.Text
-    val pista = LectorColors.Text.copy(alpha = 0.15f)
+    val forma = com.example.lector.ui.mochy.SmoothCornerShape(MiniEsquina)
     Box(
         modifier.fillMaxWidth().height(AltoCromo)
             .press3D(4f, 0.985f)
             .sombraCromo(forma)
             .clip(forma)
-            .pressable(onClick)
-            .drawWithContent { drawContent(); lineaCristal(size.height / 2f) },
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .drawWithContent { drawContent(); lineaCristal(MiniEsquina.toPx()) },
     ) {
         FondoCristal(CristalApp, Modifier.fillMaxSize())
-        Row(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(48.dp).drawWithContent {
-                    drawContent()
-                    if (progreso != null) {
-                        val g = 2.5.dp.toPx()
-                        drawArc(pista, 0f, 360f, false, topLeft = Offset(g / 2, g / 2), size = Size(size.width - g, size.height - g), style = Stroke(g))
-                        drawArc(anillo, -90f, 360f * progreso, false, topLeft = Offset(g / 2, g / 2), size = Size(size.width - g, size.height - g), style = Stroke(g, cap = StrokeCap.Round))
-                    }
-                },
-                Alignment.Center,
-            ) { portada(Modifier.size(if (progreso != null) 40.dp else 48.dp)) }
+        Row(Modifier.fillMaxSize().padding(start = 8.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            portada(Modifier.size(48.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 LText(titulo, LectorType.Body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold), maxLines = 1)
                 LText(subtitulo, LectorType.Label, color = LectorColors.Muted, maxLines = 1)
             }
-            Spacer(Modifier.width(8.dp))
-            Box(
-                Modifier.size(44.dp).clip(CircleShape).border(1.dp, LectorColors.Text.copy(alpha = 0.15f), CircleShape),
-                Alignment.Center,
-            ) { Icon(Icons.Rounded.PlayArrow, "Continuar", tint = LectorColors.Text, modifier = Modifier.size(24.dp)) }
-            Spacer(Modifier.width(2.dp))
+            Spacer(Modifier.width(6.dp))
+            Box(Modifier.size(36.dp)) { BotonMini(onClick) }
         }
+        if (progreso != null) {
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(2.dp).background(LectorColors.Text.copy(alpha = 0.10f))) {
+                Box(Modifier.fillMaxWidth(progreso.coerceIn(0f, 1f)).fillMaxHeight().background(LectorColors.Text.copy(alpha = 0.75f)))
+            }
+        }
+    }
+}
+
+/** Esquinas del mini lector (las de la píldora del mini reproductor de Mochy). */
+private val MiniEsquina = 20.dp
+
+/**
+ * The round highlight behind a pressed mini player button: the nav bar's highlight colour, 4dp
+ * past the 36dp button. (Copiado de Mochy Music, GPL-3.0: ui/player/MorphingCover.kt, MiniButtonHighlight)
+ */
+private val MiniButtonHighlight = com.example.lector.ui.mochy.RoundedHighlight(
+    cornerRadius = 22.dp,
+    spillX = 4.dp,
+    spillY = 4.dp,
+    color = com.example.lector.ui.mochy.ChromeHighlightColor,
+)
+
+/**
+ * One of the mini player's buttons. A round highlight comes up under the finger and the button
+ * squishes with it. (Copiado de Mochy Music, GPL-3.0: ui/player/MorphingCover.kt, MiniPlayerButton)
+ */
+@Composable
+private fun BotonMini(onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .rebote(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = MiniButtonHighlight,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Rounded.PlayArrow, "Continuar", tint = LectorColors.Text, modifier = Modifier.size(20.dp))
     }
 }
 
