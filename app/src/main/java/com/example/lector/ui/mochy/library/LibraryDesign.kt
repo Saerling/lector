@@ -168,12 +168,15 @@ internal val LibraryRowCoverSize = 54.dp
 @Composable
 fun LibraryTitleBlock(title: String, subtitle: String?, modifier: Modifier = Modifier, subtitleContent: (@Composable () -> Unit)? = null) {
     Column(modifier, verticalArrangement = Arrangement.Center) {
+        var tam by androidx.compose.runtime.remember(title) { androidx.compose.runtime.mutableStateOf(34f) }
         Text(
             text = title,
-            style = MaterialTheme.typography.displaySmall.copy(fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 40.sp),
+            style = MaterialTheme.typography.displaySmall.copy(fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = tam.sp, lineHeight = 40.sp),
             color = LibraryColors.Primary,
             maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (it.hasVisualOverflow && tam > 24f) tam -= 2f },
         )
         if (subtitleContent != null) subtitleContent()
         else if (subtitle != null) {

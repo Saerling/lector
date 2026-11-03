@@ -808,3 +808,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 ## 2bm. PASO 65 (0.56) — Interfaz de Mochy en todas las pantallas
 - ui/mochy/library, home, detail (ficha = álbum), search (búsqueda/Explorar), artist (catálogo de fuente = artista), sheet (hojas/menús/diálogos).
 - Material You retirado: paleta monocroma de Mochy en Theme.kt, sin ripple, cristal líquido (shader API 33+, blur 31-32, tinte <31).
+
+## 2bn. PASO 66 (0.57)
+- Título grande de Biblioteca se encoge (34→24sp) si no cabe, en vez de cortarse.
