@@ -811,3 +811,7 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2bn. PASO 66 (0.57)
 - Título grande de Biblioteca se encoge (34→24sp) si no cabe, en vez de cortarse.
+
+## 2bo. PASO 67 (0.58)
+- Menús (MenuShiori): con desplazamiento (no se cortan), y solo las filas reales llevan fondo/hueco (separadores y títulos ya no salen como píldoras).
+- Lector: barras estilo iOS 26 — botones redondos de cristal sueltos y cápsula de título; abajo cápsula de avance y cápsula de herramientas solo con iconos (se quitó el duplicado Modo/Ajustes).

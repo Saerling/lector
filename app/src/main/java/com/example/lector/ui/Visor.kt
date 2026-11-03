@@ -683,27 +683,23 @@ fun Visor(
             exit = saleBarra(arriba = true),
         ) {
             Row(
-                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)
-                    .pildoraCristal(FormaBarra)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 BotonRedondo(Icons.Rounded.ArrowBack, "Atrás") { onBack() }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(cap.nombre, style = LectorType.Section.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold), color = TintaBarra, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        if (n != null) "$titulo · ${paginaReal + 1} de $n" else titulo,
-                        style = LectorType.Label, color = SubBarra, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
+                Spacer(Modifier.width(10.dp))
+                Column(
+                    Modifier.weight(1f).pildoraCristal(CircleShape).padding(horizontal = 18.dp, vertical = 7.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(cap.nombre, style = LectorType.Section.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold), color = TintaBarra, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(titulo, style = LectorType.Label.copy(fontSize = 12.sp), color = SubBarra, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(10.dp))
                 acciones.alternarMarca?.let { alternar ->
                     val marcado = acciones.estaMarcado?.invoke(ci) == true
                     BotonRedondo(if (marcado) Iconos.Marca else Iconos.MarcaBorde, if (marcado) "Quitar marca" else "Marcar capítulo", activo = marcado) { alternar(ci) }
-                    Spacer(Modifier.width(6.dp))
-                }
-                acciones.urlWeb?.let { url ->
+                } ?: acciones.urlWeb?.let { url ->
                     BotonRedondo(Icons.Rounded.Share, "Compartir enlace") {
                         val u = url(ci)
                         if (u == null) Avisos.mostrar("Este capítulo no tiene dirección web")
@@ -720,12 +716,12 @@ fun Visor(
             exit = saleBarra(arriba = false),
         ) {
             Column(
-                Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)
-                    .pildoraCristal(FormaBarra).padding(horizontal = 8.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val rtl = modo == ModoVisor.DERECHA_IZQUIERDA
                 Row(
-                    Modifier.fillMaxWidth()
+                    Modifier.fillMaxWidth().pildoraCristal(CircleShape).padding(6.dp)
                         .graphicsLayer { if (rtl) scaleX = -1f },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -739,8 +735,7 @@ fun Visor(
                         val tot = n ?: 0
                         Text(
                             "${if (tot > 0) paginaReal + 1 else 0} / $tot", style = EstiloContador, color = TintaBarra,
-                            modifier = girar.widthIn(min = 64.dp).clip(CircleShape).background(LectorColors.PillFill)
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = girar.widthIn(min = 56.dp).padding(horizontal = 4.dp),
                             textAlign = TextAlign.Center, maxLines = 1,
                         )
                         if (tot > 1) {
@@ -764,10 +759,10 @@ fun Visor(
                     Spacer(Modifier.width(8.dp))
                     BotonCapitulo(Icons.Rounded.KeyboardArrowRight, "Capítulo siguiente", haySiguiente, girar) { irCapitulo(ci + 1, false) }
                 }
-                Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp).fillMaxWidth().height(1.dp).background(BordeBarra))
+                Spacer(Modifier.height(10.dp))
                 Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    Modifier.pildoraCristal(CircleShape).padding(horizontal = 6.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     if (capitulos.size > 1) AccionVisor(Icons.Rounded.List, "Capítulos") { dialogoCaps = true }
                     // WebView del capítulo que estás leyendo (en lugar de la reproducción automática).
@@ -776,8 +771,13 @@ fun Visor(
                         if (u == null) Avisos.mostrar("Este capítulo no tiene dirección web") else webCap = u
                     }
                     AccionVisor(Icons.Rounded.Refresh, "Recargar") { CacheVisor.vaciar(); recarga++ }
-                    AccionVisor(Icons.Rounded.Build, "Modo") { hoja = true }
-                    AccionVisor(Icons.Rounded.Settings, "Ajustes") { hoja = true }
+                    acciones.urlWeb?.takeIf { acciones.alternarMarca != null }?.let { url ->
+                        AccionVisor(Icons.Rounded.Share, "Compartir") {
+                            val u = url(ci)
+                            if (u == null) Avisos.mostrar("Este capítulo no tiene dirección web") else compartirTexto(ctx, "$titulo - ${cap.nombre}\n$u")
+                        }
+                    }
+                    AccionVisor(Icons.Rounded.Settings, "Ajustes del lector") { hoja = true }
                 }
             }
         }
@@ -925,8 +925,8 @@ private fun salePildora(): ExitTransition =
 @Composable
 private fun BotonRedondo(icono: ImageVector, desc: String, activo: Boolean = false, onClick: () -> Unit) {
     val acento = MaterialTheme.colorScheme.primary
-    val fondo by animateColorAsState(if (activo) acento.copy(alpha = 0.2f) else LectorColors.PillFill, Muelles.efectos(), label = "fondoBoton")
-    Box(Modifier.size(48.dp).pressable(onClick).clip(CircleShape).background(fondo), Alignment.Center) {
+    val fondo by animateColorAsState(if (activo) acento.copy(alpha = 0.2f) else Color.Transparent, Muelles.efectos(), label = "fondoBoton")
+    Box(Modifier.size(48.dp).pressable(onClick).pildoraCristal(CircleShape).background(fondo), Alignment.Center) {
         Icon(icono, desc, tint = if (activo) acento else TintaBarra, modifier = Modifier.size(22.dp))
     }
 }
@@ -938,23 +938,16 @@ private fun BotonCapitulo(
     Box(
         Modifier.size(48.dp).then(if (activo) Modifier.pressable(onClick) else Modifier)
             .graphicsLayer { alpha = if (activo) 1f else 0.38f }
-            .clip(CircleShape).background(LectorColors.PillFill),
+            .clip(CircleShape),
         Alignment.Center,
     ) { Icon(icono, desc, tint = TintaBarra, modifier = extra.size(26.dp)) }
 }
 
-/** Acción de la barra inferior: botón redondo tonal con su nombre debajo. */
+/** Acción de la barra inferior (cápsula de herramientas): icono de 48 dp sin rótulo, como las barras de iOS. */
 @Composable
 private fun AccionVisor(icono: ImageVector, texto: String, onClick: () -> Unit) {
-    Column(
-        Modifier.widthIn(min = 56.dp).pressable(onClick).padding(horizontal = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(Modifier.size(48.dp).clip(CircleShape).background(LectorColors.PillFill), Alignment.Center) {
-            Icon(icono, texto, tint = TintaBarra, modifier = Modifier.size(22.dp))
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(texto, style = LectorType.Label.copy(fontSize = 11.sp), maxLines = 1, color = SubBarra)
+    Box(Modifier.size(48.dp).clip(CircleShape).pressable(onClick), Alignment.Center) {
+        Icon(icono, texto, tint = TintaBarra, modifier = Modifier.size(23.dp))
     }
 }
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -154,7 +155,7 @@ fun DialogoAlerta(
 fun MenuShiori(expanded: Boolean, onDismissRequest: () -> Unit, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     if (!expanded) return
     com.example.lector.ui.mochy.sheet.PopupSheet(onClosed = onDismissRequest) {
-        Column(modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
+        Column(modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).navigationBarsPadding().padding(bottom = 12.dp)) {
             com.example.lector.ui.mochy.sheet.FilasMenu(content)
         }
     }

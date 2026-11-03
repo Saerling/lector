@@ -179,15 +179,19 @@ fun FilasMenu(content: @Composable ColumnScope.() -> Unit) {
             },
         ) { medibles, restricciones ->
             val hueco = 8.dp.roundToPx()
+            val minFila = 40.dp.roundToPx()
             val acotado = restricciones.hasBoundedWidth
             val colocables = medibles.map {
-                it.measure(restricciones.copy(minWidth = if (acotado) restricciones.maxWidth else 0, minHeight = 0))
+                it.measure(restricciones.copy(minWidth = if (acotado) restricciones.maxWidth else 0, minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity))
             }
             val ancho = if (acotado) restricciones.maxWidth else (colocables.maxOfOrNull { it.width } ?: 0)
             val tops = IntArray(colocables.size)
             var y = 0
-            colocables.forEachIndexed { i, p -> tops[i] = y; y += p.height + if (i < colocables.lastIndex) hueco else 0 }
-            filas.tops = tops; filas.alturas = IntArray(colocables.size) { colocables[it].height }; filas.ancho = ancho
+            // Solo las filas de verdad (≥ 40 dp) llevan fondo y hueco; separadores, títulos y espacios van tal cual.
+            colocables.forEachIndexed { i, p -> tops[i] = y; y += p.height + if (i < colocables.lastIndex && p.height >= minFila) hueco else 0 }
+            val esFila = colocables.map { it.height >= minFila }
+            filas.tops = tops.filterIndexed { i, _ -> esFila[i] }.toIntArray()
+            filas.alturas = colocables.filterIndexed { i, _ -> esFila[i] }.map { it.height }.toIntArray(); filas.ancho = ancho
             layout(ancho, y.coerceAtLeast(restricciones.minHeight)) {
                 colocables.forEachIndexed { i, p -> p.place(0, tops[i]) }
             }
