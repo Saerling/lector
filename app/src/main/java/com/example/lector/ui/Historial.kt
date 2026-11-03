@@ -238,6 +238,42 @@ private fun FilaHistorial(item: ItemHistorial, almacen: Almacen, hora: String, a
             "$cap$pag" to (if (e.total > 0) (e.pagina + 1).toFloat() / e.total else 0f)
         }
     }
+    val e = (item as? ItemHistorial.EnLinea)?.entrada
+    if (e == null) FilaHistorialBase(item, almacen, hora, principal, progreso, acento, haptic, formaPortada, alAbrir, alQuitar, modifier)
+    else {
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        val ext = remember { com.example.lector.ext.ExtManager.obtener(ctx) }
+        val leido = ext.leidos.let { ext.esLeido(e.fuenteId, e.capUrl) }
+        val descargado = com.example.lector.Descargas.version.value >= 0 && almacen.estaDescargado(e.fuenteId, e.capUrl)
+        com.example.lector.ui.mochy.ChapterSwipeBox(
+            estado = com.example.lector.ui.mochy.EstadoCapituloSwipe(leido, ext.esMarcado(e.fuenteId, e.capUrl), descargado),
+            onAction = { acc ->
+                when (acc) {
+                    com.example.lector.ui.mochy.ChapterSwipeAction.MARK_READ ->
+                        if (leido) ext.desmarcarLeido(e.fuenteId, e.capUrl) else ext.marcarLeido(e.fuenteId, e.capUrl)
+                    com.example.lector.ui.mochy.ChapterSwipeAction.MARK_PREVIOUS_READ -> ext.marcarLeido(e.fuenteId, e.capUrl)
+                    com.example.lector.ui.mochy.ChapterSwipeAction.BOOKMARK -> ext.alternarMarcado(e.fuenteId, e.capUrl)
+                    com.example.lector.ui.mochy.ChapterSwipeAction.DOWNLOAD -> {
+                        val f = ext.fuentes.firstOrNull { it.id == e.fuenteId }
+                        when {
+                            descargado -> { almacen.borrarDescarga(e.fuenteId, e.capUrl); com.example.lector.Descargas.version.value++ }
+                            f == null -> Avisos.mostrar("Esa fuente no está disponible ahora")
+                            else -> com.example.lector.Descargas.encolar(ctx, f, e.urlManga, e.titulo, listOf(com.example.lector.CacheFichas.conMemo(e.fuenteId, e.urlManga, com.example.lector.ext.CapituloFuente(e.capUrl, e.capNombre, 0L, null, -1f))))
+                        }
+                    }
+                    else -> Unit
+                }
+            },
+        ) { FilaHistorialBase(item, almacen, hora, principal, progreso, acento, haptic, formaPortada, alAbrir, alQuitar, modifier) }
+    }
+}
+
+@Composable
+private fun FilaHistorialBase(
+    item: ItemHistorial, almacen: Almacen, hora: String, principal: String, progreso: Float, acento: androidx.compose.ui.graphics.Color,
+    haptic: androidx.compose.ui.hapticfeedback.HapticFeedback, formaPortada: androidx.compose.ui.graphics.Shape,
+    alAbrir: () -> Unit, alQuitar: () -> Unit, modifier: Modifier,
+) {
     HomeTrackRow(
         title = item.titulo,
         subtitle = "$principal • $hora",

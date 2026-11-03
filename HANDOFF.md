@@ -818,3 +818,8 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2bp. PASO 68 (0.59)
 - Menús y hojas: altura máxima explícita (62 % / 80 % de pantalla). Antes se medían más altas que la pantalla: las últimas opciones quedaban fuera, no desplazaba y al arrastrar se movía la hoja entera.
+
+## 2bq. PASO 69 (0.60)
+- MenuShiori vuelve a ser desplegable anclado (DropdownMenu) con aspecto de Mochy; la hoja en ventana propia fallaba.
+- Deslizar capítulos también en Actualizaciones e Historial (en línea). Color por acción en Personalización → Gestos (prefs gestos/color_*).
+- «No se pudieron revisar»: por fuente dice qué extensión/repositorio la tiene (caché de repos, sin red) y tocar un título lo busca en las fuentes instaladas.

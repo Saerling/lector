@@ -434,6 +434,7 @@ fun Inicio(
                             )
                         },
                         alAbrirManga = { a -> abrirEnLinea(a.fuenteId, a.urlManga, a.titulo, a.portadaUrl, null) },
+                        alBuscarGlobal = { t -> consultaGlobal = t; ruta = Ruta.BusquedaGlobal },
                     )
                 }
                 LectorTab.History -> Box(Modifier.statusBarsPadding().padding(bottom = 76.dp)) {

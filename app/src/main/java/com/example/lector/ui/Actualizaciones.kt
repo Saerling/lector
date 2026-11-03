@@ -100,6 +100,7 @@ fun ActualizacionesScreen(
     alAbrir: (ActualizacionCap) -> Unit,
     alAbrirManga: (ActualizacionCap) -> Unit = {},
     modifier: Modifier = Modifier,
+    alBuscarGlobal: (String) -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val lista = almacen.actualizaciones
@@ -243,6 +244,7 @@ fun ActualizacionesScreen(
                                             onClick = { if (seleccion.isNotEmpty()) alternar(primera) else alAbrir(primera) },
                                             onLargo = { alternar(primera) },
                                             modifier = Modifier.entrada(escalonAct(pos)),
+                                            alCambiarLeido = { recalcularProgreso(listOf(primera)) },
                                         )
                                     }
                                 } else {
@@ -266,6 +268,7 @@ fun ActualizacionesScreen(
                                             a, comic, almacen, ext, leidos, clave(a) in seleccion, seleccion.isNotEmpty(),
                                             onClick = { if (seleccion.isNotEmpty()) alternar(a) else alAbrir(a) },
                                             onLargo = { alternar(a) }, sangria = true,
+                                            alCambiarLeido = { recalcularProgreso(listOf(a)) },
                                         )
                                     }
                                 }
@@ -331,7 +334,28 @@ fun ActualizacionesScreen(
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     almacen.erroresActualizacion.groupBy { it.motivo }.forEach { (motivo, errs) ->
                         Text(motivo, color = MaterialTheme.colorScheme.error, style = LectorType.Body)
-                        errs.forEach { e -> Text("• ${e.titulo} (${e.fuente})", style = LectorType.Label, modifier = Modifier.padding(start = 8.dp, top = 2.dp)) }
+                        // Por fuente: si la extensión está en algún repositorio, se dice cuál instalar; tocar un título
+                        // lo busca en las fuentes instaladas (búsqueda global). Nada corre en segundo plano.
+                        errs.groupBy { it.fuente }.forEach { (fuente, deFuente) ->
+                            val id = Regex("\\d{5,}").find(fuente)?.value?.toLongOrNull()
+                            val enRepo = id?.let { i -> ext.disponibles.firstOrNull { d -> d.fuentes.any { it.id == i } } }
+                            val fi = enRepo?.fuentes?.firstOrNull { it.id == id }
+                            Text(
+                                when {
+                                    enRepo != null -> "${fi?.nombre ?: enRepo.nombre} · instala «${enRepo.nombre}» (${enRepo.repoSigla})" + (fi?.baseUrl?.takeIf { it.isNotBlank() }?.let { "\n$it" } ?: "")
+                                    else -> "$fuente · no está en tus repositorios"
+                                },
+                                style = LectorType.Label.copy(fontWeight = FontWeight.Bold),
+                                color = if (enRepo != null) MaterialTheme.colorScheme.primary else LectorColors.Muted,
+                                modifier = Modifier.padding(start = 8.dp, top = 6.dp),
+                            )
+                            deFuente.forEach { e ->
+                                Text(
+                                    "• ${e.titulo}  ⌕", style = LectorType.Label,
+                                    modifier = Modifier.fillMaxWidth().clickable { verErrores = false; alBuscarGlobal(e.titulo) }.padding(start = 8.dp, top = 3.dp, bottom = 3.dp),
+                                )
+                            }
+                        }
                         Spacer(Modifier.height(10.dp))
                     }
                 }
@@ -415,6 +439,7 @@ private fun FilaActualizacion(
     a: ActualizacionCap, comic: Comic?, almacen: Almacen, ext: ExtManager, leidos: Int,
     seleccionado: Boolean, enSeleccion: Boolean,
     onClick: () -> Unit, onLargo: () -> Unit, sangria: Boolean = false, modifier: Modifier = Modifier,
+    alCambiarLeido: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val acento = MaterialTheme.colorScheme.primary
@@ -432,6 +457,33 @@ private fun FilaActualizacion(
     }
     val hora = remember(a.detectado) { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(a.detectado)) }
 
+    val descargar = {
+        val f = ext.fuentes.firstOrNull { it.id == a.fuenteId }
+        when {
+            estado is EstadoDescarga.Descargando -> Descargas.cancelar(ctx, k)
+            estado is EstadoDescarga.Listo -> { almacen.borrarDescarga(a.fuenteId, a.capUrl); Descargas.version.value++ }
+            f == null -> Avisos.mostrar("Esa fuente no está disponible ahora")
+            else -> Descargas.encolar(ctx, f, a.urlManga, a.titulo, listOf(com.example.lector.CacheFichas.conMemo(a.fuenteId, a.urlManga, CapituloFuente(a.capUrl, a.capNombre, a.capFecha, a.scanlator, a.capNumero))))
+        }
+    }
+    com.example.lector.ui.mochy.ChapterSwipeBox(
+        estado = com.example.lector.ui.mochy.EstadoCapituloSwipe(
+            leido = leido, marcado = ext.esMarcado(a.fuenteId, a.capUrl),
+            descargado = estado is EstadoDescarga.Listo, descargando = estado is EstadoDescarga.Descargando,
+        ),
+        enabled = !enSeleccion,
+        onAction = { acc ->
+            when (acc) {
+                com.example.lector.ui.mochy.ChapterSwipeAction.MARK_READ -> {
+                    if (leido) ext.desmarcarLeido(a.fuenteId, a.capUrl) else ext.marcarLeido(a.fuenteId, a.capUrl); alCambiarLeido()
+                }
+                com.example.lector.ui.mochy.ChapterSwipeAction.MARK_PREVIOUS_READ -> { ext.marcarLeido(a.fuenteId, a.capUrl); alCambiarLeido() }
+                com.example.lector.ui.mochy.ChapterSwipeAction.BOOKMARK -> ext.alternarMarcado(a.fuenteId, a.capUrl)
+                com.example.lector.ui.mochy.ChapterSwipeAction.DOWNLOAD -> descargar()
+                else -> Unit
+            }
+        },
+    ) {
     HomeTrackRow(
         title = if (sangria) nombre else comic?.titulo ?: a.titulo,
         subtitle = if (sangria) hora else "$nombre • $hora",
@@ -449,15 +501,10 @@ private fun FilaActualizacion(
         trailing = {
             if (!enSeleccion) Box(Modifier.size(38.dp), Alignment.Center) {
                 BotonDescarga(estado, onClick = {
-                    val f = ext.fuentes.firstOrNull { it.id == a.fuenteId }
-                    when {
-                        estado is EstadoDescarga.Descargando -> Descargas.cancelar(ctx, k)
-                        estado is EstadoDescarga.Listo -> Avisos.mostrar("Ya está descargado")
-                        f == null -> Avisos.mostrar("Esa fuente no está disponible ahora")
-                        else -> Descargas.encolar(ctx, f, a.urlManga, a.titulo, listOf(com.example.lector.CacheFichas.conMemo(a.fuenteId, a.urlManga, CapituloFuente(a.capUrl, a.capNombre, a.capFecha, a.scanlator, a.capNumero))))
-                    }
+                    if (estado is EstadoDescarga.Listo) Avisos.mostrar("Ya está descargado") else descargar()
                 })
             }
         },
     )
+    }
 }

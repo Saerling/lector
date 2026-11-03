@@ -5,6 +5,7 @@
 
 package com.example.lector.ui.mochy
 
+import androidx.compose.ui.graphics.toArgb
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.material.icons.Icons
@@ -29,11 +30,16 @@ enum class ChapterSwipeAction(
     val color: Color,
     val pillLabel: String,
 ) {
+
     NONE("Nada", Icons.Rounded.Close, Color(0xFF8E8E93), "Nada"),
     MARK_READ("Marcar leído / no leído", Icons.Rounded.Check, SwipeQueueColor, "Marcar leído"),
     BOOKMARK("Marcar / desmarcar", Iconos.Marca, SwipeSaveColor, "Marcar"),
     DOWNLOAD("Descargar / borrar descarga", Iconos.Descargar, SwipeDownloadColor, "Descargar"),
-    MARK_PREVIOUS_READ("Marcar anteriores como leídos", Icons.Rounded.KeyboardArrowDown, SwipePlayNextColor, "Anteriores leídos"),
+    MARK_PREVIOUS_READ("Marcar anteriores como leídos", Icons.Rounded.KeyboardArrowDown, SwipePlayNextColor, "Anteriores leídos");
+
+    /** El color elegido por el usuario para esta acción (Personalización → Gestos), o el de Mochy. */
+    val colorActual: Color get() = GestosCapitulos.colores[name]?.let { Color(it) } ?: color
+
 }
 
 val DefaultSwipeRight = ChapterSwipeAction.MARK_READ
@@ -53,10 +59,19 @@ object GestosCapitulos {
         val p = ctx.applicationContext.getSharedPreferences("gestos", Context.MODE_PRIVATE).also { prefs = it }
         derecha = leer(p, "derecha", DefaultSwipeRight)
         izquierda = leer(p, "izquierda", DefaultSwipeLeft)
+        ChapterSwipeAction.entries.forEach { a -> if (p.contains("color_${a.name}")) colores[a.name] = p.getInt("color_${a.name}", 0) }
     }
 
     private fun leer(p: SharedPreferences, clave: String, def: ChapterSwipeAction) =
         runCatching { ChapterSwipeAction.valueOf(p.getString(clave, null)!!) }.getOrDefault(def)
+
+    /** Colores propios por acción (ARGB); sin entrada = el de Mochy. */
+    val colores = androidx.compose.runtime.mutableStateMapOf<String, Int>()
+    fun elegirColor(a: ChapterSwipeAction, c: Color?) {
+        if (c == null) colores.remove(a.name) else colores[a.name] = c.toArgbCompat()
+        prefs?.edit()?.apply { if (c == null) remove("color_${a.name}") else putInt("color_${a.name}", c.toArgbCompat()) }?.apply()
+    }
+    private fun Color.toArgbCompat(): Int = toArgb()
 
     fun elegirDerecha(a: ChapterSwipeAction) { derecha = a; prefs?.edit()?.putString("derecha", a.name)?.apply() }
     fun elegirIzquierda(a: ChapterSwipeAction) { izquierda = a; prefs?.edit()?.putString("izquierda", a.name)?.apply() }
@@ -104,17 +119,17 @@ fun chapterSwipeAction(
     onTrigger: () -> Unit,
 ): SwipeAction = when (chosen) {
     ChapterSwipeAction.MARK_READ ->
-        if (estado.leido) SwipeAction(Iconos.OjoTachado, chosen.color, "Marcar no leído", onTrigger)
-        else SwipeAction(chosen.icon, chosen.color, chosen.pillLabel, onTrigger)
+        if (estado.leido) SwipeAction(Iconos.OjoTachado, chosen.colorActual, "Marcar no leído", onTrigger)
+        else SwipeAction(chosen.icon, chosen.colorActual, chosen.pillLabel, onTrigger)
     ChapterSwipeAction.BOOKMARK ->
-        if (estado.marcado) SwipeAction(Iconos.MarcaBorde, chosen.color, "Desmarcar", onTrigger)
-        else SwipeAction(chosen.icon, chosen.color, chosen.pillLabel, onTrigger)
+        if (estado.marcado) SwipeAction(Iconos.MarcaBorde, chosen.colorActual, "Desmarcar", onTrigger)
+        else SwipeAction(chosen.icon, chosen.colorActual, chosen.pillLabel, onTrigger)
     ChapterSwipeAction.DOWNLOAD -> when {
         estado.descargando -> SwipeAction(Icons.Rounded.Close, SwipeRemoveColor, "Cancelar descarga", onTrigger)
         estado.descargado -> SwipeAction(Icons.Rounded.Delete, SwipeRemoveColor, "Borrar descarga", onTrigger)
-        else -> SwipeAction(chosen.icon, chosen.color, chosen.pillLabel, onTrigger)
+        else -> SwipeAction(chosen.icon, chosen.colorActual, chosen.pillLabel, onTrigger)
     }
-    else -> SwipeAction(chosen.icon, chosen.color, chosen.pillLabel, onTrigger)
+    else -> SwipeAction(chosen.icon, chosen.colorActual, chosen.pillLabel, onTrigger)
 }
 
 @Composable

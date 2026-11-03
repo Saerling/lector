@@ -103,7 +103,7 @@ fun SwipePreview(action: ChapterSwipeAction, toRight: Boolean, modifier: Modifie
     val out = { pull() * line }
     val armed by remember(reduced) { derivedStateOf { pull() >= 1f } }
 
-    val swipeAction = SwipeAction(action.icon, action.color, action.pillLabel) {}
+    val swipeAction = SwipeAction(action.icon, action.colorActual, action.pillLabel) {}
 
     Box(
         modifier = modifier

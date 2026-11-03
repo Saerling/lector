@@ -154,11 +154,21 @@ fun DialogoAlerta(
  */
 @Composable
 fun MenuShiori(expanded: Boolean, onDismissRequest: () -> Unit, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    if (!expanded) return
-    com.example.lector.ui.mochy.sheet.PopupSheet(onClosed = onDismissRequest) {
-        Column(modifier.fillMaxWidth().heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.62f).dp).verticalScroll(androidx.compose.foundation.rememberScrollState()).navigationBarsPadding().padding(bottom = 12.dp)) {
-            com.example.lector.ui.mochy.sheet.FilasMenu(content)
-        }
+    // Menú anclado (desplegable) con el aspecto de Mochy: superficie oscura, esquinas de 20 dp, filas de 14 sp
+    // SemiBold. Antes era una hoja propia en otra ventana y daba fallos al tocar/desplazar.
+    androidx.compose.material3.MaterialTheme(
+        colorScheme = MaterialTheme.colorScheme.copy(onSurface = LectorColors.Text, onSurfaceVariant = LectorColors.Text),
+        typography = MaterialTheme.typography.copy(labelLarge = MaterialTheme.typography.bodyLarge.copy(fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)),
+    ) {
+        androidx.compose.material3.DropdownMenu(
+            expanded = expanded, onDismissRequest = onDismissRequest,
+            modifier = modifier.widthIn(min = 200.dp).padding(horizontal = 6.dp),
+            shape = SuaveShape(20.dp),
+            containerColor = com.example.lector.ui.mochy.sheet.MenuSurface,
+            tonalElevation = 0.dp, shadowElevation = 12.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, LectorColors.Linea),
+            content = content,
+        )
     }
 }
 

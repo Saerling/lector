@@ -6,6 +6,7 @@ package com.example.lector.ui
 // con su vista previa asomando abajo a la derecha y el borde del elegido, tarjetas con interruptor y vista previa en
 // vivo, selector de dos opciones con la píldora que se desliza) y mismas medidas. El contenido es el de Shiori.
 
+import androidx.compose.ui.graphics.toArgb
 import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -849,6 +850,10 @@ private fun TarjetaDeslizar(
         SwipePreview(accion, haciaDerecha, Modifier.sangrarHorizontal(RellenoTarjetaGesto))
         Spacer(Modifier.height(20.dp))
         DesplegableAccion(accion) { hoja = true }
+        if (accion != ChapterSwipeAction.NONE) {
+            Spacer(Modifier.height(14.dp))
+            SelectorColorGesto(accion)
+        }
     }
     if (hoja) {
         HojaLector(onCerrar = { hoja = false }) {
@@ -856,6 +861,29 @@ private fun TarjetaDeslizar(
                 alElegir(elegida)
                 hoja = false
             }
+        }
+    }
+}
+
+private val ColoresGesto = listOf(
+    Color(0xFF34C759), Color(0xFF0A84FF), Color(0xFF9B72F2), Color(0xFFFF9F0A),
+    Color(0xFFFF375F), Color(0xFF5AC8FA), Color(0xFFFFD60A), Color(0xFF8E8E93),
+)
+
+/** Muestras de color para la acción: la primera vuelve al color de Mochy. */
+@Composable
+private fun SelectorColorGesto(accion: ChapterSwipeAction) {
+    val actual = accion.colorActual
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        (listOf<Color?>(null) + ColoresGesto).forEach { c ->
+            val muestra = c ?: accion.color
+            val elegido = if (c == null) GestosCapitulos.colores[accion.name] == null else GestosCapitulos.colores[accion.name] == c.toArgb()
+            Box(
+                Modifier.size(30.dp).clip(CircleShape).background(muestra)
+                    .then(if (elegido) Modifier.border(2.5.dp, LectorColors.Text, CircleShape) else Modifier)
+                    .clickable { GestosCapitulos.elegirColor(accion, c) },
+                Alignment.Center,
+            ) { if (c == null) LText("A", TextStyle(fontFamily = LectorFont, fontWeight = FontWeight.Bold, fontSize = 12.sp), color = Color.White) }
         }
     }
 }
@@ -927,8 +955,8 @@ private fun InsigniaAccion(accion: ChapterSwipeAction) {
         modifier = Modifier
             .size(28.dp)
             .clip(CircleShape)
-            .background(accion.color.copy(alpha = 0.22f)),
+            .background(accion.colorActual.copy(alpha = 0.22f)),
     ) {
-        Icon(accion.icon, null, tint = accion.color, modifier = Modifier.size(16.dp))
+        Icon(accion.icon, null, tint = accion.colorActual, modifier = Modifier.size(16.dp))
     }
 }
