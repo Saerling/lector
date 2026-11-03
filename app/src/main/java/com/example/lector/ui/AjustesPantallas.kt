@@ -15,6 +15,7 @@ import android.webkit.CookieManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -55,27 +56,149 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Ajustes: lista de secciones (como la de Komikku). */
+/**
+ * Ajustes: la raíz de ajustes de Mochy (ui/screens/settings/MochySettingsScreen.kt): cabecera con la marca de la app,
+ * una línea fina y cada apartado como una burbuja (CategoryBubble). El buscador es el de las subpáginas de Mochy y,
+ * al escribir, los apartados dejan paso a los ajustes que coinciden.
+ */
 @Composable
 fun AjustesScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> Unit) {
-    // Como Mochy: buscador arriba y cada apartado como una burbuja grande; al buscar, salen los ajustes que coinciden.
     var q by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
-    PaginaAjustes("Ajustes", onBack) {
-        Box(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) { CampoBusqueda(q, { q = it }, "Buscar en ajustes") }
-        Spacer(Modifier.height(12.dp))
-        val texto = q.trim()
-        if (texto.isEmpty()) {
-            APARTADOS_AJUSTES.forEachIndexed { i, a ->
-                BurbujaAjuste(a.icono, a.titulo, Modifier.entrada(i)) { onRuta(a.ruta) }
-            }
-        } else {
+    val ctx = LocalContext.current
+    val version = remember {
+        runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
+    }
+    val texto = q.trim()
+    val hallados = remember(texto) {
+        if (texto.isEmpty()) emptyList() else {
             val norm = { t: String -> java.text.Normalizer.normalize(t.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}"), "") }
             val qn = norm(texto)
-            val hallados = AJUSTES_BUSCABLES.filter { (t, d, _) -> norm(t).contains(qn) || norm(d).contains(qn) }
-            if (hallados.isEmpty()) LText("Ningún ajuste coincide con «$texto».", LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted)
-            hallados.forEach { (t, d, r) ->
-                val apartado = APARTADOS_AJUSTES.firstOrNull { it.ruta == r }
-                FilaAjuste(apartado?.icono, t, listOfNotNull(apartado?.titulo, d.takeIf { it.isNotBlank() }).joinToString(" · ")) { onRuta(r) }
+            AJUSTES_BUSCABLES.filter { (t, d, r) ->
+                norm(t).contains(qn) || norm(d).contains(qn) ||
+                    APARTADOS_AJUSTES.firstOrNull { it.ruta == r }?.let { norm(it.titulo).contains(qn) } == true
+            }
+        }
+    }
+    // Animated fade for content when search bar is tapped
+    val contentAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (texto.isNotEmpty()) 0f else 1f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "contentAlpha",
+    )
+
+    com.example.lector.ui.mochy.SubSettingsScaffold(
+        title = "Ajustes",
+        onBack = onBack,
+        searchBar = { com.example.lector.ui.mochy.SubSettingsSearchBar(q, { q = it }) },
+    ) {
+        // Search results view when user types
+        androidx.compose.animation.AnimatedVisibility(
+            visible = texto.isNotEmpty(),
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)) +
+                androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(160, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { 20 },
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120, easing = androidx.compose.animation.core.FastOutSlowInEasing)),
+        ) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (hallados.isEmpty()) {
+                    Text(
+                        text = "Ningún ajuste coincide con «$texto».",
+                        fontFamily = com.example.lector.ui.mochy.InterFontFamily,
+                        fontSize = 15.sp,
+                        color = LectorColors.Text.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
+                    )
+                } else {
+                    hallados.forEach { (t, _, r) ->
+                        val apartado = APARTADOS_AJUSTES.firstOrNull { it.ruta == r }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                                .background(BubbleColor)
+                                .clickable { onRuta(r) }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier.size(38.dp).clip(CircleShape).background(IconBgColor),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(apartado?.icono ?: Icons.Rounded.Settings, null, tint = LectorColors.Text, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(Modifier.width(11.dp))
+                                Column {
+                                    Text(
+                                        text = t,
+                                        fontFamily = com.example.lector.ui.mochy.InterFontFamily,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                        fontSize = 16.sp,
+                                        color = LectorColors.Text,
+                                    )
+                                    Text(
+                                        text = apartado?.titulo ?: "",
+                                        fontFamily = com.example.lector.ui.mochy.InterFontFamily,
+                                        fontSize = 12.sp,
+                                        color = LectorColors.Text.copy(alpha = 0.55f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Normal Settings Content (fades smoothly when searching)
+        if (contentAlpha > 0.001f) {
+            Column(Modifier.fillMaxWidth().graphicsLayer { alpha = contentAlpha }) {
+                // la cabecera de la app, donde Mochy pone su recomendado: marca, nombre y versión
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                        .background(BubbleColor)
+                        .clickable { onRuta(Ruta.AcercaDe) }
+                        .padding(18.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        LogoApp(Modifier.size(44.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "Shiori",
+                                fontFamily = com.example.lector.ui.mochy.InterFontFamily,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = LectorColors.Text,
+                            )
+                            Text(
+                                text = "Versión $version",
+                                fontFamily = com.example.lector.ui.mochy.InterFontFamily,
+                                fontSize = 13.sp,
+                                color = LectorColors.Text.copy(alpha = 0.55f),
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                // Divider
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(0.8.dp)
+                        .background(LectorColors.Text.copy(alpha = 0.1f)),
+                )
+
+                Spacer(Modifier.height(18.dp))
+
+                // Separate Bubble Pills for Categories (No outlines, individually bubble-wrapped)
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    APARTADOS_AJUSTES.forEachIndexed { i, a ->
+                        CategoryBubble(a.titulo, a.icono, Modifier.entrada(i)) { onRuta(a.ruta) }
+                    }
+                }
             }
         }
     }
@@ -134,20 +257,43 @@ private val AJUSTES_BUSCABLES: List<Triple<String, String, Ruta>> = listOf(
     Triple("Versión y actualizaciones", "versión actualizar app novedades", Ruta.AcercaDe),
 )
 
-/** Burbuja de apartado (Mochy): 64 dp, esquinas de 22 dp, icono en círculo de 40 dp y título de 17 sp. */
+private val BubbleColor: Color get() = com.example.lector.ui.mochy.LabColors.Card
+private val IconBgColor: Color get() = if (TemaActual.oscuro) Color(0xFF333338) else LectorColors.CardHigh
+
+/** CategoryBubble de MochySettingsScreen: 64 dp, esquinas de 22 dp, icono en círculo de 40 dp y título de 17 sp. */
 @Composable
-private fun BurbujaAjuste(icono: androidx.compose.ui.graphics.vector.ImageVector, titulo: String, modifier: Modifier, onClick: () -> Unit) {
-    Row(
-        modifier.padding(horizontal = 20.dp, vertical = 6.dp).fillMaxWidth().height(64.dp).clip(SuaveShape(22.dp))
-            .background(LectorColors.Card).pressableCon(0.97f, onClick).padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun CategoryBubble(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+            .background(BubbleColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(LectorColors.PillFill), Alignment.Center) {
-            Icon(icono, null, tint = LectorColors.Text, modifier = Modifier.size(20.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(IconBgColor),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, null, tint = LectorColors.Text, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = title,
+                fontFamily = com.example.lector.ui.mochy.InterFontFamily,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                fontSize = 17.sp,
+                color = LectorColors.Text,
+            )
         }
-        Spacer(Modifier.width(12.dp))
-        LText(titulo, LectorType.Body.copy(fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), Modifier.weight(1f), maxLines = 1)
-        Icon(Icons.Rounded.KeyboardArrowRight, null, tint = LectorColors.Muted)
     }
 }
 

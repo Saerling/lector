@@ -108,70 +108,25 @@ fun rememberPliegue(scroll: ScrollState, entra: Dp = 24.dp, sale: Dp = 6.dp): St
     return animateFloatAsState(if (plegado) 1f else 0f, if (Mov.reducido) tween(120) else tween(1000, easing = PliegueEasing), label = "pliegue")
 }
 
-/** Botón atrás redondo gris de 40 dp. */
+/** Botón atrás redondo gris de 40 dp: el de las subpáginas de ajustes de Mochy (ui/mochy/SubSettingsScaffold.kt). */
 @Composable
 fun BotonAtras(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier.size(TamAtras).pressableCon(0.9f, onBack).clip(CircleShape).background(LectorColors.PillFill),
-        Alignment.Center,
-    ) { Icon(Icons.Rounded.KeyboardArrowLeft, "Atrás", tint = LectorColors.Text, modifier = Modifier.size(26.dp)) }
+    com.example.lector.ui.mochy.SubSettingsBackButton(onBack, modifier)
 }
 
 /**
- * Página de ajustes a pantalla completa (como las de musicfy): título enorme que, al desplazar, se encoge y se
- * desliza junto al botón atrás con un desenfoque de paso, sobre una cabecera de cristal que aparece a la vez.
+ * Página de ajustes a pantalla completa: el SubSettingsScaffold de Mochy (título enorme que, al desplazar, se encoge
+ * y se desliza junto al botón atrás con un desenfoque de paso, sobre una cabecera de cristal progresivo).
+ * Las filas de las páginas de Shiori ponen su propio margen lateral, así que el contenido va sin él.
  */
 @Composable
 fun PaginaAjustes(titulo: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    val scroll = rememberScrollState()
-    val cristal = remember { EstadoCristal() }
-    val pliegue by rememberPliegue(scroll)
-    val arriba = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val altoTotal = arriba + AltoCabecera
-    var altoTitulo by remember { mutableIntStateOf(0) }
-    val fondo = LectorColors.Bg
-
-    Box(Modifier.fillMaxSize().background(fondo)) {
-        Column(
-            Modifier.fillMaxSize().raizCristal(cristal).verticalScroll(scroll).navigationBarsPadding().padding(bottom = 32.dp)
-        ) {
-            Spacer(Modifier.height(altoTotal))
-            content()
-        }
-        // Cabecera de cristal: aparece al plegarse.
-        Box(Modifier.fillMaxWidth().height(altoTotal).graphicsLayer { alpha = pliegue }) {
-            CristalProgresivo(cristal, { 40f * pliegue }, fondo, Modifier.fillMaxSize())
-            Box(
-                Modifier.matchParentSize().background(
-                    Brush.verticalGradient(
-                        0f to fondo.copy(alpha = 0.90f), 0.20f to fondo.copy(alpha = 0.50f),
-                        0.45f to fondo.copy(alpha = 0.18f), 0.75f to Color.Transparent,
-                    )
-                )
-            )
-        }
-        Box(Modifier.fillMaxWidth().height(altoTotal).padding(top = arriba, start = MargenPagina, end = MargenPagina)) {
-            BotonAtras(onBack, Modifier.padding(top = ArribaCabecera))
-            LText(
-                titulo, LectorType.Display.copy(fontSize = 32.sp, lineHeight = 40.sp), maxLines = 1,
-                modifier = Modifier
-                    .onSizeChanged { altoTitulo = it.height }
-                    .graphicsLayer {
-                        val p = pliegue
-                        transformOrigin = TransformOrigin(0f, 0f)
-                        val e = 1f + (EscalaPlegado - 1f) * p
-                        scaleX = e; scaleY = e
-                        val centroAtras = (ArribaCabecera + TamAtras / 2).toPx()
-                        val arribaPlegado = centroAtras - altoTitulo * EscalaPlegado / 2f
-                        translationX = TituloPlegadoX.toPx() * p
-                        translationY = TituloArriba.toPx() + (arribaPlegado - TituloArriba.toPx()) * p
-                        // Desenfoque de paso: máximo a mitad del pliegue.
-                        val b = (sin(p.coerceIn(0f, 1f) * PI.toFloat()) * 26f)
-                        renderEffect = if (hayDesenfoque && b > 0.5f) BlurEffect(b, b, TileMode.Decal) else null
-                    },
-            )
-        }
-    }
+    com.example.lector.ui.mochy.SubSettingsScaffold(
+        title = titulo,
+        onBack = onBack,
+        contentPadding = 0.dp,
+        content = content,
+    )
 }
 
 /*
