@@ -495,7 +495,7 @@ fun FichaMangaScreen(
                     ) {
                         ImagenRemota(
                             fi.detalle.portadaUrl ?: manga.portadaUrl,
-                            Modifier.width(48.dp).aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), motor.cabeceras(f), fuenteId = f.id,
+                            Modifier.width(48.dp).aspectRatio(2f / 3f).clip(formaPortada(0.75f)), motor.cabeceras(f), fuenteId = f.id,
                         )
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
@@ -593,7 +593,7 @@ fun FichaMangaScreen(
                             vp != null -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 items(vp.size) { i ->
                                     Box(
-                                        Modifier.width(92.dp).aspectRatio(2f / 3f).clip(SuaveShape(12.dp)).background(LectorColors.CardHigh)
+                                        Modifier.width(92.dp).aspectRatio(2f / 3f).clip(formaPortada(0.75f)).background(LectorColors.CardHigh)
                                             .press3D().pressable { onLeer(fi.capitulos, fi.capitulos.lastIndex, i) },
                                         Alignment.Center,
                                     ) {
@@ -617,7 +617,7 @@ fun FichaMangaScreen(
                             else -> LazyRow(contentPadding = PaddingValues(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 items(lista, key = { it.url }) { m ->
                                     Column(Modifier.width(96.dp).press3D().pressable { alAbrirOtro(f, m) }) {
-                                        ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)), motor.cabeceras(f), fuenteId = f.id)
+                                        ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(formaPortada(0.75f)), motor.cabeceras(f), fuenteId = f.id)
                                         Spacer(Modifier.height(6.dp))
                                         LText(m.titulo, LectorType.Label, maxLines = 2)
                                     }
@@ -636,7 +636,7 @@ fun FichaMangaScreen(
                             items(recs, key = { it.id }) { r ->
                                 Column(Modifier.width(96.dp).press3D().pressable { abrirRecomendacion(r) }) {
                                     Box {
-                                        ImagenRemota(r.portada, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(12.dp)))
+                                        ImagenRemota(r.portada, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(formaPortada(0.75f)))
                                         if (abriendoRec == r.id) Box(
                                             Modifier.matchParentSize().clip(SuaveShape(12.dp)).background(Color.Black.copy(alpha = 0.5f)),
                                             Alignment.Center,

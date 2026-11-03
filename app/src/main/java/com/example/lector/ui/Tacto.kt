@@ -48,5 +48,5 @@ object Tacto {
 object MovimientoReducido {
     var activo = false; private set
 
-    fun actualizar() { activo = !ValueAnimator.areAnimatorsEnabled() }
+    fun actualizar() { activo = !ValueAnimator.areAnimatorsEnabled() || !MovimientoApp.activado }
 }

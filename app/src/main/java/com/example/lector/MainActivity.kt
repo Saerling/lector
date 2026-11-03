@@ -23,6 +23,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.compose.ui.platform.createLifecycleAwareWindowRecomposer
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -117,7 +118,13 @@ class MainActivity : ComponentActivity() {
             NuevaVersion.alArrancar(applicationContext)
         }
         procesarEnlace(intent)
-        setContent {
+        // Como Mochy: un Recomposer propio con nuestra escala de duración, así «Animación» (encendida / velocidad)
+        // de Personalización afecta a TODAS las animaciones de Compose de la app.
+        com.example.lector.ui.MovimientoApp.iniciar(applicationContext)
+        com.example.lector.ui.MovimientoReducido.actualizar()
+        @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+        val recompositor = window.decorView.createLifecycleAwareWindowRecomposer(com.example.lector.ui.MovimientoApp.escala, lifecycle)
+        setContent(parent = recompositor) {
             App(
                 almacen,
                 destino = destino, alConsumirDestino = { destino = null },

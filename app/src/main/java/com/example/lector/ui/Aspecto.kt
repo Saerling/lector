@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.unit.dp
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -35,6 +36,8 @@ object Aspecto {
     var fondo by mutableStateOf(FondoApp.NEGRO); private set
     var arranque by mutableStateOf(AnimArranque.AGUJERO); private set
     var luzTactil by mutableStateOf(true); private set
+    /** Redondeo de las portadas en toda la app, en dp (el «Cover rounding» de Mochy). */
+    var radioPortada by mutableFloatStateOf(16f); private set
 
     fun iniciar(ctx: Context) {
         val p = ctx.getSharedPreferences("aspecto", Context.MODE_PRIVATE).also { prefs = it }
@@ -42,13 +45,19 @@ object Aspecto {
         fondo = runCatching { FondoApp.valueOf(p.getString("fondo", null)!!) }.getOrDefault(FondoApp.NEGRO)
         arranque = runCatching { AnimArranque.valueOf(p.getString("arranque", null)!!) }.getOrDefault(AnimArranque.AGUJERO)
         luzTactil = p.getBoolean("luz", true)
+        radioPortada = p.getFloat("radio_portada", 16f)
     }
 
     fun elegir(s: Superficie) { superficie = s; prefs?.edit()?.putString("superficie", s.name)?.apply() }
     fun elegir(f: FondoApp) { fondo = f; prefs?.edit()?.putString("fondo", f.name)?.apply() }
     fun elegir(a: AnimArranque) { arranque = a; prefs?.edit()?.putString("arranque", a.name)?.apply() }
     fun elegirLuz(v: Boolean) { luzTactil = v; prefs?.edit()?.putBoolean("luz", v)?.apply() }
+    fun elegirRadioPortada(v: Float) { radioPortada = v; prefs?.edit()?.putFloat("radio_portada", v)?.apply() }
 }
+
+/** Forma de las portadas según el ajuste de redondeo ([escala] para portadas pequeñas). */
+val FormaPortada: androidx.compose.ui.graphics.Shape get() = SuaveShape(Aspecto.radioPortada.dp)
+fun formaPortada(escala: Float): androidx.compose.ui.graphics.Shape = SuaveShape((Aspecto.radioPortada * escala).dp)
 
 /**
  * Fondo vivo (pseudo liquid glass): manchas de luz muy suaves que derivan despacio detrás de las pestañas; el cristal

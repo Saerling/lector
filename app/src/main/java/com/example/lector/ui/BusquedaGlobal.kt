@@ -254,7 +254,7 @@ internal fun FilaResultados(
                         val igual = clave != null && tituloComparable(m.titulo) == clave
                         Column(Modifier.width(112.dp).origenTransicion().press3D().pressable(onLongClick = { onLargo(m) }) { onManga(m) }) {
                             Box {
-                                ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(16.dp)), cabeceras, fuenteId = f.id)
+                                ImagenRemota(m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(FormaPortada), cabeceras, fuenteId = f.id)
                                 if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                                 else if (igual) Insignia("Mismo título", Modifier.align(Alignment.TopStart).padding(6.dp))
                             }

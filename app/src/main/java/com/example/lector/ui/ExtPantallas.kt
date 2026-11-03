@@ -668,14 +668,14 @@ private fun NavegarFuente(
                 } else if (vista == com.example.lector.VistaExplorar.CUADRICULA) Column(mod) {
                     Box {
                         ImagenRemota(
-                            m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(16.dp)).alpha(if (esta) 0.55f else 1f),
+                            m.portadaUrl, Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(FormaPortada).alpha(if (esta) 0.55f else 1f),
                             cabeceras, fuenteId = f.id
                         )
                         if (esta) EnBiblioteca(Modifier.align(Alignment.TopStart).padding(6.dp))
                     }
                     Spacer(Modifier.height(8.dp))
                     LText(m.titulo, LectorType.Label.copy(fontSize = 13.sp, lineHeight = 17.sp), maxLines = 2)
-                } else Box(mod.fillMaxWidth().aspectRatio(2f / 3f).clip(SuaveShape(16.dp))) {
+                } else Box(mod.fillMaxWidth().aspectRatio(2f / 3f).clip(FormaPortada)) {
                     // Compacta (título sobre la portada) o solo portadas.
                     ImagenRemota(m.portadaUrl, Modifier.fillMaxSize().alpha(if (esta) 0.55f else 1f), cabeceras, fuenteId = f.id)
                     if (vista == com.example.lector.VistaExplorar.COMPACTA) {

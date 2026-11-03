@@ -78,7 +78,7 @@ fun LText(
 
 /** Portada real (la que ya guarda tu Almacen); si no hay, muestra la inicial del título. */
 @Composable
-fun ComicCover(comic: Comic, almacen: Almacen, modifier: Modifier = Modifier, shape: Shape = SuaveShape(20.dp)) {
+fun ComicCover(comic: Comic, almacen: Almacen, modifier: Modifier = Modifier, shape: Shape = FormaPortada) {
     val portada = rememberPortada(almacen, comic.id)
     Box(modifier.clip(shape).background(LectorColors.CardHigh), contentAlignment = Alignment.Center) {
         when {
@@ -138,7 +138,7 @@ fun CoverCarousel(items: List<Comic>, almacen: Almacen, onClick: (Comic) -> Unit
         flingBehavior = rememberSnapFlingBehavior(state)
     ) {
         itemsIndexed(items, key = { _, c -> c.id }) { i, c ->
-            val forma = SuaveShape(18.dp)
+            val forma = FormaPortada
             val progreso = c.progresoLectura()
             val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
             Column(Modifier.width(132.dp).entrada(i, 45).pressable { onClick(c) }) {

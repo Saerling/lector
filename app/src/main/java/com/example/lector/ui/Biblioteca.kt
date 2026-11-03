@@ -784,7 +784,7 @@ private fun TarjetaBiblioteca(
     val acento = MaterialTheme.colorScheme.primary
     // Selección con muelle: la portada redondea más sus esquinas, se encoge un poco y aparece el borde de acento.
     val s by animateFloatAsState(if (seleccionado) 1f else 0f, if (Mov.reducido) snap() else Muelles.espacial(), label = "selTarjeta")
-    val forma = SuaveShape(18.dp + 10.dp * s)
+    val forma = SuaveShape(Aspecto.radioPortada.dp + 10.dp * s) // redondeo de Personalización
     val comoda = vista == Vista.CUADRICULA_COMODA
     val compacta = vista == Vista.CUADRICULA_COMPACTA
     val progreso = progresoDe(c)

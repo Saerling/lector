@@ -84,7 +84,7 @@ fun AjustesScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> Unit) 
 private class Apartado(val icono: androidx.compose.ui.graphics.vector.ImageVector, val titulo: String, val ruta: Ruta)
 
 private val APARTADOS_AJUSTES = listOf(
-    Apartado(Icons.Rounded.Create, "Apariencia", Ruta.Apariencia),
+    Apartado(Icons.Rounded.Create, "Personalización", Ruta.Apariencia),
     Apartado(Icons.Rounded.List, "Biblioteca", Ruta.AjBiblioteca),
     Apartado(Icons.Rounded.PlayArrow, "Visor", Ruta.AjVisor),
     Apartado(Iconos.Descargar, "Descargas", Ruta.AjDescargas),
@@ -830,7 +830,7 @@ private fun VistaSuperficie(s: Superficie, acento: Color) {
 }
 
 @Composable
-private fun VistaBarra(s: Superficie, modifier: Modifier = Modifier) {
+internal fun VistaBarra(s: Superficie, modifier: Modifier = Modifier) {
     val forma = CircleShape
     val oscuro = TemaActual.oscuro
     Box(
