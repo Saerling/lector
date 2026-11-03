@@ -181,101 +181,32 @@ enum class LectorTab(val label: String, val icon: ImageVector, val iconoApagado:
 
 /** Alto de la barra y del mini lector: un «estadio» de 64 dp, como en musicfy. */
 private val AltoCromo = 64.dp
-/** La píldora iluminada queda a 8 dp de arriba, abajo y de los extremos de la barra. */
-private val MargenLuz = 8.dp
-private val HuecoLuz = 4.dp
-/** El borde delantero de la píldora llega antes que el trasero: se estira hacia la pestaña y luego se asienta. */
-private val LuzDelante = spring<Float>(dampingRatio = 0.82f, stiffness = 700f)
-private val LuzDetras = spring<Float>(dampingRatio = 0.82f, stiffness = 320f)
-
 /** Sombra suave bajo el cromo flotante (no se nota como halo sobre negro). */
 private fun Modifier.sombraCromo(forma: Shape): Modifier =
     shadow(10.dp, forma, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
 
 /**
- * Barra flotante de cristal (musicfy): estadio de 64 dp con lo de debajo desenfocado, una píldora
- * blanca al 10 % detrás de la pestaña activa que se estira al cambiar de pestaña, y cada icono pasa
- * de contorno a relleno al encenderse. Al pulsar, la pestaña se aplasta y rebota.
+ * Barra flotante de cristal: la AppNavigationBar de Mochy Music (ui/mochy/AppNavigation.kt), solo iconos, con las
+ * pestañas de Shiori. Inicio y Explorar llevan el icono a 22 dp y el resto a 24, como Home y Search en Mochy.
  */
 @Composable
 fun FloatingNavBar(selected: LectorTab, onSelect: (LectorTab) -> Unit, modifier: Modifier = Modifier) {
-    val forma = CircleShape
     val tabs = LectorTab.values()
-    val indice = selected.ordinal
-    val inicio = remember { Animatable(indice.toFloat()) }
-    val fin = remember { Animatable(indice.toFloat()) }
-    // Ritmo que sigue al gesto (Living Flow): si cambias de pestaña rápido, la luz va más deprisa; con calma, más suave.
-    var ultimoCambio by remember { mutableStateOf(0L) }
-    LaunchedEffect(indice) {
-        val ahora = android.os.SystemClock.uptimeMillis()
-        val rapido = ahora - ultimoCambio < 450
-        ultimoCambio = ahora
-        val delante = if (rapido) spring<Float>(dampingRatio = 0.86f, stiffness = 1300f) else LuzDelante
-        val detras = if (rapido) spring<Float>(dampingRatio = 0.86f, stiffness = 650f) else LuzDetras
-        val destino = indice.toFloat()
-        val aDerecha = destino > (inicio.value + fin.value) / 2f
-        launch { inicio.animateTo(destino, if (aDerecha) detras else delante) }
-        fin.animateTo(destino, if (aDerecha) delante else detras)
-    }
-    // La píldora de la pestaña activa lleva el acento (tonal), no un blanco plano.
-    val luz = androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
-    Box(
-        modifier.fillMaxWidth().height(AltoCromo)
-            .press3D(4f, 0.985f)
-            .sombraCromo(forma)
-            .clip(forma)
-            .drawWithContent { drawContent(); lineaCristal(size.height / 2f) }
-            .luzTactil(),
-    ) {
-        FondoCristal(CristalApp, Modifier.fillMaxSize())
-        Row(
-            Modifier.fillMaxSize()
-                .padding(horizontal = MargenLuz - HuecoLuz / 2)
-                .drawBehind {
-                    val ranura = size.width / tabs.size
-                    val medio = HuecoLuz.toPx() / 2f
-                    val margen = MargenLuz.toPx()
-                    val izq = inicio.value * ranura + medio
-                    val der = (fin.value + 1f) * ranura - medio
-                    val alto = size.height - margen * 2f
-                    drawRoundRect(luz, Offset(izq, margen), Size(der - izq, alto), CornerRadius(alto / 2f))
-                },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            tabs.forEach { tab -> PestanaNav(tab, tab == selected) { onSelect(tab) } }
-        }
-    }
-}
-
-@Composable
-private fun RowScope.PestanaNav(tab: LectorTab, encendida: Boolean, onClick: () -> Unit) {
-    val fuente = remember { MutableInteractionSource() }
-    val luz by animateFloatAsState(if (encendida) 1f else 0f, tween(200), label = "pestana")
-    Box(
-        Modifier.weight(1f).fillMaxHeight()
-            .rebote(fuente, 0.85f)
-            .clickable(interactionSource = fuente, indication = null, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        // Encendida: el icono (relleno y con el acento) sube y da un pequeño salto, y aparece su nombre debajo.
-        val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
-        val salto by animateFloatAsState(if (encendida) 1f else 0f, Muelles.espacialRapido(), label = "salto")
-        Box(Modifier.graphicsLayer { translationY = -7.dp.toPx() * salto; val e = 1f + 0.12f * salto; scaleX = e; scaleY = e }) {
-            Icon(
-                tab.iconoApagado, tab.label, tint = LectorColors.Text,
-                modifier = Modifier.size(24.dp).graphicsLayer { alpha = 0.7f * (1f - luz) },
-            )
-            Icon(
-                tab.icon, null, tint = acento,
-                modifier = Modifier.size(24.dp).graphicsLayer { alpha = luz },
+    val items = remember {
+        tabs.map { t ->
+            com.example.lector.ui.mochy.NavItem(
+                t.label, t.icon, t.iconoApagado,
+                if (t == LectorTab.Home || t == LectorTab.Search) 22.dp else 24.dp,
             )
         }
-        LText(
-            if (tab == LectorTab.Updates) "Nuevos" else tab.label, LectorType.Label.copy(fontSize = 10.sp), color = acento, maxLines = 1,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 9.dp)
-                .graphicsLayer { alpha = luz; translationY = (1f - salto) * 6.dp.toPx() },
-        )
     }
+    com.example.lector.ui.mochy.AppNavigationBar(
+        navigationItems = items,
+        selectedIndex = selected.ordinal,
+        onItemClick = { i, _ -> onSelect(tabs[i]) },
+        modifier = modifier,
+        clipped = Modifier.luzTactil(),
+    )
 }
 
 /**

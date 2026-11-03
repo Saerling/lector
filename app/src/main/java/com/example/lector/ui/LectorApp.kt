@@ -353,8 +353,9 @@ fun Inicio(
     val abiertaEncima = detalleId != null || pila.isNotEmpty()
     val retroceso = remember { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(abiertaEncima) {
+        // HomeRecedeSpring / HomeReturnEase de Mochy (NavigationBuilder): escala 0,92 y alfa 0,45 (ver graphicsLayer).
         if (abiertaEncima) retroceso.animateTo(1f, spring(dampingRatio = 0.88f, stiffness = 150f, visibilityThreshold = 0.001f))
-        else retroceso.animateTo(0f, tween(560, easing = CierreEasing))
+        else retroceso.animateTo(0f, tween(ContenedorCierreMs, easing = CierreEasing))
     }
 
     Box(
@@ -385,12 +386,13 @@ fun Inicio(
                     alpha = 1f - 0.55f * r
                 }
             },
-            // Las pestañas se deslizan un octavo de pantalla hacia el lado de la pestaña nueva, con un fundido.
+            // Como el NavHost de Mochy (MainActivity): un octavo de pantalla hacia el lado de la pestaña nueva con el
+            // muelle por defecto de slideIn, y un fundido de 200 ms.
             transitionSpec = {
-                val derecha = targetState.ordinal > initialState.ordinal
+                val derecha = targetState.ordinal >= initialState.ordinal
                 if (Mov.reducido) ContentTransform(fadeIn(tween(120)), fadeOut(tween(100))) else ContentTransform(
-                    slideInHorizontally(tween(260, easing = EnfasisEasing)) { if (derecha) it / 8 else -it / 8 } + fadeIn(tween(200)),
-                    slideOutHorizontally(tween(260, easing = EnfasisEasing)) { if (derecha) -it / 8 else it / 8 } + fadeOut(tween(200)),
+                    slideInHorizontally { if (derecha) it / 8 else -it / 8 } + fadeIn(tween(200)),
+                    slideOutHorizontally { if (derecha) -it / 8 else it / 8 } + fadeOut(tween(200)),
                 )
             }
         ) { t ->
@@ -456,13 +458,26 @@ fun Inicio(
         // Páginas que se deslizan encima (detalle de cómic, Más → Categorías, Ajustes, etc.).
         AnimatedContent(
             targetState = capa, label = "capa",
+            // Como Mochy (NavigationBuilder): el detalle de un cómic es una ruta «de portada» (entra con fadeIn 300 y al
+            // volver se encoge hacia arriba: scaleOut 260 a 0,82 desde (0,5, 0,22) + fadeOut 180); las demás páginas
+            // usan la transición por defecto del NavHost (un octavo de pantalla + fundido de 200).
             transitionSpec = {
-                if (Mov.reducido) ContentTransform(fadeIn(tween(120)), fadeOut(tween(100))) else ContentTransform(
-                    slideInHorizontally(tween(330, easing = EnfasisEasing)) { it / 8 } +
-                        scaleIn(tween(330, easing = EnfasisEasing), initialScale = 0.96f) +
-                        fadeIn(tween(260, easing = EnfasisEasing)),
-                    slideOutHorizontally(tween(240, easing = EnfasisEasing)) { -it / 8 } +
-                        scaleOut(tween(240, easing = EnfasisEasing), targetScale = 0.97f) + fadeOut(tween(160)),
+                val vuelta = targetState.isEmpty() || (targetState == Ruta.Ajustes.name && initialState.isNotEmpty())
+                val portada = (if (vuelta) initialState else targetState).startsWith("d:")
+                if (Mov.reducido) ContentTransform(fadeIn(tween(120)), fadeOut(tween(100)))
+                else if (portada && !vuelta) ContentTransform(fadeIn(tween(300)), fadeOut(tween(200)))
+                else if (portada) ContentTransform(
+                    fadeIn(tween(300)),
+                    scaleOut(tween(260), targetScale = 0.82f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.22f)) +
+                        fadeOut(tween(180)),
+                )
+                else if (!vuelta) ContentTransform(
+                    slideInHorizontally { it / 8 } + fadeIn(tween(200)),
+                    slideOutHorizontally { -it / 8 } + fadeOut(tween(200)),
+                )
+                else ContentTransform(
+                    slideInHorizontally { -it / 8 } + fadeIn(tween(200)),
+                    slideOutHorizontally { it / 8 } + fadeOut(tween(200)),
                 )
             }
         ) { clave ->
@@ -545,10 +560,16 @@ fun Inicio(
                     // La página «crece» al abrirse (muelle suave, interrumpible) y se encoge al cerrarse.
                     // Si se abrió tocando una portada (ficha), la página crece DESDE esa portada (container transform de
                     // Mochy); si no, crece desde el punto tocado.
+                    // Sin portada de origen, como Mochy: la lista de la fuente es una página normal (un octavo de pantalla +
+                    // fundido de 200) y la ficha y el lector son rutas «de portada» (fadeIn 300; al cerrar, scaleOut 260 a
+                    // 0,82 desde (0,5, 0,22) + fadeOut 180).
                     enter = if (Mov.reducido) fadeIn(tween(120)) else if (conContenedor) fadeIn(tween(90))
-                        else scaleIn(spring(dampingRatio = 0.88f, stiffness = 150f), initialScale = 0.86f, transformOrigin = OrigenToque.origen()) + fadeIn(tween(240)),
+                        else if (r == Ruta.FuenteDetalle) slideInHorizontally { it / 8 } + fadeIn(tween(200))
+                        else fadeIn(tween(300)),
                     exit = if (Mov.reducido) fadeOut(tween(100)) else if (conContenedor && detalleId == null) fadeOut(tween(200, delayMillis = 380))
-                        else scaleOut(tween(420, easing = CierreEasing), targetScale = 0.88f) + fadeOut(tween(300, easing = CierreEasing)),
+                        else if (r == Ruta.FuenteDetalle) slideOutHorizontally { it / 8 } + fadeOut(tween(200))
+                        else scaleOut(tween(260), targetScale = 0.82f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.22f)) +
+                            fadeOut(tween(180)),
                 ) {
                     val rectOrigen = if (conContenedor && detalleId == null) rectFicha[0] else null
                     val p by transition.animateFloat(
