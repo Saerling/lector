@@ -815,3 +815,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 ## 2bo. PASO 67 (0.58)
 - Menús (MenuShiori): con desplazamiento (no se cortan), y solo las filas reales llevan fondo/hueco (separadores y títulos ya no salen como píldoras).
 - Lector: barras estilo iOS 26 — botones redondos de cristal sueltos y cápsula de título; abajo cápsula de avance y cápsula de herramientas solo con iconos (se quitó el duplicado Modo/Ajustes).
+
+## 2bp. PASO 68 (0.59)
+- Menús y hojas: altura máxima explícita (62 % / 80 % de pantalla). Antes se medían más altas que la pantalla: las últimas opciones quedaban fuera, no desplazaba y al arrastrar se movía la hoja entera.

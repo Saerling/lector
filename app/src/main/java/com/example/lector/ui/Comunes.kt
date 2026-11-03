@@ -201,7 +201,8 @@ fun HojaLector(onCerrar: () -> Unit, content: @Composable ColumnScope.() -> Unit
     }
     com.example.lector.ui.mochy.sheet.PopupSheet(onClosed = onCerrar, fullBleed = true) {
         CompositionLocalProvider(LocalContentColor provides LectorColors.Text) {
-            content()
+            // Altura acotada: sin esto la hoja podía medirse más alta que la pantalla y su contenido no desplazaba.
+            Column(Modifier.fillMaxWidth().heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.8f).dp)) { content() }
         }
         Spacer(Modifier.navigationBarsPadding())
     }
