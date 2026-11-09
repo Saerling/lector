@@ -1535,3 +1535,11 @@ private fun huecoCapitulos(a: String, b: String): Int {
     val y = numeroCapitulo(b) ?: return 0
     return (kotlin.math.floor(maxOf(x, y)) - kotlin.math.floor(minOf(x, y)) - 1).toInt().coerceIn(0, 999)
 }
+
+/** Copia [texto] al portapapeles y lo avisa (Android 13+ ya muestra su propio aviso). */
+fun copiarTexto(ctx: Context, texto: String) {
+    if (texto.isBlank()) return
+    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    cm.setPrimaryClip(android.content.ClipData.newPlainText("Shiori", texto))
+    if (android.os.Build.VERSION.SDK_INT < 33) Avisos.mostrar("Copiado")
+}

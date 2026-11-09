@@ -85,7 +85,7 @@ fun hace(ms: Long): String {
     }
 }
 
-private fun clave(a: ActualizacionCap) = "${a.fuenteId}|${a.capUrl}"
+private fun clave(a: ActualizacionCap) = "${a.fuenteId}|${a.urlManga}|${a.capUrl}"
 
 /**
  * Pestaña "Actualizaciones" (como la de Komikku): capítulos nuevos de los mangas de tu biblioteca, por día y
@@ -452,7 +452,7 @@ private fun FilaActualizacion(
     val version = Descargas.version.value
     val estado: EstadoDescarga = when {
         fraccion != null -> EstadoDescarga.Descargando(fraccion)
-        version >= 0 && almacen.estaDescargado(a.fuenteId, a.capUrl) -> EstadoDescarga.Listo
+        version >= 0 && almacen.estaDescargado(a.fuenteId, a.urlManga, a.capUrl) -> EstadoDescarga.Listo
         else -> EstadoDescarga.Libre
     }
     val hora = remember(a.detectado) { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(a.detectado)) }
@@ -461,7 +461,7 @@ private fun FilaActualizacion(
         val f = ext.fuentes.firstOrNull { it.id == a.fuenteId }
         when {
             estado is EstadoDescarga.Descargando -> Descargas.cancelar(ctx, k)
-            estado is EstadoDescarga.Listo -> { almacen.borrarDescarga(a.fuenteId, a.capUrl); Descargas.version.value++ }
+            estado is EstadoDescarga.Listo -> { almacen.borrarDescarga(a.fuenteId, a.urlManga, a.capUrl); Descargas.version.value++ }
             f == null -> Avisos.mostrar("Esa fuente no está disponible ahora")
             else -> Descargas.encolar(ctx, f, a.urlManga, a.titulo, listOf(com.example.lector.CacheFichas.conMemo(a.fuenteId, a.urlManga, CapituloFuente(a.capUrl, a.capNombre, a.capFecha, a.scanlator, a.capNumero))))
         }

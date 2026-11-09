@@ -199,10 +199,21 @@ fun HojaLector(onCerrar: () -> Unit, content: @Composable ColumnScope.() -> Unit
         Hojas.abiertas++
         onDispose { Hojas.abiertas-- }
     }
-    com.example.lector.ui.mochy.sheet.PopupSheet(onClosed = onCerrar, fullBleed = true) {
+    // Hoja estándar de Material (fiable: misma ventana del sistema para toques, atrás y teclado) con el aspecto de
+    // Mochy: superficie #0B0B0C / clara, esquinas de 24 dp y asa de 36 × 4 dp. La de ventana propia daba fallos.
+    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onCerrar,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = com.example.lector.ui.mochy.sheet.MenuSurface,
+        contentColor = LectorColors.Text,
+        tonalElevation = 0.dp,
+        scrimColor = Color.Black.copy(alpha = 0.5f),
+        dragHandle = { Box(Modifier.padding(vertical = 14.dp).size(36.dp, 4.dp).clip(CircleShape).background(LectorColors.Muted.copy(alpha = 0.5f))) },
+    ) {
         CompositionLocalProvider(LocalContentColor provides LectorColors.Text) {
-            // Altura acotada: sin esto la hoja podía medirse más alta que la pantalla y su contenido no desplazaba.
-            Column(Modifier.fillMaxWidth().heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.8f).dp)) { content() }
+            Column(Modifier.fillMaxWidth().heightIn(max = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.85f).dp)) { content() }
         }
         Spacer(Modifier.navigationBarsPadding())
     }

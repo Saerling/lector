@@ -823,3 +823,8 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - MenuShiori vuelve a ser desplegable anclado (DropdownMenu) con aspecto de Mochy; la hoja en ventana propia fallaba.
 - Deslizar capítulos también en Actualizaciones e Historial (en línea). Color por acción en Personalización → Gestos (prefs gestos/color_*).
 - «No se pudieron revisar»: por fuente dice qué extensión/repositorio la tiene (caché de repos, sin red) y tocar un título lo busca en las fuentes instaladas.
+
+## 2br. PASO 70 (0.61)
+- Descargas por manga (como Komikku fuente/manga/capítulo): clave fuente|urlManga|capUrl en archivo, cola, progreso y caché del lector. Las viejas se siguen usando si el índice dice que son de ese manga. Arregla capítulos bajados que salían (y se leían) en todos los mangas de la fuente (fuentes con memo y URLs repetidas).
+- HojaLector pasa a ModalBottomSheet de Material con el aspecto de Mochy (la ventana propia fallaba).
+- Ficha: descripción a 3 líneas (ya no crece tapando la portada); tocarla abre hoja con texto seleccionable, géneros, copiar y buscar. Título: tocar = búsqueda global, mantener = copiar.

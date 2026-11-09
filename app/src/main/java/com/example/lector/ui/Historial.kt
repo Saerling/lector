@@ -244,7 +244,7 @@ private fun FilaHistorial(item: ItemHistorial, almacen: Almacen, hora: String, a
         val ctx = androidx.compose.ui.platform.LocalContext.current
         val ext = remember { com.example.lector.ext.ExtManager.obtener(ctx) }
         val leido = ext.leidos.let { ext.esLeido(e.fuenteId, e.capUrl) }
-        val descargado = com.example.lector.Descargas.version.value >= 0 && almacen.estaDescargado(e.fuenteId, e.capUrl)
+        val descargado = com.example.lector.Descargas.version.value >= 0 && almacen.estaDescargado(e.fuenteId, e.urlManga, e.capUrl)
         com.example.lector.ui.mochy.ChapterSwipeBox(
             estado = com.example.lector.ui.mochy.EstadoCapituloSwipe(leido, ext.esMarcado(e.fuenteId, e.capUrl), descargado),
             onAction = { acc ->
@@ -256,7 +256,7 @@ private fun FilaHistorial(item: ItemHistorial, almacen: Almacen, hora: String, a
                     com.example.lector.ui.mochy.ChapterSwipeAction.DOWNLOAD -> {
                         val f = ext.fuentes.firstOrNull { it.id == e.fuenteId }
                         when {
-                            descargado -> { almacen.borrarDescarga(e.fuenteId, e.capUrl); com.example.lector.Descargas.version.value++ }
+                            descargado -> { almacen.borrarDescarga(e.fuenteId, e.urlManga, e.capUrl); com.example.lector.Descargas.version.value++ }
                             f == null -> Avisos.mostrar("Esa fuente no está disponible ahora")
                             else -> com.example.lector.Descargas.encolar(ctx, f, e.urlManga, e.titulo, listOf(com.example.lector.CacheFichas.conMemo(e.fuenteId, e.urlManga, com.example.lector.ext.CapituloFuente(e.capUrl, e.capNombre, 0L, null, -1f))))
                         }

@@ -50,10 +50,11 @@ class OrigenFuente(
     private val motor: MotorFuentes,
     private val fuente: FuenteUI,
     private val cap: CapituloFuente,
+    private val urlManga: String = "",
 ) : OrigenPaginas {
-    override val id: String = "s:${fuente.id}|${cap.url}"
+    override val id: String = "s:${fuente.id}|$urlManga|${cap.url}"
 
-    private fun local(): File? = almacen?.archivoDescarga(fuente.id, cap.url)?.takeIf { it.exists() && it.length() > 0 }
+    private fun local(): File? = almacen?.archivoDescarga(fuente.id, urlManga, cap.url)?.takeIf { it.exists() && it.length() > 0 }
 
     override suspend fun total(): Int {
         local()?.let { f -> runCatching { OrigenArchivo(f).total() }.getOrNull()?.takeIf { it > 0 }?.let { return it } }

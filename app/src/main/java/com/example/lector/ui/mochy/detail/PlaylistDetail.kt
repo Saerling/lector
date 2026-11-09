@@ -545,6 +545,8 @@ fun PlaylistHeader(
     description: String? = null,
     onDescriptionLongClick: () -> Unit = {},
     onCoverClick: () -> Unit = {},
+    onTitleClick: () -> Unit = {},
+    onTitleLongClick: () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val ink = LectorColors.Text
@@ -574,6 +576,10 @@ fun PlaylistHeader(
                 color = ink,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                // Como Komikku: tocar el título lo busca en todas las fuentes; mantenerlo pulsado lo copia.
+                modifier = Modifier.pointerInput(Unit) {
+                    detectTapGestures(onTap = { onTitleClick() }, onLongPress = { onTitleLongClick() })
+                },
             )
             if (creators.isNotEmpty()) {
                 Spacer(Modifier.height(3.dp))
@@ -610,24 +616,15 @@ fun PlaylistHeader(
  */
 @Composable
 internal fun PlaylistDescription(text: String, modifier: Modifier = Modifier, onLongClick: () -> Unit = {}) {
-    var expanded by remember(text) { mutableStateOf(false) }
-    var overflows by remember(text) { mutableStateOf(false) }
     val longClick by androidx.compose.runtime.rememberUpdatedState(onLongClick)
     Text(
         text = text,
         style = PlaylistStatsStyle.copy(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
         color = LectorColors.Text.copy(alpha = 0.74f),
-        maxLines = if (expanded) Int.MAX_VALUE else 2,
+        maxLines = 3,
         overflow = TextOverflow.Ellipsis,
-        onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
-        modifier = modifier
-            .animateContentSize(if (Mov.reducido) tween(120) else spring(dampingRatio = 0.9f, stiffness = 420f))
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { if (overflows || expanded) expanded = !expanded },
-                    onLongPress = { longClick() },
-                )
-            },
+        // Ya no se despliega en su sitio (crecía hacia arriba y tapaba la portada): tocar abre la información completa.
+        modifier = modifier.pointerInput(Unit) { detectTapGestures(onTap = { longClick() }, onLongPress = { longClick() }) },
     )
 }
 

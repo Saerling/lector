@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import androidx.compose.foundation.combinedClickable
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -142,7 +143,7 @@ private fun urlManga(f: FuenteUI, m: MangaFuente): String? =
 
 private fun nombreOrdenCap(o: Int) = when (o) { 1 -> "Número de capítulo"; 2 -> "Fecha de subida"; else -> "Orden de la fuente" }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun FichaMangaScreen(
     ext: ExtManager,
@@ -392,7 +393,7 @@ fun FichaMangaScreen(
         val filtrados = base.filter { iv ->
             (iv.value.scanlator == null || iv.value.scanlator !in ocultos) &&
             filtroCaps.noLeidos.deja(!ext.esLeido(f.id, iv.value.url)) &&
-                filtroCaps.descargados.deja(almacen.estaDescargado(f.id, iv.value.url)) &&
+                filtroCaps.descargados.deja(almacen.estaDescargado(f.id, manga.url, iv.value.url)) &&
                 filtroCaps.marcados.deja(ext.esMarcado(f.id, iv.value.url))
         }
         val desc = filtroCaps.descendente
@@ -497,6 +498,8 @@ fun FichaMangaScreen(
                     description = descripcion?.takeIf { it.isNotBlank() },
                     onDescriptionLongClick = { descExpandida = true },
                     onCoverClick = { verPortada = true },
+                    onTitleClick = { alBuscarGlobal(tituloFicha) },
+                    onTitleLongClick = { copiarTexto(ctx, tituloFicha) },
                 ) {
                     CircleAction(
                         if (enBiblioteca != null) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
@@ -639,7 +642,7 @@ fun FichaMangaScreen(
                                 cargandoVista = true
                                 scope.launch {
                                     val primero = fi.capitulos.last()
-                                    val origen = OrigenFuente(almacen, motor, f, CacheFichas.conMemo(f.id, manga.url, primero))
+                                    val origen = OrigenFuente(almacen, motor, f, CacheFichas.conMemo(f.id, manga.url, primero), manga.url)
                                     vistaPrevia = withContext(Dispatchers.IO) {
                                         val n = runCatching { origen.total() }.getOrDefault(0).coerceAtMost(8)
                                         (0 until n).map { i -> runCatching { miniatura(origen.bytes(i)) }.getOrNull() }
@@ -733,12 +736,12 @@ fun FichaMangaScreen(
                 itemsIndexedAnimados(visibles, key = { _, iv -> iv.index }, contentType = { _, _ -> 1 }) { pos, iv ->
                     val i = iv.index
                     val c = iv.value
-                    val clave = Descargas.clave(f, c)
+                    val clave = Descargas.clave(f, manga.url, c)
                     val paginaGuardada = ext.paginaDe(f.id, c.url)
                     val fraccion = Descargas.progreso[clave] ?: if (Descargas.enCola(clave)) 0f else null
                     val estado: EstadoDescarga = when {
                         fraccion != null -> EstadoDescarga.Descargando(fraccion)
-                        versionDesc >= 0 && almacen.estaDescargado(f.id, c.url) -> EstadoDescarga.Listo
+                        versionDesc >= 0 && almacen.estaDescargado(f.id, manga.url, c.url) -> EstadoDescarga.Listo
                         else -> EstadoDescarga.Libre
                     }
                     val leido = leidosAhora.let { ext.esLeido(f.id, c.url) }
@@ -762,7 +765,7 @@ fun FichaMangaScreen(
                                     is EstadoDescarga.Libre -> Descargas.encolar(ctx, f, manga.url, tituloFicha, listOf(c))
                                     is EstadoDescarga.Descargando -> Descargas.cancelar(ctx, clave)
                                     is EstadoDescarga.Listo -> {
-                                        almacen.borrarDescarga(f.id, c.url)
+                                        almacen.borrarDescarga(f.id, manga.url, c.url)
                                         Descargas.version.value++
                                     }
                                 }
@@ -935,8 +938,8 @@ fun FichaMangaScreen(
                     add(AccionBarra(Iconos.Descargar, "Descargar") {
                         Descargas.encolar(ctx, f, manga.url, tituloFicha, elegidos.asReversed()); seleccion = emptySet()
                     })
-                    if (elegidos.any { almacen.estaDescargado(f.id, it.url) }) add(AccionBarra(Icons.Rounded.Delete, "Borrar descarga") {
-                        elegidos.forEach { if (almacen.estaDescargado(f.id, it.url)) almacen.borrarDescarga(f.id, it.url) }
+                    if (elegidos.any { almacen.estaDescargado(f.id, manga.url, it.url) }) add(AccionBarra(Icons.Rounded.Delete, "Borrar descarga") {
+                        elegidos.forEach { if (almacen.estaDescargado(f.id, manga.url, it.url)) almacen.borrarDescarga(f.id, manga.url, it.url) }
                         Descargas.version.value++
                         seleccion = emptySet()
                     })
@@ -951,13 +954,42 @@ fun FichaMangaScreen(
         }
 
         // Sinopsis completa.
+        // Información completa (como el panel desplegado de Komikku): texto seleccionable, título y autor que se copian
+        // al mantenerlos, géneros que buscan en la fuente.
         if (descExpandida) {
-            DialogoAlerta(
-                onDismissRequest = { descExpandida = false },
-                title = { Text("Sinopsis") },
-                text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(descripcion.orEmpty()) } },
-                confirmButton = { TextButton(onClick = { descExpandida = false }) { Text("Cerrar") } },
-            )
+            HojaLector({ descExpandida = false }) {
+                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Column {
+                            Text(tituloFicha, style = LectorType.Section.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold), color = LectorColors.Text)
+                            val au = autor
+                            if (!au.isNullOrBlank()) Text(au, style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp))
+                            Text(f?.nombre.orEmpty(), style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 2.dp))
+                            Spacer(Modifier.height(14.dp))
+                            Text(descripcion?.takeIf { it.isNotBlank() } ?: "Sin descripción.", style = LectorType.Body, color = LectorColors.Text)
+                        }
+                    }
+                    if (generos.isNotEmpty()) {
+                        Spacer(Modifier.height(16.dp))
+                        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            generos.forEach { g ->
+                                Text(
+                                    g, style = LectorType.Label, color = LectorColors.Text,
+                                    modifier = Modifier.clip(CircleShape).background(LectorColors.PillFill)
+                                        .combinedClickable(onClick = { descExpandida = false; alGenero(g) }, onLongClick = { copiarTexto(ctx, g) })
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { copiarTexto(ctx, descripcion.orEmpty()) }) { Text("Copiar descripción") }
+                        TextButton(onClick = { descExpandida = false; alBuscarGlobal(tituloFicha) }) { Text("Buscar en todas") }
+                    }
+                }
+            }
         }
 
         // Asignar categorías (captura de Komikku): casillas + Editar / Cancelar / Aceptar.
@@ -1013,7 +1045,7 @@ fun FichaMangaScreen(
                 text = { Text("Se borrará el archivo descargado de «${nombreCapitulo(c)}». Podrás seguir leyéndolo online.") },
                 confirmButton = {
                     TextButton(onClick = {
-                        almacen.borrarDescarga(f.id, c.url)
+                        almacen.borrarDescarga(f.id, manga.url, c.url)
                         Descargas.version.value++
                         quitarDescarga = null
                         alRecargar()
@@ -1114,7 +1146,7 @@ fun FichaMangaScreen(
         confirmButton = { TextButton(onClick = {
             limpiar = false
             val caps = ficha?.capitulos.orEmpty()
-            caps.forEach { if (almacen.estaDescargado(fuenteId, it.url)) almacen.borrarDescarga(fuenteId, it.url) }
+            caps.forEach { if (almacen.estaDescargado(fuenteId, manga.url, it.url)) almacen.borrarDescarga(fuenteId, manga.url, it.url) }
             ext.desmarcarLeidos(fuenteId, caps.map { it.url })
             Descargas.version.value++
             Avisos.mostrar("Manga limpiado")
@@ -1284,16 +1316,17 @@ fun LeerOnlineScreen(
     val alm = almacen ?: remember { Almacen.obtener(ctx) }
     val enOrden = remember(capitulos) { capitulos.asReversed() }
     val caps = remember(enOrden, f.id) {
-        enOrden.map { c -> CapVisor("${f.id}|${c.url}", nombreCapitulo(c), OrigenFuente(alm, motor, f, c)) }
+        enOrden.map { c -> CapVisor("${f.id}|${manga?.url}|${c.url}", nombreCapitulo(c), OrigenFuente(alm, motor, f, c, manga?.url.orEmpty())) }
     }
     val inicio = (capitulos.lastIndex - indiceInicial).coerceIn(0, caps.lastIndex)
     val comic = remember(manga, alm.version) { manga?.let { alm.comicEnLinea(f.id, it.url) } }
+    val urlM = manga?.url ?: comic?.urlManga.orEmpty()
     // Capítulos terminados en esta sesión: si está activado «borrar al leer», se borran al salir o al pasar al siguiente.
     val terminados = remember { mutableSetOf<String>() }
     fun borrarLeidos(salvo: String?) {
         if (!alm.borrarAlLeer) return
         terminados.filter { it != salvo }.forEach { url ->
-            if (alm.estaDescargado(f.id, url)) alm.borrarDescarga(f.id, url)
+            if (alm.estaDescargado(f.id, urlM, url)) alm.borrarDescarga(f.id, urlM, url)
             terminados.remove(url)
         }
     }
@@ -1325,7 +1358,7 @@ fun LeerOnlineScreen(
             // Descargar por adelantado los capítulos siguientes (Ajustes → Descargas).
             val adelante = alm.descargarAdelante
             if (adelante > 0 && comic != null) {
-                val siguientes = enOrden.drop(i + 1).take(adelante).filter { !alm.estaDescargado(f.id, it.url) }
+                val siguientes = enOrden.drop(i + 1).take(adelante).filter { !alm.estaDescargado(f.id, urlM, it.url) }
                 if (siguientes.isNotEmpty()) Descargas.encolar(ctx, f, manga?.url ?: comic.urlManga.orEmpty(), comic.titulo, siguientes, avisar = false)
             }
         },

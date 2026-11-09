@@ -1637,10 +1637,19 @@ class Almacen private constructor(private val contexto: Context) {
     // ---- Capítulos descargados ----
     // Como en Komikku, una descarga pertenece al capítulo de su manga: NO es un cómic aparte de la
     // biblioteca. Se guarda como .cbz en su propia carpeta y el lector online la usa en vez de la red.
-    fun archivoDescarga(fuenteId: Long, capUrl: String): File {
-        val h = java.security.MessageDigest.getInstance("SHA-256")
-            .digest("$fuenteId|$capUrl".toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
-        return File(carpetaDescargas, "$h.cbz")
+    // Como Komikku (DownloadProvider: fuente/manga/capítulo), la descarga es de ESE capítulo de ESE manga: la clave
+    // lleva la URL del manga. Antes solo era fuente|capítulo y en fuentes cuyas URLs de capítulo se repiten entre
+    // mangas, un capítulo bajado aparecía (y se leía) en todos los mangas de la fuente.
+    private fun nombreHash(clave: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(clave.toByteArray()).joinToString("") { "%02x".format(it) }.take(32) + ".cbz"
+
+    /** Archivo de la descarga; si existe uno viejo (clave sin manga) que el índice asigna a este manga, se usa ese. */
+    fun archivoDescarga(fuenteId: Long, urlManga: String, capUrl: String): File {
+        val nuevo = File(carpetaDescargas, nombreHash("$fuenteId|$urlManga|$capUrl"))
+        if (nuevo.name in nombresDescargados()) return nuevo
+        val viejo = nombreHash("$fuenteId|$capUrl")
+        val suyo = viejo in nombresDescargados() && synchronized(this) { indice()[viejo] } == "$fuenteId|$urlManga"
+        return if (suyo) File(carpetaDescargas, viejo) else nuevo
     }
 
     // Nombres de los archivos descargados, en memoria (la ficha pregunta por CADA capítulo en cada recomposición).
@@ -1668,8 +1677,8 @@ class Almacen private constructor(private val contexto: Context) {
         prefs.edit().putString("desc_idx", o.toString()).apply()
     }
 
-    fun estaDescargado(fuenteId: Long, capUrl: String): Boolean =
-        archivoDescarga(fuenteId, capUrl).name in nombresDescargados()
+    fun estaDescargado(fuenteId: Long, urlManga: String, capUrl: String): Boolean =
+        archivoDescarga(fuenteId, urlManga, capUrl).name in nombresDescargados()
 
     /** Cuántos capítulos descargados tiene un manga (insignia de la biblioteca). */
     fun descargasDe(fuenteId: Long, urlManga: String): Int {
@@ -1689,8 +1698,8 @@ class Almacen private constructor(private val contexto: Context) {
     fun bytesDescargas(): Long = carpetaDescargas.listFiles()?.sumOf { it.length() } ?: 0L
 
     // Mueve (o copia) el .cbz recién bajado a su sitio definitivo.
-    fun guardarDescarga(origen: File, fuenteId: Long, capUrl: String, urlManga: String? = null) {
-        val destino = archivoDescarga(fuenteId, capUrl)
+    fun guardarDescarga(origen: File, fuenteId: Long, capUrl: String, urlManga: String) {
+        val destino = File(carpetaDescargas, nombreHash("$fuenteId|$urlManga|$capUrl"))
         destino.delete()
         if (!origen.renameTo(destino)) {
             origen.copyTo(destino, overwrite = true)
@@ -1698,14 +1707,14 @@ class Almacen private constructor(private val contexto: Context) {
         }
         synchronized(this) {
             nombresDescargados().add(destino.name)
-            if (urlManga != null) indice()[destino.name] = "$fuenteId|$urlManga"
+            indice()[destino.name] = "$fuenteId|$urlManga"
         }
-        if (urlManga != null) guardarIndice()
+        guardarIndice()
         version++
     }
 
-    fun borrarDescarga(fuenteId: Long, capUrl: String) {
-        val archivo = archivoDescarga(fuenteId, capUrl)
+    fun borrarDescarga(fuenteId: Long, urlManga: String, capUrl: String) {
+        val archivo = archivoDescarga(fuenteId, urlManga, capUrl)
         archivo.delete()
         synchronized(this) {
             nombresDescargados().remove(archivo.name)
@@ -1739,7 +1748,7 @@ class Almacen private constructor(private val contexto: Context) {
             val sep = clave.indexOf('|')
             val fuente = clave.substring(0, sep.coerceAtLeast(0)).toLongOrNull()
             if (id.isNotEmpty() && origen.exists() && sep > 0 && fuente != null) {
-                guardarDescarga(origen, fuente, clave.substring(sep + 1))
+                guardarDescarga(origen, fuente, clave.substring(sep + 1), "")
             }
             if (id.isNotEmpty()) eliminar(id)
         }

@@ -41,7 +41,7 @@ data class TareaDescarga(
     val capFecha: Long,
     val scanlator: String?,
 ) {
-    val clave: String get() = "$fuenteId|$capUrl"
+    val clave: String get() = "$fuenteId|$mangaUrl|$capUrl"
     fun capitulo() = CacheFichas.conMemo(fuenteId, mangaUrl, CapituloFuente(capUrl, capNombre, capFecha, scanlator, capNumero))
 }
 
@@ -68,7 +68,7 @@ object Descargas {
     private val trabajos = ConcurrentHashMap<String, Job>()
     @Volatile private var cargada = false
 
-    fun clave(f: FuenteUI, c: CapituloFuente) = "${f.id}|${c.url}"
+    fun clave(f: FuenteUI, mangaUrl: String, c: CapituloFuente) = "${f.id}|$mangaUrl|${c.url}"
 
     fun enCola(clave: String) = cola.any { it.clave == clave }
 
@@ -113,7 +113,7 @@ object Descargas {
     ): Int {
         cargar(ctx)
         val alm = Almacen.obtener(ctx)
-        val nuevas = caps.filter { c -> !alm.estaDescargado(f.id, c.url) && !enCola("${f.id}|${c.url}") }
+        val nuevas = caps.filter { c -> !alm.estaDescargado(f.id, mangaUrl, c.url) && !enCola("${f.id}|$mangaUrl|${c.url}") }
             .map { TareaDescarga(f.id, mangaUrl, mangaTitulo, it.url, it.nombre, it.numero, it.fecha, it.scanlator) }
         if (nuevas.isEmpty()) {
             if (avisar) Avisos.mostrar("Ya están descargados")
