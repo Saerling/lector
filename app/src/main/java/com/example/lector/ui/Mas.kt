@@ -79,6 +79,18 @@ fun MasScreen(almacen: Almacen, onRuta: (Ruta) -> Unit, onAdd: () -> Unit, onAdd
             if (almacen.incognito) Iconos.OjoTachado else Iconos.Ojo, "Modo incógnito", "No se anota el historial de lectura",
             Modifier.entrada(i++), destacado = almacen.incognito, onClick = { almacen.incognito = !almacen.incognito },
         ) { Interruptor(almacen.incognito, { almacen.incognito = it }) }
+        run {
+            val sfw = com.example.lector.ModoContenido.modo == com.example.lector.ModoContenido.Modo.SFW
+            val nsfw = com.example.lector.ModoContenido.modo == com.example.lector.ModoContenido.Modo.NSFW
+            BurbujaMas(
+                if (sfw) Iconos.OjoTachado else Iconos.Ojo, "Modo SFW", "Oculta todo lo +18 (para usar en público)",
+                Modifier.entrada(i++), destacado = sfw, onClick = { com.example.lector.ModoContenido.fijar(if (sfw) com.example.lector.ModoContenido.Modo.NORMAL else com.example.lector.ModoContenido.Modo.SFW) },
+            ) { Interruptor(sfw, { com.example.lector.ModoContenido.fijar(if (it) com.example.lector.ModoContenido.Modo.SFW else com.example.lector.ModoContenido.Modo.NORMAL) }) }
+            BurbujaMas(
+                Icons.Rounded.Warning, "Modo NSFW", "Muestra solo contenido +18",
+                Modifier.entrada(i++), destacado = nsfw, onClick = { com.example.lector.ModoContenido.fijar(if (nsfw) com.example.lector.ModoContenido.Modo.NORMAL else com.example.lector.ModoContenido.Modo.NSFW) },
+            ) { Interruptor(nsfw, { com.example.lector.ModoContenido.fijar(if (it) com.example.lector.ModoContenido.Modo.NSFW else com.example.lector.ModoContenido.Modo.NORMAL) }) }
+        }
 
         GrupoMas("Añadir", Modifier.entrada(i++))
         BurbujaMas(Icons.Rounded.Add, "Añadir cómic", "Archivo .cbz, .zip o .pdf de tu móvil", Modifier.entrada(i++), onClick = onAdd)
