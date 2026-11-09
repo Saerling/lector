@@ -1,18 +1,23 @@
 // Copiado de Komikku (https://github.com/komikku-app/komikku, Apache-2.0): app/src/main/java/mihon/feature/upcoming/
 // (UpcomingScreenModel.kt, UpcomingScreenContent.kt, components/calendar/Calendar.kt, CalendarDay.kt, CalendarHeader.kt,
-// CalendarIndicator.kt) y domain/.../FetchInterval.kt (calculateInterval), adaptado a Shiori.
+// CalendarIndicator.kt) y domain/.../FetchInterval.kt (calculateInterval), adaptado a Shiori. Aspecto del calendario al
+// estilo de Mochy Music (github.com/realidkroo/Mochy-Music, GPL-3.0) y BitChord (GPL-3.0): cabecera grande, meses con
+// paginador y días con la portada del manga previsto.
 package com.example.lector.ui.actualizaciones
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,22 +26,24 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lector.Almacen
@@ -47,12 +54,11 @@ import com.example.lector.ui.LText
 import com.example.lector.ui.LectorColors
 import com.example.lector.ui.LectorType
 import com.example.lector.ui.SuaveShape
-import com.example.lector.ui.mochy.library.GeneratedGroupHeader
+import com.example.lector.ui.Tacto
 import com.example.lector.ui.mochy.library.HomeTrackRow
 import com.example.lector.ui.mochy.library.LibraryIconButton
 import com.example.lector.ui.mochy.library.LibraryRowCoverCorner
 import com.example.lector.ui.mochy.library.LibraryRowCoverSize
-import com.example.lector.ui.mochy.library.LibraryTitleBlock
 import com.example.lector.ui.mochy.library.SearchHorizontalPadding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -121,104 +127,275 @@ fun calcularProximos(almacen: Almacen): List<MangaProximo> {
         .toList()
 }
 
-/** Pantalla «Próximos» (UpcomingScreen de Komikku): calendario con puntos por día y lista agrupada por fecha. */
+private const val PAGINAS_MES = 14 // el mes pasado, el actual y doce más
+private const val PAGINA_HOY = 1
+private const val DIAS_SEMANA = 7
+private const val FILAS_MES = 6
+
+/**
+ * Pantalla «Próximos» (UpcomingScreen de Komikku): cabecera grande con el mes, calendario que se pasa deslizando, días
+ * con la portada del manga previsto y, debajo, la lista del día elegido (o de todas las fechas).
+ * El cálculo se hace fuera del hilo principal y se guarda en [EstadoActualizaciones] según la versión de la biblioteca;
+ * el mes, el día y el desplazamiento también, para volver igual tras abrir un manga.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ProximosScreen(almacen: Almacen, onVolver: () -> Unit, onAbrir: (Comic) -> Unit, modifier: Modifier = Modifier) {
     BackHandler(onBack = onVolver)
-    var items by remember { mutableStateOf<List<MangaProximo>?>(null) }
-    LaunchedEffect(almacen.version) { items = withContext(Dispatchers.IO) { calcularProximos(almacen) } }
-    var mes by remember { mutableStateOf(YearMonth.now()) }
-    val estadoLista = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val porDia = remember(items) { items.orEmpty().groupBy { it.fecha } }
-    val eventos = remember(porDia) { porDia.mapValues { it.value.size } }
-    // Índice de cada cabecera en la lista (getHeaderIndexes); el calendario ocupa el índice 0.
-    val indices = remember(porDia) {
-        var i = 1
-        porDia.entries.associate { (d, l) -> (d to i).also { i += 1 + l.size } }
+    val est = EstadoActualizaciones
+    val version = almacen.version
+    LaunchedEffect(version) {
+        if (est.proximos == null || est.versionProximos != version) {
+            val r = withContext(Dispatchers.IO) { runCatching { calcularProximos(almacen) }.getOrDefault(emptyList()) }
+            est.proximos = r
+            est.versionProximos = version
+        }
     }
+    val items = est.proximos
+    val porDia = remember(items) { items.orEmpty().groupBy { it.fecha } }
+    val hoy = remember { LocalDate.now() }
+    val base = remember { YearMonth.from(hoy).minusMonths(PAGINA_HOY.toLong()) }
+    val pager = rememberPagerState(initialPage = est.paginaMes ?: PAGINA_HOY) { PAGINAS_MES }
+    val estadoLista = rememberLazyListState(est.listaIndice, est.listaDesplazamiento)
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(pager.settledPage) { est.paginaMes = pager.settledPage }
+    DisposableEffect(Unit) {
+        onDispose {
+            est.listaIndice = estadoLista.firstVisibleItemIndex
+            est.listaDesplazamiento = estadoLista.firstVisibleItemScrollOffset
+        }
+    }
+    val seleccion = est.diaSeleccionado
     val formatoDia = remember { DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", Locale.getDefault()) }
+    val primerDia = remember { WeekFields.of(Locale.getDefault()).firstDayOfWeek.value }
+    val diasSemana = remember { (0 until DIAS_SEMANA).map { DayOfWeek.of((primerDia - 1 + it) % DIAS_SEMANA + 1) } }
 
     Column(modifier.fillMaxSize().background(LectorColors.Bg)) {
         Row(
-            Modifier.fillMaxWidth().padding(start = SearchHorizontalPadding, end = 16.dp, top = 14.dp, bottom = 6.dp),
+            Modifier.fillMaxWidth().padding(start = SearchHorizontalPadding, end = SearchHorizontalPadding, top = 14.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LibraryIconButton(Icons.Rounded.ArrowBack, "Volver", false, onVolver)
             Spacer(Modifier.width(12.dp))
-            LibraryTitleBlock(
-                "Próximos",
-                items?.let { if (it.isEmpty()) "Sin fechas previstas" else "${it.size} mangas con fecha prevista" } ?: "Calculando…",
-                Modifier.weight(1f),
-            )
-        }
-        LazyColumn(Modifier.fillMaxSize(), state = estadoLista, contentPadding = PaddingValues(bottom = 120.dp)) {
-            item(key = "calendario") {
-                Calendario(
-                    mes, eventos, { mes = it },
-                    onDia = { d -> indices[d]?.let { scope.launch { estadoLista.animateScrollToItem(it) } } },
-                    modifier = Modifier.padding(horizontal = SearchHorizontalPadding),
+            Column(Modifier.weight(1f)) {
+                LText("Próximos", LectorType.Section.copy(fontWeight = FontWeight.Bold))
+                LText(
+                    items?.let { if (it.isEmpty()) "Sin fechas previstas" else "${it.size} mangas con fecha prevista" } ?: "Calculando…",
+                    LectorType.Label, color = LectorColors.Muted,
                 )
+            }
+            val enHoy = pager.currentPage == PAGINA_HOY && seleccion == null
+            Pastilla("Hoy", activa = !enHoy) {
+                est.diaSeleccionado = null
+                scope.launch { pager.animateScrollToPage(PAGINA_HOY) }
+            }
+        }
+
+        LazyColumn(Modifier.fillMaxSize(), state = estadoLista, contentPadding = PaddingValues(bottom = 120.dp)) {
+            item(key = "mes", contentType = "mes") {
+                CabeceraMes(
+                    base.plusMonths(pager.currentPage.toLong()),
+                    puedeAtras = pager.currentPage > 0, puedeAdelante = pager.currentPage < PAGINAS_MES - 1,
+                    onAnterior = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } },
+                    onSiguiente = { scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } },
+                )
+            }
+            item(key = "semana", contentType = "semana") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = SearchHorizontalPadding - 4.dp, vertical = 6.dp)) {
+                    diasSemana.forEach {
+                        LText(
+                            it.getDisplayName(TextStyle.SHORT, Locale.getDefault()).trimEnd('.').uppercase(),
+                            LectorType.Label.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp, textAlign = TextAlign.Center),
+                            Modifier.weight(1f), color = LectorColors.Muted,
+                        )
+                    }
+                }
+            }
+            item(key = "calendario", contentType = "calendario") {
+                HorizontalPager(
+                    pager, Modifier.fillMaxWidth(), beyondViewportPageCount = 1, key = { it },
+                    contentPadding = PaddingValues(horizontal = SearchHorizontalPadding - 4.dp), pageSpacing = 8.dp,
+                    verticalAlignment = Alignment.Top,
+                ) { pagina ->
+                    MesCalendario(base.plusMonths(pagina.toLong()), diasSemana, porDia, hoy, seleccion, almacen) { d ->
+                        Tacto.alternar(true)
+                        est.diaSeleccionado = if (seleccion == d) null else d
+                    }
+                }
+            }
+            item(key = "titulo_lista", contentType = "titulo") {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = SearchHorizontalPadding, end = SearchHorizontalPadding, top = 22.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AnimatedContent(
+                        seleccion, Modifier.weight(1f),
+                        transitionSpec = { fadeIn(tween(180)).togetherWith(fadeOut(tween(120))) }, label = "tituloLista",
+                    ) { d ->
+                        Column {
+                            LText(
+                                d?.let { formatoDia.format(it).replaceFirstChar { c -> c.titlecase() } } ?: "Todas las fechas",
+                                LectorType.Section.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
+                            )
+                            val n = if (d != null) porDia[d]?.size ?: 0 else items?.size ?: 0
+                            LText(
+                                (d?.let { relativo(hoy, it) + " · " } ?: "") + if (n == 1) "1 manga" else "$n mangas",
+                                LectorType.Label, color = LectorColors.Muted,
+                            )
+                        }
+                    }
+                    if (seleccion != null) Pastilla("Ver todos", activa = true) { est.diaSeleccionado = null }
+                }
             }
             if (items?.isEmpty() == true) item(key = "vacio") {
                 LText(
                     "Aquí salen los mangas de tu biblioteca en emisión con la fecha en que se espera su próximo capítulo, " +
                         "calculada con las fechas de sus últimos capítulos.",
-                    LectorType.Body, Modifier.padding(SearchHorizontalPadding, 24.dp), color = LectorColors.Muted,
+                    LectorType.Body, Modifier.padding(SearchHorizontalPadding, 12.dp), color = LectorColors.Muted,
                 )
             }
-            porDia.forEach { (dia, lista) ->
-                stickyHeader(key = "h_$dia") {
-                    GeneratedGroupHeader(
-                        formatoDia.format(dia).replaceFirstChar { it.titlecase() },
-                        count = if (lista.size == 1) "1 manga" else "${lista.size} mangas",
+            if (seleccion != null) {
+                val delDia = porDia[seleccion].orEmpty()
+                if (delDia.isEmpty() && items != null) item(key = "dia_vacio") {
+                    LText(
+                        "No se espera nada este día.", LectorType.Body,
+                        Modifier.animateItem().padding(horizontal = SearchHorizontalPadding, vertical = 12.dp), color = LectorColors.Muted,
                     )
                 }
-                items(lista, key = { "m_${dia}_${it.comic.id}" }) { p ->
-                    HomeTrackRow(
-                        title = p.comic.titulo,
-                        subtitle = "Cada ${p.intervalo} ${if (p.intervalo == 1) "día" else "días"} · último ${com.example.lector.ui.etiquetaDia(p.ultima.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()).lowercase()}",
-                        onClick = { onAbrir(p.comic) },
-                        onLongClick = null,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = SearchHorizontalPadding, vertical = 3.dp),
-                        cover = { ComicCover(p.comic, almacen, Modifier.size(LibraryRowCoverSize), SuaveShape(LibraryRowCoverCorner)) },
-                    )
+                items(delDia, key = { "m_${it.fecha}_${it.comic.id}" }, contentType = { "manga" }) { p ->
+                    FilaProximo(p, hoy, almacen, Modifier.animateItem()) { onAbrir(p.comic) }
+                }
+            } else {
+                porDia.forEach { (dia, lista) ->
+                    item(key = "h_$dia", contentType = "cabecera") {
+                        Row(
+                            Modifier.animateItem().fillMaxWidth().clickable {
+                                est.diaSeleccionado = dia
+                                val pag = ChronoUnit.MONTHS.between(base, YearMonth.from(dia)).toInt()
+                                if (pag in 0 until PAGINAS_MES) scope.launch { pager.animateScrollToPage(pag) }
+                            }.padding(horizontal = SearchHorizontalPadding, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            LText(
+                                formatoDia.format(dia).replaceFirstChar { it.titlecase() },
+                                LectorType.Label.copy(fontWeight = FontWeight.SemiBold, fontSize = 13.sp), Modifier.weight(1f),
+                            )
+                            LText(relativo(hoy, dia), LectorType.Label, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    items(lista, key = { "m_${dia}_${it.comic.id}" }, contentType = { "manga" }) { p ->
+                        FilaProximo(p, hoy, almacen, Modifier.animateItem()) { onAbrir(p.comic) }
+                    }
                 }
             }
         }
     }
 }
 
-// ---- Calendario (components/calendar de Komikku) ----
-
-private const val DIAS_SEMANA = 7
-private const val MAX_EVENTOS = 3
+private fun relativo(hoy: LocalDate, d: LocalDate): String = when (val n = ChronoUnit.DAYS.between(hoy, d)) {
+    0L -> "Hoy"
+    1L -> "Mañana"
+    -1L -> "Ayer"
+    else -> if (n > 0) "En $n días" else "Hace ${-n} días"
+}
 
 @Composable
-private fun Calendario(
-    mes: YearMonth, eventos: Map<LocalDate, Int>, alCambiarMes: (YearMonth) -> Unit, onDia: (LocalDate) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        CabeceraCalendario(mes, { alCambiarMes(mes.minusMonths(1)) }, { alCambiarMes(mes.plusMonths(1)) }, Modifier.fillMaxWidth().padding(vertical = 6.dp))
-        val primerDia = WeekFields.of(Locale.getDefault()).firstDayOfWeek.value
-        val diasSemana = remember { (0 until DIAS_SEMANA).map { DayOfWeek.of((primerDia - 1 + it) % DIAS_SEMANA + 1) } }
-        val vacios = diasSemana.indexOf(mes.atDay(1).dayOfWeek)
-        val celdas: List<LocalDate?> = List(vacios) { null } + (1..mes.lengthOfMonth()).map { mes.atDay(it) }
-        Row(Modifier.fillMaxWidth()) {
-            diasSemana.forEach {
+private fun Pastilla(texto: String, activa: Boolean, onClick: () -> Unit) {
+    val fondo by animateColorAsState(if (activa) LectorColors.CardHigh else LectorColors.Card, label = "pastilla")
+    val color by animateColorAsState(if (activa) LectorColors.Text else LectorColors.Muted, label = "pastillaTexto")
+    Box(
+        Modifier.clip(CircleShape).background(fondo).clickable(enabled = activa, onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp),
+    ) { LText(texto, LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = color) }
+}
+
+@Composable
+private fun FilaProximo(p: MangaProximo, hoy: LocalDate, almacen: Almacen, modifier: Modifier, onClick: () -> Unit) {
+    val zona = remember { ZoneId.systemDefault() }
+    HomeTrackRow(
+        title = p.comic.titulo,
+        subtitle = "Cada ${p.intervalo} ${if (p.intervalo == 1) "día" else "días"} · último " +
+            com.example.lector.ui.etiquetaDia(p.ultima.atStartOfDay(zona).toInstant().toEpochMilli()).lowercase(),
+        onClick = onClick,
+        onLongClick = null,
+        modifier = modifier.fillMaxWidth().padding(horizontal = SearchHorizontalPadding, vertical = 3.dp),
+        cover = { ComicCover(p.comic, almacen, Modifier.size(LibraryRowCoverSize), SuaveShape(LibraryRowCoverCorner)) },
+        trailing = {
+            val hoyEs = p.fecha == hoy
+            Box(
+                Modifier.clip(CircleShape)
+                    .background(if (hoyEs) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else LectorColors.CardHigh)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            ) {
                 LText(
-                    it.getDisplayName(TextStyle.NARROW, Locale.getDefault()), LectorType.Body.copy(fontWeight = FontWeight.SemiBold, fontSize = 16.sp, textAlign = TextAlign.Center),
-                    Modifier.weight(1f),
+                    relativo(hoy, p.fecha), LectorType.Label.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (hoyEs) MaterialTheme.colorScheme.primary else LectorColors.Muted,
+                )
+            }
+        },
+    )
+}
+
+// ---- Calendario ----
+
+@Composable
+private fun CabeceraMes(
+    mes: YearMonth, puedeAtras: Boolean, puedeAdelante: Boolean, onAnterior: () -> Unit, onSiguiente: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = SearchHorizontalPadding, end = SearchHorizontalPadding, top = 18.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        AnimatedContent(
+            targetState = mes, modifier = Modifier.weight(1f),
+            transitionSpec = {
+                val adelante = targetState > initialState
+                (slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) { w -> if (adelante) w / 3 else -w / 3 } + fadeIn(tween(220)))
+                    .togetherWith(slideOutHorizontally(tween(180)) { w -> if (adelante) -w / 3 else w / 3 } + fadeOut(tween(150)))
+                    .using(SizeTransform(clip = false))
+            },
+            label = "cambioMes",
+        ) { m ->
+            Column {
+                LText(
+                    m.year.toString(), LectorType.Label.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                LText(
+                    m.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.getDefault()).replaceFirstChar { it.titlecase() },
+                    LectorType.Hero.copy(fontSize = 40.sp, lineHeight = 44.sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp),
+                    maxLines = 1,
                 )
             }
         }
+        Row(Modifier.padding(bottom = 4.dp)) {
+            Box(Modifier.graphicsLayer { alpha = if (puedeAtras) 1f else 0.35f }) {
+                LibraryIconButton(Icons.Rounded.KeyboardArrowLeft, "Mes anterior", false) { if (puedeAtras) onAnterior() }
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.graphicsLayer { alpha = if (puedeAdelante) 1f else 0.35f }) {
+                LibraryIconButton(Icons.Rounded.KeyboardArrowRight, "Mes siguiente", false) { if (puedeAdelante) onSiguiente() }
+            }
+        }
+    }
+}
+
+/** Un mes: siempre seis filas, para que todas las páginas midan lo mismo y el paginador no salte. */
+@Composable
+private fun MesCalendario(
+    mes: YearMonth, diasSemana: List<DayOfWeek>, porDia: Map<LocalDate, List<MangaProximo>>, hoy: LocalDate,
+    seleccion: LocalDate?, almacen: Almacen, onDia: (LocalDate) -> Unit,
+) {
+    val celdas = remember(mes, diasSemana) {
+        val vacios = diasSemana.indexOf(mes.atDay(1).dayOfWeek)
+        val dias: List<LocalDate?> = List(vacios) { null } + (1..mes.lengthOfMonth()).map { mes.atDay(it) }
+        dias + List(FILAS_MES * DIAS_SEMANA - dias.size) { null }
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         celdas.chunked(DIAS_SEMANA).forEach { semana ->
-            Row(Modifier.fillMaxWidth()) {
-                (0 until DIAS_SEMANA).forEach { i ->
-                    Box(Modifier.weight(1f).padding(vertical = 2.dp), Alignment.Center) {
-                        semana.getOrNull(i)?.let { d -> DiaCalendario(d, eventos[d] ?: 0) { onDia(d) } }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                semana.forEach { d ->
+                    Box(Modifier.weight(1f).aspectRatio(0.74f)) {
+                        if (d != null) DiaCalendario(d, porDia[d].orEmpty(), hoy, d == seleccion, almacen) { onDia(d) }
                     }
                 }
             }
@@ -227,62 +404,69 @@ private fun Calendario(
 }
 
 @Composable
-private fun DiaCalendario(fecha: LocalDate, eventos: Int, onClick: () -> Unit) {
-    val hoy = remember { LocalDate.now() }
+private fun DiaCalendario(
+    fecha: LocalDate, mangas: List<MangaProximo>, hoy: LocalDate, elegido: Boolean, almacen: Almacen, onClick: () -> Unit,
+) {
     val acento = MaterialTheme.colorScheme.primary
+    val escala by animateFloatAsState(
+        if (elegido) 1.08f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "escalaDia",
+    )
+    val borde by animateColorAsState(
+        when {
+            elegido -> acento
+            fecha == hoy -> acento.copy(alpha = 0.55f)
+            else -> Color.Transparent
+        },
+        label = "bordeDia",
+    )
+    val forma = RoundedCornerShape(14.dp)
+    val pasado = fecha.isBefore(hoy)
+    val conPortada = mangas.isNotEmpty()
     Box(
-        Modifier
-            .then(if (hoy == fecha) Modifier.border(BorderStroke(1.dp, LectorColors.Text), CircleShape) else Modifier)
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-            .circulo(),
-        contentAlignment = Alignment.Center,
+        Modifier.fillMaxSize()
+            .graphicsLayer { scaleX = escala; scaleY = escala }
+            .clip(forma)
+            .background(
+                when {
+                    conPortada -> LectorColors.CardHigh
+                    elegido -> acento.copy(alpha = 0.16f)
+                    pasado -> Color.Transparent
+                    else -> LectorColors.Card
+                },
+            )
+            .border(if (elegido) 2.dp else 1.5.dp, borde, forma)
+            .clickable(onClick = onClick),
     ) {
+        if (conPortada) {
+            ComicCover(mangas.first().comic, almacen, Modifier.fillMaxSize(), RoundedCornerShape(0.dp))
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.55f), 0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.35f)),
+                ),
+            )
+        }
         LText(
             fecha.dayOfMonth.toString(),
-            LectorType.Body.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center),
-            Modifier.padding(10.dp),
-            color = if (fecha.isBefore(hoy)) LectorColors.Text.copy(alpha = 0.38f) else LectorColors.Text,
-        )
-        if (eventos > 0) {
-            LText(eventos.toString(), LectorType.Label.copy(fontSize = 8.sp), Modifier.offset(x = 12.dp, y = (-10).dp), color = acento)
-        }
-        Row(Modifier.offset(y = 12.dp)) {
-            repeat(eventos.coerceAtMost(MAX_EVENTOS)) { Indicador(it, 56.dp, acento) }
-        }
-    }
-}
-
-@Composable
-private fun Indicador(indice: Int, tam: Dp, color: Color) {
-    Box(Modifier.padding(horizontal = 1.dp).clip(CircleShape).background(color.copy(alpha = (indice + 1) * 0.3f)).size(tam / 12))
-}
-
-private fun Modifier.circulo() = layout { medible, restricciones ->
-    val p = medible.measure(restricciones)
-    val d = maxOf(p.height, p.width)
-    layout(d, d) { p.placeRelative((d - p.width) / 2, (d - p.height) / 2) }
-}
-
-@Composable
-private fun CabeceraCalendario(mes: YearMonth, onAnterior: () -> Unit, onSiguiente: () -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        AnimatedContent(
-            targetState = mes,
-            transitionSpec = {
-                val adelante = targetState > initialState
-                (slideInVertically(tween(200)) { h -> if (adelante) h else -h } + fadeIn(tween(200)))
-                    .togetherWith(slideOutVertically(tween(200)) { h -> if (adelante) -h else h } + fadeOut(tween(200)))
-                    .using(SizeTransform(clip = false))
+            LectorType.Body.copy(fontSize = 14.sp, fontWeight = if (fecha == hoy || elegido) FontWeight.Black else FontWeight.SemiBold),
+            Modifier.align(if (conPortada) Alignment.TopStart else Alignment.Center).padding(if (conPortada) 6.dp else 0.dp),
+            color = when {
+                conPortada -> Color.White
+                fecha == hoy || elegido -> acento
+                pasado -> LectorColors.Text.copy(alpha = 0.3f)
+                else -> LectorColors.Text
             },
-            label = "cambioMes",
-        ) { m ->
-            LText(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()).format(m).replaceFirstChar { it.titlecase() }, LectorType.Hero)
+        )
+        if (mangas.size > 1) {
+            Box(
+                Modifier.align(Alignment.BottomEnd).padding(4.dp).clip(CircleShape).background(acento)
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+            ) {
+                LText("+${mangas.size - 1}", LectorType.Label.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold), color = com.example.lector.textoSobre(acento))
+            }
         }
-        Row {
-            LibraryIconButton(Icons.Rounded.KeyboardArrowLeft, "Mes anterior", false, onAnterior)
-            Spacer(Modifier.width(8.dp))
-            LibraryIconButton(Icons.Rounded.KeyboardArrowRight, "Mes siguiente", false, onSiguiente)
+        if (fecha == hoy && !conPortada) {
+            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp).size(4.dp).clip(CircleShape).background(acento))
         }
     }
 }

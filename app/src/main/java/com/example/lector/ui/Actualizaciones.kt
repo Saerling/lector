@@ -121,7 +121,7 @@ fun ActualizacionesScreen(
     var confirmarLimpiar by remember { mutableStateOf(false) }
     var verErrores by remember { mutableStateOf(false) }
     var verFiltros by remember { mutableStateOf(false) }
-    var verProximos by remember { mutableStateOf(false) }
+    val estadoAct = com.example.lector.ui.actualizaciones.EstadoActualizaciones
     val filtros = com.example.lector.ui.actualizaciones.FiltrosActualizaciones
     remember { filtros.iniciar(ctx) }
 
@@ -191,7 +191,7 @@ fun ActualizacionesScreen(
                         else Icon(Icons.Rounded.Refresh, "Buscar capítulos nuevos", tint = acento, modifier = Modifier.size(21.dp))
                     }
                     Spacer(Modifier.width(8.dp))
-                    LibraryIconButton(Icons.Rounded.DateRange, "Próximos", false) { verProximos = true }
+                    LibraryIconButton(Icons.Rounded.DateRange, "Próximos", false) { estadoAct.abrirProximos() }
                     Spacer(Modifier.width(8.dp))
                     LibraryIconButton(com.example.lector.ui.actualizaciones.IconoFiltrar, "Filtrar", filtros.hayFiltros) { verFiltros = true }
                     Spacer(Modifier.width(8.dp))
@@ -204,7 +204,7 @@ fun ActualizacionesScreen(
                                     onClick = { menu = false; verErrores = true },
                                 )
                             }
-                            DropdownMenuItem(text = { Text("Próximas actualizaciones") }, onClick = { menu = false; verProximos = true })
+                            DropdownMenuItem(text = { Text("Próximas actualizaciones") }, onClick = { menu = false; estadoAct.abrirProximos() })
                             if (filtros.hayFiltros) {
                                 DropdownMenuItem(text = { Text("Quitar los filtros") }, onClick = { menu = false; filtros.limpiar() })
                             }
@@ -346,9 +346,9 @@ fun ActualizacionesScreen(
             ),
         )
 
-        if (verProximos) {
+        if (estadoAct.verProximos) {
             com.example.lector.ui.actualizaciones.ProximosScreen(
-                almacen, onVolver = { verProximos = false },
+                almacen, onVolver = { estadoAct.cerrarProximos() },
                 onAbrir = { c ->
                     alAbrirManga(ActualizacionCap(c.fuenteId, c.urlManga.orEmpty(), c.titulo, c.portadaUrl, "", "", -1f, 0L, null, 0L))
                 },
