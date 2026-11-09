@@ -833,3 +833,6 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Búsqueda global y lista de cada fuente conservan su estado al ir a un manga y volver (SaveableStateHolder en LectorApp + EstadoListaFuente en memoria con lista, página y filtros).
 - Migrar: lógica de Komikku (mayor número leído en la vieja marca <= en la nueva; marcadores por número; número reconocido del nombre si la fuente no lo da). Sin lista de la fuente vieja se usa la de CacheFichas.
 - Fuente no instalada: primero InfoSinFuente (portada, autor, N capítulos · M leídos, descripción y capítulos de la copia); buscar/migrar es opcional.
+
+## 2bt. PASO 72 (0.63)
+- Descargas (ExtRepos.abrir): 2 reintentos con espera ante 5xx. Actualizar la app: si el enlace de la release falla (HTTP 504), se baja por la API de GitHub (asset url + Accept octet-stream).

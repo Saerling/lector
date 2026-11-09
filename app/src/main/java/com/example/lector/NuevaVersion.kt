@@ -30,7 +30,7 @@ object NuevaVersion {
     private const val REPO = "Saerling/lector"
     private const val API = "https://api.github.com/repos/$REPO/releases/latest"
 
-    data class Version(val nombre: String, val codigo: Long, val notas: String, val apkUrl: String, val tamano: Long)
+    data class Version(val nombre: String, val codigo: Long, val notas: String, val apkUrl: String, val tamano: Long, val apiUrl: String = "")
 
     enum class Paso { LISTO, DESCARGANDO, INSTALANDO, ERROR }
 
@@ -82,6 +82,7 @@ object NuevaVersion {
                 notas = (if (o.isNull("body")) "" else o.optString("body")).trim(),
                 apkUrl = apk.optString("browser_download_url"),
                 tamano = apk.optLong("size"),
+                apiUrl = apk.optString("url"),
             )
             v
         } finally {
@@ -155,7 +156,11 @@ object NuevaVersion {
             try {
                 val carpeta = File(app.cacheDir, "actualizacion").apply { deleteRecursively(); mkdirs() }
                 val apk = File(carpeta, "shiori-${v.codigo}.apk")
-                ExtRepos.descargarA(v.apkUrl, apk) { porcentaje = it }
+                // Si el enlace normal falla (p. ej. HTTP 504 del CDN), se baja por la API de GitHub (otro servidor).
+                runCatching { ExtRepos.descargarA(v.apkUrl, apk) { porcentaje = it } }.recoverCatching { e ->
+                    if (v.apiUrl.isBlank()) throw e
+                    ExtRepos.descargarA(v.apiUrl, apk, "application/octet-stream") { porcentaje = it }
+                }.getOrThrow()
                 if (v.tamano > 0 && apk.length() != v.tamano) error("La descarga quedó incompleta; inténtalo otra vez")
                 paso = Paso.INSTALANDO
                 withContext(Dispatchers.Main) { ext.abrirSesion(app.packageName, apk) }

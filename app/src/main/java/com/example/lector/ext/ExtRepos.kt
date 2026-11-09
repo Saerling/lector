@@ -107,8 +107,18 @@ object ExtRepos {
         return "https://cdn.jsdelivr.net/gh/${p[1]}/${p[2]}@${p[3]}/" + p.drop(4).joinToString("/")
     }
 
-    private fun abrir(url: String): okhttp3.Response {
-        fun pedir(u: String) = http.newCall(okhttp3.Request.Builder().url(u).header("User-Agent", UA).build()).execute()
+    private fun abrir(url: String, aceptar: String? = null): okhttp3.Response {
+        fun pedir1(u: String) = http.newCall(okhttp3.Request.Builder().url(u).header("User-Agent", UA)
+            .apply { if (aceptar != null) header("Accept", aceptar) }.build()).execute()
+        // Errores pasajeros del servidor (502/503/504, típicos del CDN de GitHub): dos reintentos con espera.
+        fun pedir(u: String): okhttp3.Response {
+            var r = pedir1(u)
+            repeat(2) { i ->
+                if (r.code !in 500..599) return r
+                r.close(); Thread.sleep(1500L * (i + 1)); r = pedir1(u)
+            }
+            return r
+        }
         val r = try { pedir(url) } catch (e: java.io.IOException) {
             return pedir(espejo(url) ?: throw e)
         }
@@ -123,7 +133,7 @@ object ExtRepos {
         r.body.bytes()
     }
 
-    fun descargarA(url: String, destino: File, alProgreso: (Int) -> Unit) = abrir(url).use { r ->
+    fun descargarA(url: String, destino: File, aceptar: String? = null, alProgreso: (Int) -> Unit) = abrir(url, aceptar).use { r ->
         if (!r.isSuccessful) throw IllegalStateException("HTTP ${r.code}")
         val total = r.body.contentLength()
         r.body.byteStream().use { ent ->
