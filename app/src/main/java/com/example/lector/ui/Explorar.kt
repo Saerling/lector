@@ -87,6 +87,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import com.example.lector.ui.bitchord.heldBackdrop
+import com.example.lector.ui.bitchord.heldPicture
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -107,6 +110,8 @@ fun ExplorarScreen(
     almacen: com.example.lector.Almacen? = null,
     onMigrar: (com.example.lector.Comic) -> Unit = {},
     onBuscarGlobal: () -> Unit = {},
+    /** «Buscar en todas» del menú de mantener pulsado de Novedades: abre la búsqueda global con ese título. */
+    onBuscarTitulo: ((String) -> Unit)? = null,
 ) {
     var sub by rememberSaveable { mutableStateOf(0) }
     var reordenar by rememberSaveable { mutableStateOf(false) }
@@ -151,7 +156,7 @@ fun ExplorarScreen(
             ) { pestana ->
                 when (pestana) {
                     0 -> FuentesTab(ext, consulta, { consulta = it }, onFuente) { sub = 2 }
-                    1 -> NovedadesTab(ext, reordenar, onManga, onFuente) { dialogoNovedades = true }
+                    1 -> NovedadesTab(ext, reordenar, onManga, onFuente, onBuscarTitulo) { dialogoNovedades = true }
                     2 -> ExtensionesTab(
                         ext, consulta, false, { consulta = it }, onExt,
                         onConfiar = { porConfiar = it }, onRepos = { onRuta(Ruta.ListadosExt) }
@@ -289,9 +294,9 @@ private fun FuentesTab(
     val todas = ext.fuentes
     val q = consulta.trim()
     // Con cientos de fuentes: los filtros y agrupaciones solo se rehacen cuando cambia lo que los afecta.
-    val visibles = remember(todas, ext.mostrarNsfw, ext.idiomas, q) {
+    val visibles = remember(todas, ext.mostrarNsfw, com.example.lector.ModoContenido.modo, ext.idiomas, q) {
         todas.filter {
-            (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas &&
+            com.example.lector.ModoContenido.verNsfw(it.nsfw, ext.mostrarNsfw) && it.lang in ext.idiomas &&
                 (q.isEmpty() || it.nombre.contains(q, ignoreCase = true))
         }
     }
@@ -426,6 +431,7 @@ private fun NovedadesTab(
     reordenar: Boolean,
     onManga: (FuenteUI, MangaFuente) -> Unit,
     onFuente: (FuenteUI) -> Unit,
+    onBuscarTitulo: ((String) -> Unit)?,
     onAnadir: () -> Unit,
 ) {
     val motor = Motor.actual
@@ -433,12 +439,21 @@ private fun NovedadesTab(
         val porId = ext.fuentes.associateBy { it.id }
         ext.novedades.mapNotNull { porId[it] }
     }
-    val lista = remember(todas, ext.mostrarNsfw) { todas.filter { ext.mostrarNsfw || !it.nsfw } }
+    val lista = remember(todas, ext.mostrarNsfw, com.example.lector.ModoContenido.modo) { todas.filter { com.example.lector.ModoContenido.verNsfw(it.nsfw, ext.mostrarNsfw) } }
     when {
         todas.isEmpty() -> Vacio("Aquí salen las novedades de las fuentes que elijas.", "Añadir fuentes", onAnadir, Icons.Rounded.Notifications)
         motor == null -> Vacio("El motor de fuentes no está disponible.", icono = Icons.Rounded.Warning)
         reordenar -> OrdenarNovedades(ext)
         else -> {
+            // Menú de mantener pulsado de BitChord (ui/bitchord/HeldContextMenu.kt), como en el catálogo de una fuente:
+            // la portada se levanta y las novedades se desenfocan detrás.
+            val fondoRetenido = remember { com.example.lector.ui.bitchord.HeldBackdrop() }
+            var retenido by remember { mutableStateOf<Pair<FuenteUI, MangaFuente>?>(null) }
+            var fotoRetenida by remember { mutableStateOf<com.example.lector.ui.bitchord.HeldItem?>(null) }
+            fun soltar() { retenido = null; fotoRetenida = null }
+            val alRetener: (FuenteUI, MangaFuente, com.example.lector.ui.bitchord.HeldItem) -> Unit = { f, m, foto -> fotoRetenida = foto; retenido = f to m }
+            Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().heldBackdrop(fondoRetenido)) {
             var refrescando by remember { mutableStateOf(false) }
             val gen = NovedadesGuardadas.generacion
             val pendientes = lista.any { NovedadesGuardadas.datos[it.id]?.first != gen && NovedadesGuardadas.fallos[it.id] != gen }
@@ -477,9 +492,29 @@ private fun NovedadesTab(
                 val abajo = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = arriba, bottom = abajo + 190.dp)) {
                     items(filas, key = { (f, b) -> if (b == null) "f${f.id}" else "b${f.id}|${b.nombre}" }, contentType = { "novedad" }) { (f, b) ->
-                        NovedadesFuente(f, motor, onManga, onFuente, b, ext.busquedas(f.id).takeIf { b == null }.orEmpty(), enBiblio)
+                        NovedadesFuente(f, motor, onManga, onFuente, b, ext.busquedas(f.id).takeIf { b == null }.orEmpty(), enBiblio, alRetener)
                     }
                 }
+            }
+            }
+            val ctxM = androidx.compose.ui.platform.LocalContext.current
+            val almM = remember { com.example.lector.Almacen.obtener(ctxM) }
+            val enBiblioM = remember(almM.version) { almM.clavesEnLinea() }
+            com.example.lector.ui.bitchord.HeldContextMenu(
+                item = retenido, held = fotoRetenida, hazeState = fondoRetenido, onDismiss = ::soltar,
+                onPreviewClick = { (f, m) -> soltar(); onManga(f, m) },
+            ) { (f, m) ->
+                val esta = "${f.id}|${m.url}" in enBiblioM
+                com.example.lector.ui.bitchord.HeldMenuAction(
+                    if (esta) Icons.Rounded.Delete else Icons.Rounded.Add, if (esta) "Quitar de la biblioteca" else "Añadir a la biblioteca", destructive = esta,
+                ) { soltar(); alternarEnBiblioteca(ctxM, almM, f, m) }
+                com.example.lector.ui.bitchord.HeldMenuAction(Icons.Rounded.Info, "Abrir ficha") { soltar(); onManga(f, m) }
+                if (onBuscarTitulo != null) com.example.lector.ui.bitchord.HeldMenuAction(Icons.Rounded.Search, "Buscar en todas") { soltar(); onBuscarTitulo(m.titulo) }
+                com.example.lector.ui.bitchord.HeldMenuAction(Icons.Rounded.Share, "Compartir") {
+                    soltar()
+                    compartirTexto(ctxM, runCatching { motor.urlManga(f, m) }.getOrNull()?.let { "${m.titulo}\n$it" } ?: m.titulo)
+                }
+            }
             }
         }
     }
@@ -492,8 +527,11 @@ private fun NovedadesFuente(
     busqueda: ExtManager.BusquedaGuardada? = null,
     guardadas: List<ExtManager.BusquedaGuardada> = emptyList(),
     enBiblioteca: Set<String> = emptySet(),
+    /** Mantener pulsada una portada: abre el menú de BitChord con su foto. */
+    onRetener: ((FuenteUI, MangaFuente, com.example.lector.ui.bitchord.HeldItem) -> Unit)? = null,
 ) {
     val gen = NovedadesGuardadas.generacion
+    val scopeR = rememberCoroutineScope()
     // Clave propia para cada búsqueda guardada (comparte la caché de la sesión con las fuentes).
     val clave = if (busqueda == null) f.id else f.id * 31 + busqueda.nombre.hashCode()
     val estado = NovedadesGuardadas.datos[clave]?.second
@@ -574,7 +612,10 @@ private fun NovedadesFuente(
             )
             else -> LazyRow(contentPadding = PaddingValues(horizontal = SearchHorizontalPadding), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(lst, key = { it.url }) { m ->
-                    Column(Modifier.width(118.dp).press3D().pressable { onManga(f, m) }) {
+                    val foto = com.example.lector.ui.bitchord.rememberHeldPicture()
+                    Column(Modifier.width(118.dp).press3D().pressable(onLongClick = onRetener?.let { r ->
+                        { scopeR.launch { r(f, m, foto.capture()) } }
+                    }) { onManga(f, m) }.heldPicture(foto)) {
                         val esta = "${f.id}|${m.url}" in enBiblioteca
                         Box {
                             ImagenRemota(
@@ -673,9 +714,9 @@ private fun OrdenarNovedades(ext: ExtManager) {
 @Composable
 private fun DialogoNovedades(ext: ExtManager, onCerrar: () -> Unit) {
     var q by remember { mutableStateOf("") }
-    val todas = remember(ext.fuentes, ext.mostrarNsfw, q) {
+    val todas = remember(ext.fuentes, ext.mostrarNsfw, com.example.lector.ModoContenido.modo, q) {
         ext.fuentes
-            .filter { (ext.mostrarNsfw || !it.nsfw) && (q.isBlank() || it.nombre.contains(q.trim(), ignoreCase = true)) }
+            .filter { com.example.lector.ModoContenido.verNsfw(it.nsfw, ext.mostrarNsfw) && (q.isBlank() || it.nombre.contains(q.trim(), ignoreCase = true)) }
             .sortedWith(compareBy({ it.nombre.lowercase() }, { it.lang }))
     }
     DialogoAlerta(
@@ -728,15 +769,15 @@ private fun ExtensionesTab(
 ) {
     val q = consulta.trim()
     val instaladas = ext.instaladas
-    val inst = remember(instaladas, q, ext.mostrarNsfw) {
-        instaladas.filter { (q.isEmpty() || it.nombre.contains(q, ignoreCase = true)) && (ext.mostrarNsfw || !it.nsfw) }
+    val inst = remember(instaladas, q, ext.mostrarNsfw, com.example.lector.ModoContenido.modo) {
+        instaladas.filter { (q.isEmpty() || it.nombre.contains(q, ignoreCase = true)) && com.example.lector.ModoContenido.verNsfw(it.nsfw, ext.mostrarNsfw) }
     }
     val pendientes = remember(inst) { inst.filter { it.actualizacion != null } }
     val alDia = remember(inst) { inst.filter { it.actualizacion == null } }
-    val disp = remember(ext.disponibles, instaladas, q, ext.mostrarNsfw, ext.idiomas) {
+    val disp = remember(ext.disponibles, instaladas, q, ext.mostrarNsfw, com.example.lector.ModoContenido.modo, ext.idiomas) {
         val pkgsInstalados = instaladas.mapTo(HashSet()) { it.pkg }
         ext.disponibles
-            .filter { it.pkg !in pkgsInstalados && (q.isEmpty() || it.nombre.contains(q, ignoreCase = true)) && (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas }
+            .filter { it.pkg !in pkgsInstalados && (q.isEmpty() || it.nombre.contains(q, ignoreCase = true)) && com.example.lector.ModoContenido.verNsfw(it.nsfw, ext.mostrarNsfw) && it.lang in ext.idiomas }
             .sortedBy { it.nombre.lowercase() }
             .groupBy { it.lang }.toSortedMap(compareBy<String>({ nombreIdioma(it) }, { it }))
     }
@@ -832,7 +873,7 @@ private fun ExtensionesTab(
                                 SearchCount(pendientes.size)
                                 if (pendientes.size > 1) {
                                     Spacer(Modifier.weight(1f))
-                                    PildoraAccion("Todas", Icons.Rounded.Refresh, relleno = true) { Tacto.confirmar(); ext.actualizarTodas() }
+                                    PildoraAccion(ext.actualizandoTodas?.let { (h, t) -> "${h + 1}/$t" } ?: "Todas", Icons.Rounded.Refresh, relleno = true) { Tacto.confirmar(); ext.actualizarTodas() }
                                 }
                             }
                         },

@@ -6,10 +6,12 @@ package com.example.lector.ui.bitchord
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,59 +61,74 @@ import com.example.lector.ui.LectorType
 private fun pendientes(): List<TareaDescarga> = Descargas.cola.filter { it.clave !in Descargas.errores }
 
 /**
- * The download indicator — en Shiori, una píldora flotante arriba.
+ * The download indicator — en Shiori, una píldora pequeña acoplada encima de la barra flotante, a la izquierda.
  *
  * Absent until something is actually downloading, and absent again once the queue is quiet.
+ * Vive en la misma columna que la barra de navegación (LectorApp), así que nunca tapa los botones de las
+ * barras superiores, y se esconde con ella cuando hay una pantalla encima (lector, ficha, pantalla completa).
+ * Entra desplegándose desde abajo para que la columna crezca sin saltos.
  *
  * It draws the batch's overall progress rather than the running chapter's: from here the interesting
  * number is how much of the *batch* is left, and a ring that restarts from zero forty times says
  * nothing about that.
  */
 @Composable
+fun NavBarDownloadPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible = pendientes().isNotEmpty(),
+        modifier = modifier,
+        enter = expandVertically(tween(260), expandFrom = Alignment.Bottom) + scaleIn(tween(260), initialScale = 0.6f) + fadeIn(tween(160, delayMillis = 60)),
+        exit = fadeOut(tween(120)) + scaleOut(tween(220, delayMillis = 60), targetScale = 0.6f) + shrinkVertically(tween(220, delayMillis = 60), shrinkTowards = Alignment.Bottom),
+    ) { Box(Modifier.padding(start = 6.dp, bottom = 8.dp)) { DownloadPillBody(onClick) } }
+}
+
+/** La misma píldora suelta (posición libre). Se mantiene por compatibilidad; Shiori usa [NavBarDownloadPill]. */
+@Composable
 fun TopBarDownloadButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible = pendientes().isNotEmpty(),
+        modifier = modifier,
+        enter = scaleIn(tween(260), initialScale = 0.6f) + fadeIn(tween(160, delayMillis = 60)),
+        exit = fadeOut(tween(120)) + scaleOut(tween(220, delayMillis = 60), targetScale = 0.6f),
+    ) { DownloadPillBody(onClick) }
+}
+
+@Composable
+private fun DownloadPillBody(onClick: () -> Unit) {
     val activas = pendientes()
-    val visible = activas.isNotEmpty()
     // Fracción del lote: los capítulos en curso aportan lo que llevan; los que esperan, nada.
     val fraction = if (activas.isEmpty()) 0f else activas.sumOf { (Descargas.progreso[it.clave] ?: 0f).toDouble() }.toFloat() / activas.size
     // Animated, because the fraction lands in steps — one chapter at a time, plus
     // whatever the running one reports — and a ring that jumps reads as a stutter.
     val progress by animateFloatAsState(fraction, tween(300), label = "downloadRingProgress")
     val tint = LectorColors.Text
-
-    AnimatedVisibility(
-        visible = visible,
-        modifier = modifier,
-        enter = scaleIn(tween(260), initialScale = 0.6f) + fadeIn(tween(160, delayMillis = 60)),
-        exit = fadeOut(tween(120)) + scaleOut(tween(220, delayMillis = 60), targetScale = 0.6f),
+    Row(
+        Modifier
+            .shadow(10.dp, CircleShape, clip = false)
+            .clip(CircleShape)
+            .background(LectorColors.Glass)
+            .border(0.5.dp, LectorColors.GlassBorder, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(start = 5.dp, end = 11.dp, top = 5.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            Modifier
-                .shadow(10.dp, CircleShape, clip = false)
-                .clip(CircleShape)
-                .background(LectorColors.Glass)
-                .border(0.5.dp, LectorColors.GlassBorder, CircleShape)
-                .clickable(onClick = onClick)
-                .padding(start = 6.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    // Never quite zero: a ring pinned at nothing reads as
-                    // stalled where the first sliver reads as starting.
-                    progress = { progress.coerceAtLeast(0.02f) },
-                    modifier = Modifier.size(RING_SIZE),
-                    color = tint,
-                    trackColor = tint.copy(alpha = 0.22f),
-                    strokeWidth = 2.dp,
-                    strokeCap = StrokeCap.Round,
-                    gapSize = 0.dp,
-                )
-                // A bare arrow inside the ring: the ring is already saying "downloading".
-                Icon(Icons.Rounded.KeyboardArrowDown, "Descargas: ${(fraction * 100).toInt()} %", tint = tint, modifier = Modifier.size(GLYPH_IN_RING))
-            }
-            Spacer(Modifier.width(8.dp))
-            Text("${activas.size}", style = LectorType.Label, color = tint)
+        Box(contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                // Never quite zero: a ring pinned at nothing reads as
+                // stalled where the first sliver reads as starting.
+                progress = { progress.coerceAtLeast(0.02f) },
+                modifier = Modifier.size(RING_SIZE),
+                color = tint,
+                trackColor = tint.copy(alpha = 0.22f),
+                strokeWidth = 2.dp,
+                strokeCap = StrokeCap.Round,
+                gapSize = 0.dp,
+            )
+            // A bare arrow inside the ring: the ring is already saying "downloading".
+            Icon(Icons.Rounded.KeyboardArrowDown, "Descargas: ${(fraction * 100).toInt()} %", tint = tint, modifier = Modifier.size(GLYPH_IN_RING))
         }
+        Spacer(Modifier.width(8.dp))
+        Text("${activas.size}", style = LectorType.Label, color = tint)
     }
 }
 

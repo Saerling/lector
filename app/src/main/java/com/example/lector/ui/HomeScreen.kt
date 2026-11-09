@@ -171,6 +171,9 @@ fun HomeScreen(
     LaunchedEffect(comics) { seleccion = seleccion.filterTo(HashSet()) { id -> comics.any { it.id == id } } }
     LaunchedEffect(enSeleccion) { if (!enSeleccion) hojaMas = false }
     BackHandler(enabled = enSeleccion) { seleccion = emptySet() }
+    // El mini lector (LectorApp) cede su hueco a la barra de acciones mientras se selecciona.
+    SideEffect { com.example.lector.ui.home.SeleccionInicio.activa = enSeleccion }
+    DisposableEffect(Unit) { onDispose { com.example.lector.ui.home.SeleccionInicio.activa = false } }
     val seleccionados = remember(seleccion, comics) { comics.filter { it.id in seleccion } }
     fun alternar(c: Comic) { seleccion = if (c.id in seleccion) seleccion - c.id else seleccion + c.id }
     val toque: (Comic) -> Unit = { c -> if (enSeleccion) alternar(c) else onOpen(c) }
@@ -265,7 +268,9 @@ fun HomeScreen(
             }
         } else HomeTopBar(heroScrollProgressProvider, glowIds, almacen, onAdd)
 
-        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp)) {
+        // En el hueco del mini lector, justo encima de la barra flotante (64 dp + 8 de margen + 8 de separación;
+        // BarraAcciones ya suma las barras del sistema y 10 dp propios).
+        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 70.dp, start = 12.dp, end = 12.dp)) {
             BarraAcciones(
                 visible = enSeleccion,
                 acciones = buildList {

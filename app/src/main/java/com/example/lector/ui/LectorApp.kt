@@ -72,6 +72,8 @@ fun Inicio(
 ) {
     // Los cómics de categorías ocultas no salen en Inicio, Buscar ni Historial.
     // Solo se ven en Biblioteca, manteniendo pulsado su título.
+    // Modo SFW/NSFW (Ajustes → Seguridad): se filtra aquí una vez para Inicio, Biblioteca e Historial.
+    val comics = androidx.compose.runtime.remember(comics, com.example.lector.ModoContenido.modo, com.example.lector.ext.ExtManager.obtener(androidx.compose.ui.platform.LocalContext.current).fuentes) { com.example.lector.ModoContenido.filtrar(comics) }
     val visibles = almacen.sinOcultos(comics)
     val ultimo = visibles.firstOrNull { it.id == almacen.ultimoAbierto }
     // Último manga en línea que se estaba leyendo (si no está en una categoría oculta).
@@ -413,6 +415,7 @@ fun Inicio(
                     almacen = almacen,
                     onMigrar = { migrarId = it.id; ruta = Ruta.MigrarSerie },
                     onBuscarGlobal = { consultaGlobal = ""; ruta = Ruta.BusquedaGlobal },
+                    onBuscarTitulo = { t -> consultaGlobal = t; ruta = Ruta.BusquedaGlobal },
                 )
                 LectorTab.Library -> Box(Modifier.padding(bottom = 76.dp)) {
                     BibliotecaScreen(
@@ -638,6 +641,7 @@ fun Inicio(
 
       }
 
+        var hojaDescargas by remember { mutableStateOf(false) }
         // Mini lector + barra flotante (de cristal): se esconden hacia abajo cuando hay una página encima.
         AnimatedVisibility(
             visible = !hayCapa,
@@ -652,7 +656,7 @@ fun Inicio(
                 // Solo donde tiene sentido seguir leyendo (Inicio e Historial): en Biblioteca, Explorar, Actualizaciones y
                 // Más tapaba contenido y la barra de selección. Entra y sale plegándose, sin saltos.
                 AnimatedVisibility(
-                    visible = tab == LectorTab.Home || tab == LectorTab.History,
+                    visible = (tab == LectorTab.Home && !com.example.lector.ui.home.SeleccionInicio.activa) || tab == LectorTab.History,
                     // Living Flow: brota de la barra (crece desde abajo) y vuelve a fundirse en ella al salir.
                     enter = expandVertically(tween(300, easing = EnfasisEasing), expandFrom = Alignment.Bottom) + fadeIn(tween(220, 60)) +
                         scaleIn(tween(320, easing = EnfasisEasing), initialScale = 0.88f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)),
@@ -679,6 +683,9 @@ fun Inicio(
                         Spacer(Modifier.height(8.dp))
                     }
                 } }
+                // Indicador de descargas de BitChord (ui/bitchord/DownloadManagerSheet.kt): píldora a la izquierda, encima de
+                // la barra; solo mientras hay capítulos bajando o en cola. Se esconde con la barra (lector, fichas, pantallas encima).
+                com.example.lector.ui.bitchord.NavBarDownloadPill({ hojaDescargas = true })
                 FloatingNavBar(tab, onSelect = onTab)
             }
         }
@@ -693,11 +700,7 @@ fun Inicio(
             } else abrirDetalle(c)
         }
         IslaCopia(Modifier.align(Alignment.TopCenter))
-        // Indicador de descargas de BitChord (ui/bitchord/DownloadManagerSheet.kt): solo mientras hay capítulos bajando o en cola.
-        var hojaDescargas by remember { mutableStateOf(false) }
-        if (ruta != Ruta.Descargas) com.example.lector.ui.bitchord.TopBarDownloadButton(
-            { hojaDescargas = true }, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 6.dp, end = 12.dp),
-        )
+        // Hoja del indicador de descargas (la píldora va acoplada encima de la barra flotante).
         if (hojaDescargas) com.example.lector.ui.bitchord.DownloadManagerSheet({ hojaDescargas = false }) { ruta = Ruta.Descargas }
         InformeCopia()
 

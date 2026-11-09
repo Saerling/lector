@@ -12,6 +12,7 @@
     <!-- Extensiones: instalar/desinstalar APK y ver qué extensiones hay instaladas. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <!-- Avisos de capítulos nuevos y descargas/actualizaciones en segundo plano (WorkManager). -->

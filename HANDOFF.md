@@ -847,3 +847,10 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Inicio: pulsar largo selecciona y activa el modo selección (barra superior + BarraAcciones con ⋮ → HojaMasInicio).
 - Historial de migraciones (ui/migrar/HistorialMigraciones.kt, Ruta.MigracionesRecientes, desde Más y Explorar→Migrar). Selección de fuentes: «Todas las fuentes (todos los idiomas)», extensión original con Confiar/Instalar, no confiables en gris.
 - BitChord: HeldContextMenu en el catálogo de fuentes, SuaveShape = ContinuousCornerShape, indicador + hoja de descargas, WebDAV (bitchord/WebDav*, Ajustes→Datos), Replay (bitchord/ReplayEstadisticas.kt, en Estadísticas).
+
+## 2bw. PASO 75 (0.66)
+- Inicio: en selección la barra de acciones ocupa el sitio del mini lector (SeleccionInicio.activa).
+- Actualizaciones: filtros triestado + fuentes ocultas + agrupar (ui/actualizaciones/FiltroActualizaciones.kt) y Próximos con calendario (Proximos.kt, cálculo de Komikku).
+- Indicador de descargas: pastilla sobre la barra de navegación (izquierda). HeldContextMenu también en Novedades.
+- ModoContenido (SFW/NSFW, prefs modo_contenido) en Seguridad bajo incógnito; filtra Inicio, Biblioteca, Historial, Actualizaciones, Explorar y búsqueda global.
+- Extensiones: setRequireUserAction(NOT_REQUIRED) en API 31+ (+permiso UPDATE_PACKAGES_WITHOUT_USER_ACTION); «Actualizar todas» en segundo plano y seguidas.

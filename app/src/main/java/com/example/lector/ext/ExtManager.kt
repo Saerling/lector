@@ -321,6 +321,7 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     init {
+        com.example.lector.ModoContenido.iniciar(prefs, this)
         val paquetes = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REPLACED)
@@ -678,7 +679,28 @@ class ExtManager private constructor(private val app: Context) {
     fun fijarPaginasPorCarga(fuenteId: Long, n: Int) { prefs.edit().putInt("ppc_$fuenteId", n).apply(); ppcVersion++ }
 
     /** Actualiza todas las extensiones con versión nueva (se descargan a la vez y se instalan una tras otra). */
-    fun actualizarTodas() = instaladas.mapNotNull { it.actualizacion }.forEach { instalar(it) }
+    fun actualizarTodas() {
+        if (actualizandoTodas != null) return
+        val lista = instaladas.mapNotNull { it.actualizacion }
+        if (lista.isEmpty()) return
+        // En segundo plano y una tras otra. Desde Android 12 las extensiones que instaló Shiori se actualizan sin
+        // pedir confirmación (ver [abrirSesion]); en versiones anteriores Android sigue preguntando por cada una.
+        scope.launch {
+            try {
+                lista.forEachIndexed { i, e ->
+                    actualizandoTodas = i to lista.size
+                    instalar(e)
+                    kotlinx.coroutines.delay(300)
+                    kotlinx.coroutines.withTimeoutOrNull(240_000) {
+                        while (progreso[e.pkg]?.fase.let { it == Fase.DESCARGANDO || it == Fase.INSTALANDO }) kotlinx.coroutines.delay(300)
+                    }
+                }
+            } finally { actualizandoTodas = null }
+        }
+    }
+
+    /** Progreso de «Actualizar todas»: (hechas, total) o null si no está en marcha. */
+    var actualizandoTodas by mutableStateOf<Pair<Int, Int>?>(null); private set
 
     fun instalar(e: ExtDisponible) {
         if (e.apkUrl.isBlank()) return
@@ -719,6 +741,12 @@ class ExtManager private constructor(private val app: Context) {
         val instalador = app.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(pkg)
+        // Como Komikku (PackageInstallerInstaller): sin confirmación del sistema cuando Android lo permite
+        // (API 31+, actualizaciones de paquetes que instaló esta app y la propia app). Las instalaciones nuevas
+        // siguen pidiendo confirmación: es una limitación de Android.
+        if (Build.VERSION.SDK_INT >= 31) {
+            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+        }
         val id = instalador.createSession(params)
         instalador.openSession(id).use { s ->
             apk.inputStream().use { ent ->

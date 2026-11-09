@@ -98,12 +98,14 @@ fun HistorialScreen(
 
     val idsVisibles = remember(comics) { comics.map { it.id }.toSet() }
     val porClave = remember(almacen.version) { almacen.cargar().filter { it.enLinea }.associateBy { "${it.fuenteId}|${it.urlManga}" } }
-    val entradas = remember(comics, almacen.historialLinea, porClave, consulta) {
+    val entradas = remember(comics, almacen.historialLinea, porClave, consulta, com.example.lector.ModoContenido.modo) {
         val locales = comics.filter { it.leido > 0 && !it.enLinea }.map { ItemHistorial.Local(it) }
         // Un manga de una categoría oculta tampoco sale aquí.
         val enLinea = almacen.historialLinea.mapNotNull { e ->
             val c = porClave["${e.fuenteId}|${e.urlManga}"]
-            if (c != null && c.id !in idsVisibles) null else ItemHistorial.EnLinea(e, c)
+            if (c != null && c.id !in idsVisibles) null
+            else if (!com.example.lector.ModoContenido.permite(e.fuenteId, c?.generos)) null
+            else ItemHistorial.EnLinea(e, c)
         }
         val q = consulta.trim()
         (locales + enLinea).filter { q.isEmpty() || it.titulo.contains(q, ignoreCase = true) }.sortedByDescending { it.tiempo }

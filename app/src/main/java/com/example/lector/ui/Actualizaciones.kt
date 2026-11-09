@@ -103,7 +103,16 @@ fun ActualizacionesScreen(
     alBuscarGlobal: (String) -> Unit = {},
 ) {
     val ctx = LocalContext.current
-    val lista = almacen.actualizaciones
+    val lista = run {
+        val todas = almacen.actualizaciones
+        val modoC = com.example.lector.ModoContenido.modo
+        remember(todas, modoC, almacen.version) {
+            if (modoC == com.example.lector.ModoContenido.Modo.NORMAL) todas else {
+                val gen = almacen.cargar().filter { it.enLinea }.associate { "${it.fuenteId}|${it.urlManga}" to it.generos }
+                todas.filter { com.example.lector.ModoContenido.permite(it.fuenteId, gen["${it.fuenteId}|${it.urlManga}"]) }
+            }
+        }
+    }
     abrirMangaAct = alAbrirManga
     var seleccion by remember { mutableStateOf(emptySet<String>()) }
     var abiertos by remember { mutableStateOf(emptySet<String>()) }
@@ -111,6 +120,10 @@ fun ActualizacionesScreen(
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var confirmarLimpiar by remember { mutableStateOf(false) }
     var verErrores by remember { mutableStateOf(false) }
+    var verFiltros by remember { mutableStateOf(false) }
+    var verProximos by remember { mutableStateOf(false) }
+    val filtros = com.example.lector.ui.actualizaciones.FiltrosActualizaciones
+    remember { filtros.iniciar(ctx) }
 
     // Sin revisión automática: al abrir la pestaña, si hace más de 6 horas, se revisa sola.
     LaunchedEffect(Unit) {
@@ -120,10 +133,14 @@ fun ActualizacionesScreen(
     }
     BackHandler(enabled = seleccion.isNotEmpty()) { seleccion = emptySet() }
 
-    val grupos = remember(lista) {
-        lista.sortedByDescending { it.detectado }
+    val leidosV = ext.leidos
+    val visibles = remember(lista, leidosV, Descargas.version.value, filtros.descargados, filtros.noLeidos, filtros.empezados, filtros.marcados, filtros.fuentesOcultas) {
+        filtros.aplicar(lista, almacen, ext)
+    }
+    val grupos = remember(visibles, filtros.agrupar) {
+        visibles.sortedByDescending { it.detectado }
             .groupBy { inicioDelDia(it.detectado) }
-            .map { (dia, filas) -> dia to filas.groupBy { "${it.fuenteId}|${it.urlManga}" }.values.toList() }
+            .map { (dia, filas) -> dia to filas.groupBy { if (filtros.agrupar) "${it.fuenteId}|${it.urlManga}" else clave(it) }.values.toList() }
     }
     val comics: Map<String, Comic> = remember(almacen.version) {
         almacen.cargar().filter { it.enLinea }.associateBy { "${it.fuenteId}|${it.urlManga}" }
@@ -150,8 +167,8 @@ fun ActualizacionesScreen(
             if (seleccion.isNotEmpty()) {
                 CabeceraSeleccion(
                     seleccion.size, onCerrar = { seleccion = emptySet() },
-                    onTodo = { seleccion = lista.map { clave(it) }.toSet() },
-                    onInvertir = { seleccion = lista.map { clave(it) }.toSet() - seleccion },
+                    onTodo = { seleccion = visibles.map { clave(it) }.toSet() },
+                    onInvertir = { seleccion = visibles.map { clave(it) }.toSet() - seleccion },
                 )
             } else {
                 Row(
@@ -174,6 +191,10 @@ fun ActualizacionesScreen(
                         else Icon(Icons.Rounded.Refresh, "Buscar capítulos nuevos", tint = acento, modifier = Modifier.size(21.dp))
                     }
                     Spacer(Modifier.width(8.dp))
+                    LibraryIconButton(Icons.Rounded.DateRange, "Próximos", false) { verProximos = true }
+                    Spacer(Modifier.width(8.dp))
+                    LibraryIconButton(com.example.lector.ui.actualizaciones.IconoFiltrar, "Filtrar", filtros.hayFiltros) { verFiltros = true }
+                    Spacer(Modifier.width(8.dp))
                     Box {
                         LibraryIconButton(Icons.Rounded.MoreVert, "Más", false) { menu = true }
                         MenuShiori(expanded = menu, onDismissRequest = { menu = false }) {
@@ -182,6 +203,10 @@ fun ActualizacionesScreen(
                                     text = { Text("Errores de la última revisión (${almacen.erroresActualizacion.size})") },
                                     onClick = { menu = false; verErrores = true },
                                 )
+                            }
+                            DropdownMenuItem(text = { Text("Próximas actualizaciones") }, onClick = { menu = false; verProximos = true })
+                            if (filtros.hayFiltros) {
+                                DropdownMenuItem(text = { Text("Quitar los filtros") }, onClick = { menu = false; filtros.limpiar() })
                             }
                             if (lista.isNotEmpty()) {
                                 DropdownMenuItem(text = { Text("Borrar la lista") }, onClick = { menu = false; confirmarLimpiar = true })
@@ -220,6 +245,12 @@ fun ActualizacionesScreen(
                             else "Desliza hacia abajo para revisar.",
                         enMarcha = Actualizador.corriendo,
                     ) { Actualizador.iniciar(ctx) }
+                } else if (visibles.isEmpty()) {
+                    VacioActualizaciones(
+                        "Nada con estos filtros",
+                        "Hay ${lista.size} capítulos nuevos, pero ninguno cumple los filtros elegidos.",
+                        enMarcha = false, accion = "Quitar los filtros",
+                    ) { filtros.limpiar() }
                 } else {
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 120.dp)) {
                         var base = 0
@@ -314,6 +345,19 @@ fun ActualizacionesScreen(
                 },
             ),
         )
+
+        if (verProximos) {
+            com.example.lector.ui.actualizaciones.ProximosScreen(
+                almacen, onVolver = { verProximos = false },
+                onAbrir = { c ->
+                    alAbrirManga(ActualizacionCap(c.fuenteId, c.urlManga.orEmpty(), c.titulo, c.portadaUrl, "", "", -1f, 0L, null, 0L))
+                },
+            )
+        }
+    }
+
+    if (verFiltros) {
+        com.example.lector.ui.actualizaciones.HojaFiltroActualizaciones(lista, ext) { verFiltros = false }
     }
 
     if (confirmarLimpiar) {
@@ -372,11 +416,11 @@ private var abrirMangaAct: (ActualizacionCap) -> Unit = {}
 private fun escalonAct(i: Int): Int = if (i < 10) i else 0
 
 @Composable
-private fun VacioActualizaciones(titulo: String, texto: String, enMarcha: Boolean, onRevisar: () -> Unit) {
+private fun VacioActualizaciones(titulo: String, texto: String, enMarcha: Boolean, accion: String = "Buscar ahora", onRevisar: () -> Unit) {
     Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         LibraryEmptyState(
             Modifier.entrada(0).padding(top = 24.dp, bottom = 160.dp), texto, titulo,
-            if (enMarcha) "Revisando…" else "Buscar ahora", onRevisar.takeIf { !enMarcha } ?: {},
+            if (enMarcha) "Revisando…" else accion, onRevisar.takeIf { !enMarcha } ?: {},
         )
     }
 }

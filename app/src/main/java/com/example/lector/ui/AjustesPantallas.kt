@@ -250,6 +250,8 @@ private val AJUSTES_BUSCABLES: List<Triple<String, String, Ruta>> = listOf(
     Triple("Borrar cachés", "caché memoria espacio", Ruta.Datos),
     Triple("Bloqueo de la app", "huella bloqueo seguridad pin", Ruta.AjSeguridad),
     Triple("Modo incógnito", "incógnito historial privacidad", Ruta.AjSeguridad),
+    Triple("Modo SFW", "sfw nsfw +18 adultos ocultar contenido", Ruta.AjSeguridad),
+    Triple("Modo NSFW", "nsfw +18 adultos solo contenido", Ruta.AjSeguridad),
     Triple("Pantalla segura", "capturas pantalla segura", Ruta.AjSeguridad),
     Triple("DNS sobre HTTPS", "dns doh cloudflare google bloqueo red", Ruta.AjAvanzado),
     Triple("Cookies", "cookies webview borrar", Ruta.AjAvanzado),
@@ -802,6 +804,13 @@ fun AjSeguridadScreen(almacen: Almacen, onBack: () -> Unit) {
         TituloSeccion("Privacidad")
         FilaSwitch("Pantalla segura", "Oculta la app en la lista de recientes e impide capturas", almacen.pantallaSegura) { almacen.pantallaSegura = it }
         FilaSwitch("Modo incógnito", "No se anota nada en el historial mientras esté activo", almacen.incognito) { almacen.incognito = it }
+        val modoC = com.example.lector.ModoContenido.modo
+        FilaSwitch("Modo SFW", "Oculta todo lo +18: extensiones, fuentes y mangas de adultos en toda la app", modoC == com.example.lector.ModoContenido.Modo.SFW) {
+            com.example.lector.ModoContenido.fijar(if (it) com.example.lector.ModoContenido.Modo.SFW else com.example.lector.ModoContenido.Modo.NORMAL)
+        }
+        FilaSwitch("Modo NSFW", "Muestra solo contenido +18", modoC == com.example.lector.ModoContenido.Modo.NSFW) {
+            com.example.lector.ModoContenido.fijar(if (it) com.example.lector.ModoContenido.Modo.NSFW else com.example.lector.ModoContenido.Modo.NORMAL)
+        }
     }
 }
 

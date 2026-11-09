@@ -71,9 +71,9 @@ fun BusquedaGlobalScreen(
     }
     var enviada by rememberSaveable { mutableStateOf(consultaInicial) }
     var soloConResultados by remember { mutableStateOf(false) }
-    val fuentes = remember(ext.fuentes, almacen.globalSoloAncladas, ext.idiomas, ext.mostrarNsfw) {
+    val fuentes = remember(ext.fuentes, almacen.globalSoloAncladas, ext.idiomas, ext.mostrarNsfw, com.example.lector.ModoContenido.modo) {
         ext.fuentes.filter {
-            (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas &&
+            com.example.lector.ModoContenido.verNsfw(it.nsfw, ext.mostrarNsfw) && it.lang in ext.idiomas &&
                 (!almacen.globalSoloAncladas || it.id.toString() in ext.fijadas)
         }.sortedWith(compareBy({ it.id.toString() !in ext.fijadas }, { it.nombre.lowercase() }))
     }
