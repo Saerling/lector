@@ -1,5 +1,6 @@
 package com.example.lector.ui
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
@@ -485,7 +486,18 @@ private fun NavegarFuente(
     }
 
     // Al cambiar de modo, de búsqueda o de filtros se vuelve a empezar por la página 1.
+    // Al volver de un manga (la pantalla se recrea) se recupera la lista ya cargada en vez de pedirla otra vez.
+    val restaurada = remember {
+        EstadoListaFuente.ultimo[f.id]?.takeIf { it.modo == modo && it.enviada == enviada }?.also { e ->
+            lista.addAll(e.lista); pagina = e.pagina; hay = e.hay; filtros = e.filtros; aplicados = e.aplicados; recarga = e.recarga
+        } != null
+    }
+    var saltar by remember { mutableStateOf(restaurada) }
+    DisposableEffect(f.id) {
+        onDispose { EstadoListaFuente.ultimo[f.id] = EstadoListaFuente(modo, enviada, recarga, lista.toList(), pagina, hay, filtros, aplicados) }
+    }
     LaunchedEffect(modo, enviada, recarga) {
+        if (saltar) { saltar = false; return@LaunchedEffect }
         lista.clear(); pagina = 1; hay = true; error = null; cargando = true
         try {
             val r = pedir(1)
@@ -857,4 +869,13 @@ private fun HojaVistaCatalogo(almacen: com.example.lector.Almacen, hayFiltrosFue
             }
         }
     }
+}
+
+
+/** Lo último que mostraba la lista de cada fuente (en memoria): se recupera al volver de una ficha. */
+private class EstadoListaFuente(
+    val modo: Int, val enviada: String, val recarga: Int, val lista: List<MangaFuente>, val pagina: Int, val hay: Boolean,
+    val filtros: FilterList?, val aplicados: FilterList?,
+) {
+    companion object { val ultimo = HashMap<Long, EstadoListaFuente>() }
 }

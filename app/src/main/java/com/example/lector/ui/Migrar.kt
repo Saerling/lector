@@ -231,7 +231,9 @@ suspend fun migrarComic(
     val motor = requireNotNull(Motor.actual) { "Motor de fuentes no disponible" }
     check(almacen.comicEnLinea(f.id, m.url) == null) { "Ese manga ya está en tu biblioteca" }
     val ficha = motor.ficha(f, m)
-    val leidos = ext.migrarLeidos(origenId, capsOrigen, f.id, ficha.capitulos, comic.ultimaPagina)
+    // Sin la lista de la fuente vieja (no instalada o no responde) se usa la guardada en el móvil (copia o última vez).
+    val viejos = capsOrigen ?: comic.urlManga?.let { com.example.lector.CacheFichas.leer(origenId, it)?.capitulos }
+    val leidos = ext.migrarLeidos(origenId, viejos, f.id, ficha.capitulos, comic.ultimaPagina)
     val portada = ficha.detalle.portadaUrl ?: m.portadaUrl
     check(almacen.migrarEnLinea(comic, f.id, m.url, portada, ficha.capitulos.size, leidos)) { "No se pudo migrar" }
     // Los capítulos que hay ahora son la base: solo lo que salga después contará como novedad.

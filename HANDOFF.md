@@ -828,3 +828,8 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Descargas por manga (como Komikku fuente/manga/capítulo): clave fuente|urlManga|capUrl en archivo, cola, progreso y caché del lector. Las viejas se siguen usando si el índice dice que son de ese manga. Arregla capítulos bajados que salían (y se leían) en todos los mangas de la fuente (fuentes con memo y URLs repetidas).
 - HojaLector pasa a ModalBottomSheet de Material con el aspecto de Mochy (la ventana propia fallaba).
 - Ficha: descripción a 3 líneas (ya no crece tapando la portada); tocarla abre hoja con texto seleccionable, géneros, copiar y buscar. Título: tocar = búsqueda global, mantener = copiar.
+
+## 2bs. PASO 71 (0.62)
+- Búsqueda global y lista de cada fuente conservan su estado al ir a un manga y volver (SaveableStateHolder en LectorApp + EstadoListaFuente en memoria con lista, página y filtros).
+- Migrar: lógica de Komikku (mayor número leído en la vieja marca <= en la nueva; marcadores por número; número reconocido del nombre si la fuente no lo da). Sin lista de la fuente vieja se usa la de CacheFichas.
+- Fuente no instalada: primero InfoSinFuente (portada, autor, N capítulos · M leídos, descripción y capítulos de la copia); buscar/migrar es opcional.

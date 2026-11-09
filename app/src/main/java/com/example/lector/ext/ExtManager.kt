@@ -987,21 +987,37 @@ class ExtManager private constructor(private val app: Context) {
     fun migrarLeidos(
         viejaFuente: Long, viejos: List<CapituloFuente>?, nuevaFuente: Long, nuevos: List<CapituloFuente>, respaldo: Int,
     ): Int {
-        val numerosLeidos = viejos.orEmpty().filter { it.numero >= 0 && esLeido(viejaFuente, it.url) }.map { it.numero }.toSet()
-        val aMarcar = if (numerosLeidos.isNotEmpty()) {
-            nuevos.filter { it.numero >= 0 && it.numero in numerosLeidos }
-        } else {
-            // Las fuentes listan lo más nuevo primero: los leídos son los últimos de la lista.
-            nuevos.takeLast(respaldo.coerceIn(0, nuevos.size))
+        // Copiado de Komikku (MigrateDialog/copyChapters): el mayor número de capítulo leído en la vieja marca como
+        // leídos todos los de la nueva con número <= ese; los marcadores pasan al capítulo del mismo número. Si la
+        // fuente no da número, se reconoce del nombre («Capítulo 12.5», «Ch. 7»…), como ChapterRecognition.
+        val viejosNum = viejos.orEmpty().map { it to numeroReconocido(it) }.filter { it.second >= 0f }
+        val maxLeido = viejosNum.filter { esLeido(viejaFuente, it.first.url) }.maxOfOrNull { it.second }
+        val marcadosNum = viejosNum.filter { esMarcado(viejaFuente, it.first.url) }.map { it.second }.toSet()
+        val nuevosNum = nuevos.map { it to numeroReconocido(it) }
+        val aMarcar = when {
+            maxLeido != null -> nuevosNum.filter { it.second >= 0f && it.second <= maxLeido }.map { it.first }
+            viejos.isNullOrEmpty() -> nuevos.takeLast(respaldo.coerceIn(0, nuevos.size)) // sin datos viejos: los más antiguos
+            else -> emptyList()
         }
         if (aMarcar.isNotEmpty()) {
             aMarcar.forEach { leidosH.add(claveCap(nuevaFuente, it.url)) }
             guardarLeidos()
         }
+        val nuevosMarcados = nuevosNum.filter { it.second in marcadosNum }.map { "$nuevaFuente|${it.first.url}" }
+        if (nuevosMarcados.isNotEmpty()) { marcados = marcados + nuevosMarcados; guardarMarcados() }
         return nuevos.count { esLeido(nuevaFuente, it.url) }
     }
 
     fun esMarcado(fuenteId: Long, url: String) = "$fuenteId|$url" in marcados
+
+    /** Número del capítulo: el de la fuente o, si no lo da, el que aparece en el nombre (-1 si no hay). */
+    fun numeroReconocido(c: CapituloFuente): Float {
+        if (c.numero >= 0f) return c.numero
+        val n = c.nombre.lowercase()
+        val r = Regex("(?:cap[ií]tulo|cap\\.?|chapter|ch\\.?|episodio|ep\\.?|#)\\s*(\\d+(?:[.,]\\d+)?)").find(n)
+            ?: Regex("(\\d+(?:[.,]\\d+)?)").find(n)
+        return r?.groupValues?.get(1)?.replace(',', '.')?.toFloatOrNull() ?: -1f
+    }
 
     fun alternarMarcado(fuenteId: Long, url: String) {
         val k = "$fuenteId|$url"

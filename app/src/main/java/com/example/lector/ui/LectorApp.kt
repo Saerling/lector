@@ -100,6 +100,9 @@ fun Inicio(
     var reanudar by remember { mutableStateOf<Pair<String, Int>?>(null) }
     // Pantalla a la que vuelve la ficha cuando no se abrió desde la lista de una fuente (p. ej. búsqueda global).
     var vueltaFicha by remember { mutableStateOf<Ruta?>(null) }
+    // Estado guardado (búsqueda, modo, desplazamiento…) de la búsqueda global y de la lista de cada fuente: al ir a un
+    // manga y volver, siguen como estaban en vez de reiniciarse.
+    val estadosPantallas = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     // Mangas abiertos uno encima de otro desde una ficha (recomendaciones, «Fuente no disponible»): «atrás» vuelve
     // al anterior en vez de salir de la ficha. Se vacía al salir de la ficha.
     val fichasAnteriores = remember { androidx.compose.runtime.mutableStateListOf<Pair<Long, MangaFuente>>() }
@@ -514,13 +517,13 @@ fun Inicio(
                     Ruta.AjAvanzado -> AjAvanzadoScreen(almacen) { ruta = Ruta.Ajustes }
                     Ruta.AcercaDe -> AcercaDeScreen { ruta = Ruta.Ajustes }
                     Ruta.Descargas -> ColaDescargasScreen(almacen) { ruta = null }
-                    Ruta.BusquedaGlobal -> BusquedaGlobalScreen(
+                    Ruta.BusquedaGlobal -> estadosPantallas.SaveableStateProvider("global") { BusquedaGlobalScreen(
                         ext, almacen, consultaGlobal,
                         onManga = { f, m ->
                             fuenteId = f.id; mangaSel = m; desdeNovedades = true; reanudar = null
                             vueltaFicha = Ruta.BusquedaGlobal; ruta = Ruta.Ficha
                         },
-                    ) { ruta = null }
+                    ) { ruta = null } }
                     Ruta.MigrarSerie -> {
                         val c = comics.firstOrNull { it.id == migrarId }
                         val origen = c?.let { x -> ext.fuentes.firstOrNull { it.id == x.fuenteId } }
@@ -582,11 +585,11 @@ fun Inicio(
                     // Fondo opaco y toques propios: la pantalla de debajo no se ve ni recibe toques.
                     Box(Modifier.fillMaxSize().contenedor(rectOrigen) { p }.gestoAtras(r == ruta).background(LectorColors.Bg).pointerInput(Unit) { detectTapGestures { } }) {
                         when (r) {
-                        Ruta.FuenteDetalle -> FuenteDetalleScreen(
+                        Ruta.FuenteDetalle -> estadosPantallas.SaveableStateProvider("fuente_${fuenteId}") { FuenteDetalleScreen(
                             ext, fuenteId ?: 0L,
                             onManga = { mangaSel = it; desdeNovedades = false; reanudar = null; ruta = Ruta.Ficha },
                             generoBuscar = generoBuscar, alConsumirGenero = { generoBuscar = null },
-                        ) { ruta = null }
+                        ) { ruta = null } }
                         Ruta.Ficha -> {
                             val m = mangaSel
                             if (m == null) Box(Modifier.fillMaxSize().background(LectorColors.Bg))
