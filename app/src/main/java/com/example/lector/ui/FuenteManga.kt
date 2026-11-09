@@ -236,6 +236,8 @@ fun FichaMangaScreen(
                     Avisos.mostrar(if (nuevos > 0) "$nuevos capítulos nuevos" else "Ficha actualizada: sin capítulos nuevos")
                 }
             }.onFailure {
+                // Salir de la ficha mientras carga cancela la petición: no es un error que haya que mostrar.
+                if (it is kotlinx.coroutines.CancellationException) throw it
                 val m = it.message ?: "No se pudo cargar la ficha"
                 if (antes == null) error = m else Avisos.mostrar("No se pudo actualizar: $m")
             }
