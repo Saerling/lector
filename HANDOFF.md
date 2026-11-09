@@ -859,3 +859,7 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Modos SFW/NSFW también en Más → Lectura.
 - Actualizaciones: hoja de filtros desplazable y rediseñada; Próximos con calendario estilo Mochy (pager, portadas en días) y estado en EstadoActualizaciones.
 - Personalización → Estilo (EstiloElegido, prefs aspecto): esquinas Mochy/Continuas, pulsación larga Mochy/Elevado/Directo, ventana de actualización Mochy (HojaActualizacion.kt)/BitChord, indicador de descargas on/off + posición. Todo por defecto Mochy. WebDAV/Replay/descargas restilizados a Mochy.
+
+## 2by. PASO 77 (0.68)
+- Leídos, marcadores y página guardada por manga (fuente|urlManga|capUrl), como Komikku: archivos estado_capitulos/*_m.*; migración única al arrancar (prefs estado_por_manga) solo a capítulos conocidos; perezosa con migrarMangaSiHace al cargar la ficha. Copias Tachibk/JSON por manga. Arregla capítulos nuevos que salían leídos.
+- Cancelar la revisión de biblioteca la corta del todo (Actualizador.trabajo/cancelado, descarta lo que llegue después).

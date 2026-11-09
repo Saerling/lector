@@ -438,7 +438,7 @@ fun Inicio(
                         alAbrir = { a ->
                             abrirEnLinea(
                                 a.fuenteId, a.urlManga, a.titulo, a.portadaUrl,
-                                a.capUrl to ext.paginaDe(a.fuenteId, a.capUrl),
+                                a.capUrl to ext.paginaDe(a.fuenteId, a.urlManga, a.capUrl),
                             )
                         },
                         alAbrirManga = { a -> abrirEnLinea(a.fuenteId, a.urlManga, a.titulo, a.portadaUrl, null) },

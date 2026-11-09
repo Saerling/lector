@@ -146,7 +146,17 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
                 CapituloFuente(it.url, it.name, it.date_upload, it.scanlator?.takeIf { x -> x.isNotBlank() }, it.chapter_number, it.memo.aTexto())
             },
             memo = m.memo.aTexto() ?: entrada.memo.aTexto(),
-        ).also { com.example.lector.CacheFichas.guardar(fuente.id, manga.url, it) } // queda guardada en el móvil
+        ).also {
+            // Estado viejo («fuente|url») de un manga aún sin migrar: solo para los capítulos que ya conocía (nunca
+            // para los recién traídos, que podrían repetir la url de un capítulo leído de otro manga).
+            if (ext.faltaMigrar(fuente.id, manga.url)) runCatching {
+                val antes = HashSet<String>()
+                com.example.lector.CacheFichas.leer(fuente.id, manga.url)?.capitulos?.forEach { c -> antes += c.url }
+                antes += com.example.lector.Almacen.obtener(ctx).capitulosConocidos(fuente.id, manga.url)
+                ext.migrarMangaSiHace(fuente.id, manga.url, antes)
+            }
+            com.example.lector.CacheFichas.guardar(fuente.id, manga.url, it) // queda guardada en el móvil
+        }
     }
 
     private suspend fun paginasDe(fuente: FuenteUI, capitulo: CapituloFuente): List<Page> {

@@ -112,7 +112,7 @@ fun InfoGuardada(
     val estado = d?.estado?.takeIf { it != 0 } ?: comic?.estado ?: 0
     val portadaUrl = d?.portadaUrl ?: comic?.portadaUrl ?: portadaRespaldo
     // Leídos: los de la copia/historial; si no hay lista guardada, el recuento de la biblioteca.
-    val leidos = if (caps.isNotEmpty()) caps.count { ext.esLeido(fuenteId, it.url) } else comic?.ultimaPagina ?: 0
+    val leidos = if (caps.isNotEmpty()) caps.count { ext.esLeido(fuenteId, mangaUrl, it.url) } else comic?.ultimaPagina ?: 0
     val total = if (caps.isNotEmpty()) caps.size else comic?.paginas ?: 0
 
     Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
@@ -178,7 +178,7 @@ fun InfoGuardada(
                     LectorType.Label, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = LectorColors.Muted,
                 )
             }
-            items(caps.size, key = { "c" + caps[it].url }) { i -> FilaCapitulo(caps[i], ext.esLeido(fuenteId, caps[i].url)) }
+            items(caps.size, key = { "c" + caps[it].url }) { i -> FilaCapitulo(caps[i], ext.esLeido(fuenteId, mangaUrl, caps[i].url)) }
         }
         Box(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp)) {
             PillButton(accion, iconoAccion, onAccion)

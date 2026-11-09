@@ -96,9 +96,9 @@ object FiltrosActualizaciones {
         if (!hayFiltros) return lista
         return lista.filter { a ->
             a.fuenteId !in fuentesOcultas &&
-                noLeidos.deja(!ext.esLeido(a.fuenteId, a.capUrl)) &&
-                marcados.deja(ext.esMarcado(a.fuenteId, a.capUrl)) &&
-                empezados.deja(!ext.esLeido(a.fuenteId, a.capUrl) && ext.paginaDe(a.fuenteId, a.capUrl) > 0) &&
+                noLeidos.deja(!ext.esLeido(a.fuenteId, a.urlManga, a.capUrl)) &&
+                marcados.deja(ext.esMarcado(a.fuenteId, a.urlManga, a.capUrl)) &&
+                empezados.deja(!ext.esLeido(a.fuenteId, a.urlManga, a.capUrl) && ext.paginaDe(a.fuenteId, a.urlManga, a.capUrl) > 0) &&
                 descargados.deja(almacen.estaDescargado(a.fuenteId, a.urlManga, a.capUrl))
         }
     }

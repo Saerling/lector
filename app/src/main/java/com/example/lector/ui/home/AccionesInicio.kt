@@ -125,7 +125,7 @@ class AccionesInicio(
                 val url = c.urlManga.orEmpty()
                 val conocidos = almacen.capitulosConocidos(c.fuenteId, url)
                 if (conocidos.isEmpty() || ext == null) { sinDatos++; return@forEach }
-                if (leido) ext.marcarLeidos(c.fuenteId, conocidos) else ext.desmarcarLeidos(c.fuenteId, conocidos)
+                if (leido) ext.marcarLeidos(c.fuenteId, url, conocidos) else ext.desmarcarLeidos(c.fuenteId, url, conocidos)
                 almacen.actualizarProgresoEnLinea(c.fuenteId, url, if (leido) conocidos.size else 0, conocidos.size)
             } else {
                 almacen.actualizarComic(c.id) { it.copy(ultimaPagina = if (leido) (it.paginas - 1).coerceAtLeast(0) else 0) }
@@ -146,7 +146,7 @@ class AccionesInicio(
             enLinea.forEach { c ->
                 val f = ext.fuentes.firstOrNull { it.id == c.fuenteId } ?: return@forEach
                 runCatching { motor.ficha(f, MangaFuente(c.urlManga.orEmpty(), c.titulo, c.portadaUrl)) }.getOrNull()?.let { ficha ->
-                    var caps = ficha.capitulos.asReversed().filter { !ext.esLeido(f.id, it.url) }
+                    var caps = ficha.capitulos.asReversed().filter { !ext.esLeido(f.id, c.urlManga.orEmpty(), it.url) }
                     if (maximo != null) caps = caps.take(maximo)
                     total += Descargas.encolar(ctx, f, c.urlManga.orEmpty(), c.titulo, caps, avisar = false)
                 }

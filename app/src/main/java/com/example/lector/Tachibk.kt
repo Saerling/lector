@@ -54,28 +54,28 @@ object Tachibk {
         var sinLista = 0
 
         // Solo los capítulos con algo que guardar (leído, marcado o página): la lista completa la pide la otra app.
-        fun capitulos(fuente: Long, urls: Collection<String>, nombres: Map<String, String>) = urls.mapNotNull { u ->
-            val leido = ext.esLeido(fuente, u)
-            val marcado = ext.esMarcado(fuente, u)
-            val pagina = ext.paginaDe(fuente, u)
+        fun capitulos(fuente: Long, mu: String, urls: Collection<String>, nombres: Map<String, String>) = urls.mapNotNull { u ->
+            val leido = ext.esLeido(fuente, mu, u)
+            val marcado = ext.esMarcado(fuente, mu, u)
+            val pagina = ext.paginaDe(fuente, mu, u)
             if (!leido && !marcado && pagina <= 0) null
             else TachibkFormato.Capitulo(u, nombres[u].orEmpty(), leido = leido, marcado = marcado, pagina = pagina.toLong())
         }.also { capsConEstado += it.size }
 
         // Con la ficha guardada en el móvil: TODOS sus capítulos (nombre, número, orden y datos internos de la
         // extensión), como hace Komikku; los del historial que no estén en ella se añaden al final.
-        fun capitulosCompletos(fuente: Long, ficha: com.example.lector.ext.FichaManga, hist: List<EntradaHistorial>): List<TachibkFormato.Capitulo> {
+        fun capitulosCompletos(fuente: Long, mu: String, ficha: com.example.lector.ext.FichaManga, hist: List<EntradaHistorial>): List<TachibkFormato.Capitulo> {
             val lista = ficha.capitulos.mapIndexed { i, cap ->
-                val pagina = ext.paginaDe(fuente, cap.url)
+                val pagina = ext.paginaDe(fuente, mu, cap.url)
                 TachibkFormato.Capitulo(
-                    cap.url, cap.nombre, cap.scanlator, ext.esLeido(fuente, cap.url), ext.esMarcado(fuente, cap.url), pagina.toLong(),
+                    cap.url, cap.nombre, cap.scanlator, ext.esLeido(fuente, mu, cap.url), ext.esMarcado(fuente, mu, cap.url), pagina.toLong(),
                     cap.fecha, cap.numero, i.toLong(), cap.memo,
                 )
             }
             capsConEstado += lista.count { it.leido || it.marcado || it.pagina > 0 }
             val ya = ficha.capitulos.mapTo(HashSet()) { it.url }
             val extra = hist.filter { it.capUrl !in ya }
-            return lista + capitulos(fuente, extra.map { it.capUrl }, extra.associate { it.capUrl to it.capNombre })
+            return lista + capitulos(fuente, mu, extra.map { it.capUrl }, extra.associate { it.capUrl to it.capNombre })
         }
 
         var bytes = 0L
@@ -107,8 +107,8 @@ object Tachibk {
                     TachibkFormato.Manga(
                         fuente = c.fuenteId, url = url, titulo = c.titulo, autor = c.autor, descripcion = c.descripcion,
                         generos = c.generos, estado = c.estado, portada = c.portadaUrl, anadido = c.anadido,
-                        capitulos = if (ficha != null) capitulosCompletos(c.fuenteId, ficha, hist)
-                        else capitulos(c.fuenteId, conocidos + hist.map { it.capUrl }, hist.associate { it.capUrl to it.capNombre }),
+                        capitulos = if (ficha != null) capitulosCompletos(c.fuenteId, c.urlManga!!, ficha, hist)
+                        else capitulos(c.fuenteId, c.urlManga!!, conocidos + hist.map { it.capUrl }, hist.associate { it.capUrl to it.capNombre }),
                         memo = ficha?.memo,
                         artista = ficha?.detalle?.artista,
                         // Mihon referencia las categorías por su «order».
@@ -131,7 +131,7 @@ object Tachibk {
                 w.manga(
                     TachibkFormato.Manga(
                         fuente = h.fuenteId, url = h.urlManga, titulo = h.titulo, portada = h.portadaUrl,
-                        capitulos = capitulos(h.fuenteId, listOf(h.capUrl), mapOf(h.capUrl to h.capNombre)),
+                        capitulos = capitulos(h.fuenteId, h.urlManga, listOf(h.capUrl), mapOf(h.capUrl to h.capNombre)),
                         favorito = false,
                         historial = listOf(TachibkFormato.Historial(h.capUrl, h.leido)),
                     )
@@ -214,9 +214,10 @@ object Tachibk {
             runCatching {
                 val titulo = m.titulo.ifBlank { m.url }
                 m.conEstado.forEach { c ->
-                    if (c.leido) leidos.add(ConjuntoLargo.clave(m.fuente, c.url))
-                    if (c.marcado) marcados += "${m.fuente}|${c.url}"
-                    if (!c.leido && c.pagina > 0) paginas["${m.fuente}|${c.url}"] = c.pagina.toInt()
+                    // Por manga (como Komikku): el estado de un capítulo es de SU manga.
+                    if (c.leido) leidos.add(ext.claveLeido(m.fuente, m.url, c.url))
+                    if (c.marcado) marcados += ext.claveTexto(m.fuente, m.url, c.url)
+                    if (!c.leido && c.pagina > 0) paginas[ext.claveTexto(m.fuente, m.url, c.url)] = c.pagina.toInt()
                 }
                 if (m.favorito) {
                     // Sus capítulos quedan como «conocidos» (en disco, no en memoria): así la primera actualización no

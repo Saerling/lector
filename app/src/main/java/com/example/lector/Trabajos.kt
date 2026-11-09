@@ -53,18 +53,33 @@ object Actualizador {
     fun iniciar(ctx: Context, categoria: String? = null, avisar: Boolean = true) {
         if (corriendo) return
         corriendo = true
+        cancelado = false
         hechas = 0; total = 0; actual = null
         val req = OneTimeWorkRequestBuilder<TrabajoActualizar>()
+            .addTag(ETIQUETA)
             .setInputData(workDataOf("categoria" to categoria, "manual" to true, "avisar" to avisar))
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
         WorkManager.getInstance(ctx).enqueueUniqueWork(AHORA, ExistingWorkPolicy.KEEP, req)
     }
 
+    /** La revisión en curso (manual, periódica o al abrir la pestaña): cancelarla la corta del todo. */
+    @Volatile internal var trabajo: kotlinx.coroutines.Job? = null
+    @Volatile internal var cancelado = false
+
+    // Como LibraryUpdateJob.stop de Komikku: para TODA revisión en marcha, no solo la manual, y no deja que los mangas
+    // que estaban a medio pedir guarden nada al volver.
     fun cancelar(ctx: Context) {
+        cancelado = true
+        trabajo?.cancel()
         WorkManager.getInstance(ctx).cancelUniqueWork(AHORA)
+        WorkManager.getInstance(ctx).cancelAllWorkByTag(ETIQUETA)
         corriendo = false
+        actual = null
+        Notificaciones.quitar(ctx, Notificaciones.ID_ACTUALIZANDO)
     }
+
+    const val ETIQUETA = "revision_biblioteca"
 }
 
 data class ResultadoRevision(val nuevos: Map<String, Int>, val fallos: Int, val revisados: Int)
@@ -79,6 +94,8 @@ object RevisorBiblioteca {
         ctx: Context, categoria: String?,
         alProgreso: suspend (hechas: Int, total: Int, titulo: String?) -> Unit,
     ): ResultadoRevision = withContext(Dispatchers.IO) {
+        Actualizador.cancelado = false
+        Actualizador.trabajo = coroutineContext[kotlinx.coroutines.Job]
         val alm = Almacen.obtener(ctx)
         val ext = ExtManager.obtener(ctx)
         ext.esperarListo()
@@ -101,16 +118,20 @@ object RevisorBiblioteca {
             lista.map { c ->
                 async {
                     limite.withPermit {
+                        if (Actualizador.cancelado) throw CancellationException("Cancelada")
                         val url = c.urlManga.orEmpty()
                         val f = fuentes.firstOrNull { it.id == c.fuenteId }
                         try {
                             if (f == null) error("La fuente no está disponible (¿extensión desinstalada o sin confianza?)")
                             Actualizador.actual = c.titulo
                             val ficha = motor.ficha(f, MangaFuente(url, c.titulo, c.portadaUrl))
+                            // Si se canceló mientras la fuente respondía (las extensiones no siempre se pueden
+                            // interrumpir), lo que llegó se descarta.
+                            if (Actualizador.cancelado) throw CancellationException("Cancelada")
                             val portada = ficha.detalle.portadaUrl ?: c.portadaUrl
                             val n = alm.registrarCapitulos(c.fuenteId, url, c.titulo, portada, ficha.capitulos)
                             alm.actualizarProgresoEnLinea(
-                                c.fuenteId, url, ficha.capitulos.count { ext.esLeido(c.fuenteId, it.url) }, ficha.capitulos.size,
+                                c.fuenteId, url, ficha.capitulos.count { ext.esLeido(c.fuenteId, url, it.url) }, ficha.capitulos.size,
                             )
                             alm.actualizarInfoEnLinea(
                                 c.fuenteId, url, ficha.detalle.autor, ficha.detalle.estado, ficha.detalle.generos,
@@ -128,6 +149,7 @@ object RevisorBiblioteca {
                         } catch (e: Exception) {
                             errores += ErrorActualizacion(c.titulo, f?.nombre ?: "Fuente ${c.fuenteId}", e.message ?: e.javaClass.simpleName)
                         } finally {
+                            if (Actualizador.cancelado) return@withPermit
                             val h = hechas.incrementAndGet()
                             Actualizador.hechas = h
                             alProgreso(h, lista.size, c.titulo)

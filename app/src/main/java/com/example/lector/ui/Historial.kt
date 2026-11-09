@@ -245,16 +245,16 @@ private fun FilaHistorial(item: ItemHistorial, almacen: Almacen, hora: String, a
     else {
         val ctx = androidx.compose.ui.platform.LocalContext.current
         val ext = remember { com.example.lector.ext.ExtManager.obtener(ctx) }
-        val leido = ext.leidos.let { ext.esLeido(e.fuenteId, e.capUrl) }
+        val leido = ext.leidos.let { ext.esLeido(e.fuenteId, e.urlManga, e.capUrl) }
         val descargado = com.example.lector.Descargas.version.value >= 0 && almacen.estaDescargado(e.fuenteId, e.urlManga, e.capUrl)
         com.example.lector.ui.mochy.ChapterSwipeBox(
-            estado = com.example.lector.ui.mochy.EstadoCapituloSwipe(leido, ext.esMarcado(e.fuenteId, e.capUrl), descargado),
+            estado = com.example.lector.ui.mochy.EstadoCapituloSwipe(leido, ext.esMarcado(e.fuenteId, e.urlManga, e.capUrl), descargado),
             onAction = { acc ->
                 when (acc) {
                     com.example.lector.ui.mochy.ChapterSwipeAction.MARK_READ ->
-                        if (leido) ext.desmarcarLeido(e.fuenteId, e.capUrl) else ext.marcarLeido(e.fuenteId, e.capUrl)
-                    com.example.lector.ui.mochy.ChapterSwipeAction.MARK_PREVIOUS_READ -> ext.marcarLeido(e.fuenteId, e.capUrl)
-                    com.example.lector.ui.mochy.ChapterSwipeAction.BOOKMARK -> ext.alternarMarcado(e.fuenteId, e.capUrl)
+                        if (leido) ext.desmarcarLeido(e.fuenteId, e.urlManga, e.capUrl) else ext.marcarLeido(e.fuenteId, e.urlManga, e.capUrl)
+                    com.example.lector.ui.mochy.ChapterSwipeAction.MARK_PREVIOUS_READ -> ext.marcarLeido(e.fuenteId, e.urlManga, e.capUrl)
+                    com.example.lector.ui.mochy.ChapterSwipeAction.BOOKMARK -> ext.alternarMarcado(e.fuenteId, e.urlManga, e.capUrl)
                     com.example.lector.ui.mochy.ChapterSwipeAction.DOWNLOAD -> {
                         val f = ext.fuentes.firstOrNull { it.id == e.fuenteId }
                         when {

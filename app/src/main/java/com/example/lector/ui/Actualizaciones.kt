@@ -157,7 +157,7 @@ fun ActualizacionesScreen(
     fun recalcularProgreso(filas: List<ActualizacionCap>) {
         filas.map { it.fuenteId to it.urlManga }.distinct().forEach { (f, url) ->
             val conocidos = almacen.capitulosConocidos(f, url)
-            if (conocidos.isNotEmpty()) almacen.actualizarProgresoEnLinea(f, url, conocidos.count { ext.esLeido(f, it) }, conocidos.size)
+            if (conocidos.isNotEmpty()) almacen.actualizarProgresoEnLinea(f, url, conocidos.count { ext.esLeido(f, url, it) }, conocidos.size)
         }
     }
 
@@ -282,7 +282,7 @@ fun ActualizacionesScreen(
                                     val abierto = kGrupo in abiertos
                                     item(key = "g_$kGrupo", contentType = 2) {
                                         CabeceraGrupo(
-                                            primera, comic, almacen, filas.size, filas.count { ext.esLeido(it.fuenteId, it.capUrl) }, abierto,
+                                            primera, comic, almacen, filas.size, filas.count { ext.esLeido(it.fuenteId, it.urlManga, it.capUrl) }, abierto,
                                             seleccionado = filas.all { clave(it) in seleccion },
                                             onClick = {
                                                 if (seleccion.isNotEmpty()) {
@@ -316,13 +316,13 @@ fun ActualizacionesScreen(
             acciones = listOf(
                 AccionBarra(Icons.Rounded.Check, "Leído") {
                     val sel = seleccionadas()
-                    sel.groupBy { it.fuenteId }.forEach { (f, filas) -> ext.marcarLeidos(f, filas.map { it.capUrl }) }
+                    sel.groupBy { it.fuenteId to it.urlManga }.forEach { (k, filas) -> ext.marcarLeidos(k.first, k.second, filas.map { it.capUrl }) }
                     recalcularProgreso(sel)
                     seleccion = emptySet()
                 },
                 AccionBarra(Iconos.OjoTachado, "No leído") {
                     val sel = seleccionadas()
-                    sel.groupBy { it.fuenteId }.forEach { (f, filas) -> ext.desmarcarLeidos(f, filas.map { it.capUrl }) }
+                    sel.groupBy { it.fuenteId to it.urlManga }.forEach { (k, filas) -> ext.desmarcarLeidos(k.first, k.second, filas.map { it.capUrl }) }
                     recalcularProgreso(sel)
                     seleccion = emptySet()
                 },
@@ -489,7 +489,7 @@ private fun FilaActualizacion(
     val acento = MaterialTheme.colorScheme.primary
     val haptic = LocalHapticFeedback.current
     // [leidos] solo sirve para repintar cuando cambia algún «leído».
-    val leido = leidos.let { ext.esLeido(a.fuenteId, a.capUrl) }
+    val leido = leidos.let { ext.esLeido(a.fuenteId, a.urlManga, a.capUrl) }
     val nombre = a.capNombre.trim().trimEnd(':').trim().ifBlank { "Capítulo" }
     val k = clave(a)
     val fraccion = Descargas.progreso[k] ?: if (Descargas.enCola(k)) 0f else null
@@ -512,17 +512,17 @@ private fun FilaActualizacion(
     }
     com.example.lector.ui.mochy.ChapterSwipeBox(
         estado = com.example.lector.ui.mochy.EstadoCapituloSwipe(
-            leido = leido, marcado = ext.esMarcado(a.fuenteId, a.capUrl),
+            leido = leido, marcado = ext.esMarcado(a.fuenteId, a.urlManga, a.capUrl),
             descargado = estado is EstadoDescarga.Listo, descargando = estado is EstadoDescarga.Descargando,
         ),
         enabled = !enSeleccion,
         onAction = { acc ->
             when (acc) {
                 com.example.lector.ui.mochy.ChapterSwipeAction.MARK_READ -> {
-                    if (leido) ext.desmarcarLeido(a.fuenteId, a.capUrl) else ext.marcarLeido(a.fuenteId, a.capUrl); alCambiarLeido()
+                    if (leido) ext.desmarcarLeido(a.fuenteId, a.urlManga, a.capUrl) else ext.marcarLeido(a.fuenteId, a.urlManga, a.capUrl); alCambiarLeido()
                 }
-                com.example.lector.ui.mochy.ChapterSwipeAction.MARK_PREVIOUS_READ -> { ext.marcarLeido(a.fuenteId, a.capUrl); alCambiarLeido() }
-                com.example.lector.ui.mochy.ChapterSwipeAction.BOOKMARK -> ext.alternarMarcado(a.fuenteId, a.capUrl)
+                com.example.lector.ui.mochy.ChapterSwipeAction.MARK_PREVIOUS_READ -> { ext.marcarLeido(a.fuenteId, a.urlManga, a.capUrl); alCambiarLeido() }
+                com.example.lector.ui.mochy.ChapterSwipeAction.BOOKMARK -> ext.alternarMarcado(a.fuenteId, a.urlManga, a.capUrl)
                 com.example.lector.ui.mochy.ChapterSwipeAction.DOWNLOAD -> descargar()
                 else -> Unit
             }

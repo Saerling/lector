@@ -60,6 +60,17 @@ class ExtManager private constructor(private val app: Context) {
     private val archLeidos = com.example.lector.ArchivoConjuntoLargo(java.io.File(carpetaEstado, "leidos.bin"))
     private val archMarcados = com.example.lector.ArchivoAgrupado(java.io.File(carpetaEstado, "marcados.txt"))
     private val archPaginas = com.example.lector.ArchivoAgrupado(java.io.File(carpetaEstado, "paginas.txt"))
+    // Desde que el estado va por manga (como Komikku: el capítulo pertenece a su manga), estos son los archivos vivos.
+    // Las claves son «fuente|urlManga|urlCapítulo»: algunas fuentes repiten la url de capítulo entre mangas distintos
+    // y con «fuente|url» un capítulo nuevo de otro manga salía ya leído. Los archivos viejos se conservan sin tocar.
+    private val archLeidosM = com.example.lector.ArchivoConjuntoLargo(java.io.File(carpetaEstado, "leidos_m.bin"))
+    private val archMarcadosM = com.example.lector.ArchivoAgrupado(java.io.File(carpetaEstado, "marcados_m.txt"))
+    private val archPaginasM = com.example.lector.ArchivoAgrupado(java.io.File(carpetaEstado, "paginas_m.txt"))
+    // Lo viejo («fuente|url») aún sin pasar a ningún manga, y los mangas ya pasados («fuente|urlManga»).
+    private val archRestoLeidos = com.example.lector.ArchivoConjuntoLargo(java.io.File(carpetaEstado, "leidos_legado.bin"))
+    private val archRestoMarcados = com.example.lector.ArchivoAgrupado(java.io.File(carpetaEstado, "marcados_legado.txt"))
+    private val archRestoPaginas = com.example.lector.ArchivoAgrupado(java.io.File(carpetaEstado, "paginas_legado.txt"))
+    private val archMigrados = com.example.lector.ArchivoAgrupado(java.io.File(carpetaEstado, "mangas_migrados.txt"))
 
     /** Lee un conjunto de su archivo; la primera vez lo trae de las preferencias (versiones anteriores) y lo borra de ahí. */
     private fun cargarConjunto(arch: com.example.lector.ArchivoAgrupado, clave: String): Set<String> {
@@ -70,7 +81,11 @@ class ExtManager private constructor(private val app: Context) {
         return viejo
     }
 
-    private fun guardarLeidos() { versionLeidos++; archLeidos.guardar(leidosH) }
+    private fun guardarLeidos() { versionLeidos++; archLeidosM.guardar(leidosH) }
+
+    private fun leerPaginas(arch: com.example.lector.ArchivoAgrupado, m: MutableMap<String, Int>) {
+        arch.leer().forEach { l -> val i = l.lastIndexOf('\t'); if (i > 0) l.substring(i + 1).toIntOrNull()?.let { m[l.substring(0, i)] = it } }
+    }
 
     /**
      * Capítulos leídos: huellas de 64 bits de «fuente|url» (ver [com.example.lector.ConjuntoLargo]). La primera vez se
@@ -89,9 +104,12 @@ class ExtManager private constructor(private val app: Context) {
         return c
     }
 
-    private fun claveCap(fuenteId: Long, url: String) = com.example.lector.ConjuntoLargo.clave(fuenteId, url)
-    private fun leidoTexto(k: String) = com.example.lector.ConjuntoLargo.claveDeTexto(k)?.let { leidosH.contains(it) } == true
-    private fun guardarMarcados() { val m = marcados; archMarcados.guardar { m.asSequence() } }
+    /** Huella del estado de un capítulo DE UN MANGA (no basta la url del capítulo: hay fuentes que la repiten). */
+    fun claveLeido(fuenteId: Long, urlManga: String, url: String) = com.example.lector.ConjuntoLargo.clave(fuenteId, "$urlManga|$url")
+    /** Clave de texto de marcados y páginas: «fuente|urlManga|urlCapítulo». */
+    fun claveTexto(fuenteId: Long, urlManga: String, url: String) = "$fuenteId|$urlManga|$url"
+    private fun claveLegado(fuenteId: Long, url: String) = com.example.lector.ConjuntoLargo.clave(fuenteId, url)
+    private fun guardarMarcados() { val m = marcados; archMarcadosM.guardar { m.asSequence() } }
 
     /** Se completa cuando ya se leyeron las extensiones instaladas y sus fuentes (lo esperan los trabajos de fondo). */
     private val listo = kotlinx.coroutines.CompletableDeferred<Unit>()
@@ -155,29 +173,125 @@ class ExtManager private constructor(private val app: Context) {
     var novedades by mutableStateOf(cargarNovedades()); private set
 
     // Capítulos leídos online ("fuenteId|urlCapítulo") y modo del lector online (0 tira · 1 paginado → · 2 paginado ←).
-    private val leidosH: com.example.lector.ConjuntoLargo = cargarLeidos()
+    private val leidosH: com.example.lector.ConjuntoLargo =
+        if (archLeidosM.existe()) runCatching { archLeidosM.leer() }.getOrElse { com.example.lector.ConjuntoLargo() } else com.example.lector.ConjuntoLargo()
     /** Sube cada vez que cambia algún «leído»: las pantallas que lo leen se repintan. */
     var versionLeidos by mutableIntStateOf(0); private set
     /** Valor que cambia cuando cambian los leídos (para usarlo como clave de remember). */
     val leidos: Int get() = versionLeidos
     /** Cuántos capítulos hay marcados como leídos. */
-    val totalLeidos: Int get() { @Suppress("UNUSED_VARIABLE") val v = versionLeidos; return leidosH.size }
+    val totalLeidos: Int get() { @Suppress("UNUSED_VARIABLE") val v = versionLeidos; return leidosH.size + (if (!migrado) restoLeidos.size else 0) }
     var modoLector by mutableStateOf(prefs.getInt("modo_lector", 0)); private set
 
     // Capítulos marcados con el marcador ("fuenteId|urlCapítulo"); se alternan deslizando la fila hacia la izquierda.
-    var marcados by mutableStateOf(cargarConjunto(archMarcados, "marcados")); private set
+    var marcados by mutableStateOf<Set<String>>(if (archMarcadosM.existe()) runCatching { archMarcadosM.leer().toHashSet() }.getOrDefault(HashSet()) else HashSet()); private set
 
     // Página por la que vas en cada capítulo SIN terminar ("fuenteId|url" -> página, desde 0).
-    private val paginasCap = mutableStateMapOf<String, Int>().also { m ->
+    private val paginasCap = mutableStateMapOf<String, Int>().also { m -> runCatching { if (archPaginasM.existe()) leerPaginas(archPaginasM, m) } }
+
+    // ---- Estado viejo («fuente|url») pendiente de pasar a su manga ----
+    /** true cuando ya se hizo la migración general; antes, se consulta también lo viejo (comportamiento anterior). */
+    @Volatile private var migrado = prefs.getBoolean("estado_por_manga", false)
+    private val restoLeidos: com.example.lector.ConjuntoLargo =
+        if (migrado) runCatching { archRestoLeidos.leer() }.getOrElse { com.example.lector.ConjuntoLargo() } else cargarLeidos()
+    private val restoMarcados: MutableSet<String> = java.util.Collections.synchronizedSet(
+        if (migrado) runCatching { archRestoMarcados.leer().toHashSet() }.getOrDefault(HashSet()) else HashSet(cargarConjunto(archMarcados, "marcados")))
+    private val restoPaginas: MutableMap<String, Int> = java.util.concurrent.ConcurrentHashMap<String, Int>().also { m ->
         runCatching {
-            if (archPaginas.existe()) {
-                archPaginas.leer().forEach { l -> val i = l.lastIndexOf('\t'); if (i > 0) l.substring(i + 1).toIntOrNull()?.let { m[l.substring(0, i)] = it } }
-            } else {
+            if (migrado) leerPaginas(archRestoPaginas, m)
+            else if (archPaginas.existe()) leerPaginas(archPaginas, m)
+            else {
                 val o = JSONObject(prefs.getString("paginas_cap", "{}") ?: "{}")
                 o.keys().forEach { k -> m[k] = o.getInt(k) }
+                runCatching { com.example.lector.Persistencia.escribirLineas(java.io.File(carpetaEstado, "paginas.txt"), m.asSequence().map { (k, v) -> "$k\t$v" }) }
                 prefs.edit().remove("paginas_cap").apply()
             }
         }
+    }
+    private val mangasMigrados: MutableSet<String> = java.util.Collections.synchronizedSet(
+        runCatching { archMigrados.leer().toHashSet() }.getOrDefault(HashSet()))
+
+    private fun guardarRestos() {
+        archRestoLeidos.guardar(restoLeidos)
+        val rm = synchronized(restoMarcados) { restoMarcados.toList() }; archRestoMarcados.guardar { rm.asSequence() }
+        val rp = restoPaginas.toMap(); archRestoPaginas.guardar { rp.asSequence().map { (k, v) -> "$k\t$v" } }
+        val mm = synchronized(mangasMigrados) { mangasMigrados.toList() }; archMigrados.guardar { mm.asSequence() }
+    }
+
+    init { scope.launch { runCatching { migrarEstadoPorManga(forzar = false) } } }
+
+    /**
+     * Pasa el estado viejo («fuente|url») a cada manga de la biblioteca y del historial, SOLO para los capítulos que ya
+     * tenía (ficha guardada y capítulos conocidos): así un capítulo nuevo de otro manga con la misma url no sale leído.
+     * Lo ya pasado se quita de lo pendiente. Con [forzar] (al restaurar una copia vieja) repasa también los ya migrados.
+     */
+    private fun migrarEstadoPorManga(forzar: Boolean) {
+        if (migrado && !forzar) return
+        val alm = com.example.lector.Almacen.obtener(app)
+        com.example.lector.CacheFichas.iniciar(app)
+        val mangas = LinkedHashSet<Pair<Long, String>>()
+        alm.cargar().forEach { c -> if (c.enLinea) mangas += c.fuenteId to c.urlManga!! }
+        alm.historialLinea.forEach { e -> mangas += e.fuenteId to e.urlManga }
+        val nuevosL = com.example.lector.ConjuntoLargo()
+        val usadosL = com.example.lector.ConjuntoLargo()
+        val nuevosM = HashSet<String>(); val usadosM = HashSet<String>()
+        val nuevosP = HashMap<String, Int>(); val usadosP = HashSet<String>()
+        val hechos = HashSet<String>()
+        for ((f, mu) in mangas) {
+            val caps = HashSet<String>()
+            runCatching { com.example.lector.CacheFichas.leer(f, mu)?.capitulos?.forEach { caps += it.url } }
+            runCatching { caps += alm.capitulosConocidos(f, mu) }
+            if (caps.isEmpty()) continue // sin lista guardada: se pasa al abrir su ficha (migrarMangaSiHace)
+            for (u in caps) {
+                val kl = claveLegado(f, u)
+                if (restoLeidos.contains(kl)) { nuevosL.add(claveLeido(f, mu, u)); usadosL.add(kl) }
+                val kt = "$f|$u"
+                if (kt in restoMarcados) { nuevosM += claveTexto(f, mu, u); usadosM += kt }
+                restoPaginas[kt]?.let { nuevosP[claveTexto(f, mu, u)] = it; usadosP += kt }
+            }
+            hechos += "$f|$mu"
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            leidosH.addAll(nuevosL)
+            usadosL.aArreglo().forEach { restoLeidos.remove(it) }
+            val m2 = marcados + nuevosM.filter { it !in marcados }
+            marcados = m2
+            restoMarcados.removeAll(usadosM)
+            nuevosP.forEach { (k, v) -> if (k !in paginasCap) paginasCap[k] = v }
+            usadosP.forEach { restoPaginas.remove(it) }
+            mangasMigrados.addAll(hechos)
+            migrado = true
+            prefs.edit().putBoolean("estado_por_manga", true).apply()
+            archLeidosM.escribirYa(leidosH)
+            com.example.lector.Persistencia.escribirLineas(java.io.File(carpetaEstado, "marcados_m.txt"), m2.asSequence())
+            guardarPaginasCap(); guardarRestos()
+            versionLeidos++
+        }
+    }
+
+    /**
+     * Migración perezosa de un manga que no tenía lista de capítulos guardada al migrar: se llama al cargar su ficha
+     * con los capítulos que YA conocía (los guardados antes de esta carga), nunca con los recién traídos. Una sola vez.
+     */
+    /** true si el manga aún puede tener estado viejo sin pasar (para no leer su ficha guardada en balde). */
+    fun faltaMigrar(fuenteId: Long, urlManga: String) = migrado && "$fuenteId|$urlManga" !in mangasMigrados
+
+    fun migrarMangaSiHace(fuenteId: Long, urlManga: String, capitulos: Collection<String>) {
+        if (!migrado || capitulos.isEmpty()) return
+        val km = "$fuenteId|$urlManga"
+        if (!mangasMigrados.add(km)) return
+        var cl = false; val nm = HashSet<String>(); var cp = false
+        for (u in capitulos) {
+            val kl = claveLegado(fuenteId, u)
+            if (restoLeidos.remove(kl)) { leidosH.add(claveLeido(fuenteId, urlManga, u)); cl = true }
+            val kt = "$fuenteId|$u"
+            if (restoMarcados.remove(kt)) nm += claveTexto(fuenteId, urlManga, u)
+            restoPaginas.remove(kt)?.let { v -> val k = claveTexto(fuenteId, urlManga, u); if (k !in paginasCap) { paginasCap[k] = v; cp = true } }
+        }
+        if (cl) guardarLeidos()
+        if (nm.isNotEmpty()) { marcados = marcados + nm; guardarMarcados() }
+        if (cp) guardarPaginasCap()
+        guardarRestos()
     }
 
     private val confiadas: MutableSet<String> =
@@ -817,7 +931,8 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     /**
-     * Importa de golpe capítulos leídos, marcados y páginas (claves «fuente|url»), con una escritura de cada cosa.
+     * Importa de golpe capítulos leídos, marcados y páginas (claves por manga: [claveLeido] y [claveTexto]), con una
+     * escritura de cada cosa.
      * Lo usan las restauraciones de copias: hacerlo manga a manga reescribía todo cada vez y era muy lento.
      */
     fun importarEstados(leidosNuevos: com.example.lector.ConjuntoLargo, marcadosNuevos: Collection<String>, paginas: Map<String, Int>) {
@@ -834,21 +949,22 @@ class ExtManager private constructor(private val app: Context) {
         if (cambio) guardarPaginasCap()
     }
 
-    /** Marca varios capítulos como leídos de una vez (una sola escritura). */
-    fun marcarLeidos(fuenteId: Long, urls: Collection<String>) {
+    /** Marca varios capítulos de un manga como leídos de una vez (una sola escritura). */
+    fun marcarLeidos(fuenteId: Long, urlManga: String, urls: Collection<String>) {
         if (urls.isEmpty()) return
-        urls.forEach { u -> leidosH.add(claveCap(fuenteId, u)) }
+        urls.forEach { u -> leidosH.add(claveLeido(fuenteId, urlManga, u)) }
         guardarLeidos()
     }
 
-    fun desmarcarLeidos(fuenteId: Long, urls: Collection<String>) {
+    fun desmarcarLeidos(fuenteId: Long, urlManga: String, urls: Collection<String>) {
         if (urls.isEmpty()) return
-        urls.forEach { leidosH.remove(claveCap(fuenteId, it)) }
+        urls.forEach { u -> leidosH.remove(claveLeido(fuenteId, urlManga, u)); if (!migrado) restoLeidos.remove(claveLegado(fuenteId, u)) }
         guardarLeidos()
     }
 
-    fun marcarVarios(fuenteId: Long, urls: Collection<String>, marcar: Boolean) {
-        val claves = urls.map { "$fuenteId|$it" }.toSet()
+    fun marcarVarios(fuenteId: Long, urlManga: String, urls: Collection<String>, marcar: Boolean) {
+        val claves = urls.map { claveTexto(fuenteId, urlManga, it) }.toSet()
+        if (!marcar && !migrado) restoMarcados.removeAll(urls.map { "$fuenteId|$it" }.toSet())
         marcados = if (marcar) marcados + claves else marcados - claves
         guardarMarcados()
     }
@@ -919,13 +1035,23 @@ class ExtManager private constructor(private val app: Context) {
         val o = JSONObject()
         // Los leídos van como huellas (números): mucho más pequeños que los textos «fuente|url».
         o.put("leidos_b64", run {
+            val arr = restoLeidos.aArreglo() // lo viejo («fuente|url») aún sin pasar a su manga
+            val bb = java.nio.ByteBuffer.allocate(arr.size * 8)
+            arr.forEach { bb.putLong(it) }
+            android.util.Base64.encodeToString(bb.array(), android.util.Base64.NO_WRAP)
+        })
+        o.put("marcados", JSONArray(synchronized(restoMarcados) { restoMarcados.toList() }))
+        o.put("paginas_cap", JSONObject().also { j -> restoPaginas.forEach { (k, v) -> j.put(k, v) } })
+        // Estado por manga (claves «fuente|urlManga|urlCapítulo»).
+        o.put("leidos_m_b64", run {
             val arr = leidosH.aArreglo()
             val bb = java.nio.ByteBuffer.allocate(arr.size * 8)
             arr.forEach { bb.putLong(it) }
             android.util.Base64.encodeToString(bb.array(), android.util.Base64.NO_WRAP)
         })
-        o.put("marcados", JSONArray(marcados.toList()))
-        o.put("paginas_cap", JSONObject().also { j -> paginasCap.forEach { (k, v) -> j.put(k, v) } })
+        o.put("marcados_m", JSONArray(marcados.toList()))
+        o.put("paginas_m", JSONObject().also { j -> paginasCap.forEach { (k, v) -> j.put(k, v) } })
+        o.put("mangas_migrados", JSONArray(synchronized(mangasMigrados) { mangasMigrados.toList() }))
         o.put("repos", JSONArray(prefs.getString("repos", "[]")))
         o.put("fijadas", JSONArray(fijadas.toList()))
         o.put("novedades", JSONArray(novedades))
@@ -939,15 +1065,26 @@ class ExtManager private constructor(private val app: Context) {
 
     fun importar(o: JSONObject) {
         fun conjunto(a: JSONArray?): Set<String> = if (a == null) emptySet() else (0 until a.length()).map { a.getString(it) }.toSet()
-        o.optJSONArray("leidos")?.let { a -> for (i in 0 until a.length()) com.example.lector.ConjuntoLargo.claveDeTexto(a.getString(i))?.let { leidosH.add(it) } }
-        o.optJSONArray("leidos_h")?.let { a -> for (i in 0 until a.length()) leidosH.add(a.getLong(i)) }
+        // Lo viejo («fuente|url») va a lo pendiente y luego se pasa a cada manga, solo a los capítulos que ya tenía.
+        val antes = restoLeidos.size + restoMarcados.size + restoPaginas.size
+        o.optJSONArray("leidos")?.let { a -> for (i in 0 until a.length()) com.example.lector.ConjuntoLargo.claveDeTexto(a.getString(i))?.let { restoLeidos.add(it) } }
+        o.optJSONArray("leidos_h")?.let { a -> for (i in 0 until a.length()) restoLeidos.add(a.getLong(i)) }
         o.optString("leidos_b64").takeIf { it.isNotEmpty() }?.let { t ->
+            val bb = java.nio.ByteBuffer.wrap(android.util.Base64.decode(t, android.util.Base64.NO_WRAP))
+            while (bb.remaining() >= 8) restoLeidos.add(bb.long)
+        }
+        restoMarcados.addAll(conjunto(o.optJSONArray("marcados")))
+        o.optJSONObject("paginas_cap")?.let { j -> j.keys().forEach { k -> restoPaginas[k] = j.optInt(k) } }
+        val hayViejo = restoLeidos.size + restoMarcados.size + restoPaginas.size != antes
+        o.optString("leidos_m_b64").takeIf { it.isNotEmpty() }?.let { t ->
             val bb = java.nio.ByteBuffer.wrap(android.util.Base64.decode(t, android.util.Base64.NO_WRAP))
             while (bb.remaining() >= 8) leidosH.add(bb.long)
         }
         versionLeidos++
-        marcados = marcados + conjunto(o.optJSONArray("marcados"))
-        o.optJSONObject("paginas_cap")?.let { j -> j.keys().forEach { k -> paginasCap[k] = j.optInt(k) } }
+        marcados = marcados + conjunto(o.optJSONArray("marcados_m"))
+        o.optJSONObject("paginas_m")?.let { j -> j.keys().forEach { k -> paginasCap[k] = j.optInt(k) } }
+        mangasMigrados.addAll(conjunto(o.optJSONArray("mangas_migrados")))
+        if (migrado) { guardarRestos(); if (hayViejo) scope.launch { runCatching { migrarEstadoPorManga(forzar = true) } } }
         fijadas = fijadas + conjunto(o.optJSONArray("fijadas"))
         confiadas += conjunto(o.optJSONArray("confiadas"))
         o.optJSONArray("novedades")?.let { a -> fijarNovedades(novedades + (0 until a.length()).map { a.getLong(it) }) }
@@ -973,18 +1110,19 @@ class ExtManager private constructor(private val app: Context) {
         actualizarLista()
     }
 
-    fun marcarLeido(fuenteId: Long, url: String) {
+    fun marcarLeido(fuenteId: Long, urlManga: String, url: String) {
         // Se conserva la página aunque esté terminado: al reabrirlo sigue donde lo dejaste (también al final).
-        if (!leidosH.add(claveCap(fuenteId, url))) return
+        if (!leidosH.add(claveLeido(fuenteId, urlManga, url))) return
         guardarLeidos()
     }
 
     /** Página por la que ibas en un capítulo (0 si no lo empezaste o ya está leído). */
-    fun paginaDe(fuenteId: Long, url: String): Int =
-        paginasCap["$fuenteId|$url"] ?: 0
+    fun paginaDe(fuenteId: Long, urlManga: String, url: String): Int =
+        paginasCap[claveTexto(fuenteId, urlManga, url)] ?: (if (!migrado) restoPaginas["$fuenteId|$url"] else null) ?: 0
 
-    fun guardarPagina(fuenteId: Long, url: String, pagina: Int) {
-        val k = "$fuenteId|$url"
+    fun guardarPagina(fuenteId: Long, urlManga: String, url: String, pagina: Int) {
+        val k = claveTexto(fuenteId, urlManga, url)
+        if (!migrado) restoPaginas.remove("$fuenteId|$url")
         if (paginasCap[k] == pagina || (pagina <= 0 && k !in paginasCap)) return
         // Volver a la primera página también cuenta (se olvida la guardada).
         if (pagina <= 0) paginasCap.remove(k) else paginasCap[k] = pagina
@@ -996,15 +1134,16 @@ class ExtManager private constructor(private val app: Context) {
         archPaginas.guardar { copia.asSequence().map { (k, v) -> "$k\t$v" } }
     }
 
-    fun esLeido(fuenteId: Long, url: String): Boolean {
+    fun esLeido(fuenteId: Long, urlManga: String, url: String): Boolean {
         @Suppress("UNUSED_VARIABLE") val v = versionLeidos // para que Compose se entere de los cambios
-        return leidosH.contains(claveCap(fuenteId, url))
+        return leidosH.contains(claveLeido(fuenteId, urlManga, url)) || (!migrado && restoLeidos.contains(claveLegado(fuenteId, url)))
     }
 
     /** Vuelve a dejar un capítulo como no leído. */
-    fun desmarcarLeido(fuenteId: Long, url: String) {
-        if (!leidosH.remove(claveCap(fuenteId, url))) return
-        guardarLeidos()
+    fun desmarcarLeido(fuenteId: Long, urlManga: String, url: String) {
+        val a = leidosH.remove(claveLeido(fuenteId, urlManga, url))
+        val b = !migrado && restoLeidos.remove(claveLegado(fuenteId, url))
+        if (a || b) guardarLeidos()
     }
 
     /**
@@ -1013,14 +1152,15 @@ class ExtManager private constructor(private val app: Context) {
      * se marcan como leídos los [respaldo] capítulos más antiguos. Devuelve cuántos capítulos quedan leídos.
      */
     fun migrarLeidos(
-        viejaFuente: Long, viejos: List<CapituloFuente>?, nuevaFuente: Long, nuevos: List<CapituloFuente>, respaldo: Int,
+        viejaFuente: Long, viejaUrlManga: String, viejos: List<CapituloFuente>?,
+        nuevaFuente: Long, nuevaUrlManga: String, nuevos: List<CapituloFuente>, respaldo: Int,
     ): Int {
         // Copiado de Komikku (MigrateDialog/copyChapters): el mayor número de capítulo leído en la vieja marca como
         // leídos todos los de la nueva con número <= ese; los marcadores pasan al capítulo del mismo número. Si la
         // fuente no da número, se reconoce del nombre («Capítulo 12.5», «Ch. 7»…), como ChapterRecognition.
         val viejosNum = viejos.orEmpty().map { it to numeroReconocido(it) }.filter { it.second >= 0f }
-        val maxLeido = viejosNum.filter { esLeido(viejaFuente, it.first.url) }.maxOfOrNull { it.second }
-        val marcadosNum = viejosNum.filter { esMarcado(viejaFuente, it.first.url) }.map { it.second }.toSet()
+        val maxLeido = viejosNum.filter { esLeido(viejaFuente, viejaUrlManga, it.first.url) }.maxOfOrNull { it.second }
+        val marcadosNum = viejosNum.filter { esMarcado(viejaFuente, viejaUrlManga, it.first.url) }.map { it.second }.toSet()
         val nuevosNum = nuevos.map { it to numeroReconocido(it) }
         val aMarcar = when {
             maxLeido != null -> nuevosNum.filter { it.second >= 0f && it.second <= maxLeido }.map { it.first }
@@ -1028,15 +1168,16 @@ class ExtManager private constructor(private val app: Context) {
             else -> emptyList()
         }
         if (aMarcar.isNotEmpty()) {
-            aMarcar.forEach { leidosH.add(claveCap(nuevaFuente, it.url)) }
+            aMarcar.forEach { leidosH.add(claveLeido(nuevaFuente, nuevaUrlManga, it.url)) }
             guardarLeidos()
         }
-        val nuevosMarcados = nuevosNum.filter { it.second in marcadosNum }.map { "$nuevaFuente|${it.first.url}" }
+        val nuevosMarcados = nuevosNum.filter { it.second in marcadosNum }.map { claveTexto(nuevaFuente, nuevaUrlManga, it.first.url) }
         if (nuevosMarcados.isNotEmpty()) { marcados = marcados + nuevosMarcados; guardarMarcados() }
-        return nuevos.count { esLeido(nuevaFuente, it.url) }
+        return nuevos.count { esLeido(nuevaFuente, nuevaUrlManga, it.url) }
     }
 
-    fun esMarcado(fuenteId: Long, url: String) = "$fuenteId|$url" in marcados
+    fun esMarcado(fuenteId: Long, urlManga: String, url: String) =
+        claveTexto(fuenteId, urlManga, url) in marcados || (!migrado && "$fuenteId|$url" in restoMarcados)
 
     /** Número del capítulo: el de la fuente o, si no lo da, el que aparece en el nombre (-1 si no hay). */
     fun numeroReconocido(c: CapituloFuente): Float {
@@ -1047,9 +1188,11 @@ class ExtManager private constructor(private val app: Context) {
         return r?.groupValues?.get(1)?.replace(',', '.')?.toFloatOrNull() ?: -1f
     }
 
-    fun alternarMarcado(fuenteId: Long, url: String) {
-        val k = "$fuenteId|$url"
-        marcados = if (k in marcados) marcados - k else marcados + k
+    fun alternarMarcado(fuenteId: Long, urlManga: String, url: String) {
+        val k = claveTexto(fuenteId, urlManga, url)
+        val era = esMarcado(fuenteId, urlManga, url)
+        if (!migrado) restoMarcados.remove("$fuenteId|$url")
+        marcados = if (era) marcados - k else marcados + k
         guardarMarcados()
     }
 
