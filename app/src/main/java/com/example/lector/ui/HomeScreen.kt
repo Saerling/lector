@@ -50,6 +50,22 @@ import com.example.lector.ui.mochy.home.HomeTopGlow
 import com.example.lector.ui.mochy.home.HomeTrackRow
 import com.example.lector.ui.mochy.rememberRevealSeenState
 import com.example.lector.ui.mochy.revealOnAppear
+import com.example.lector.ui.home.CarruselInicio
+import com.example.lector.ui.home.DialogoCategoriasInicio
+import com.example.lector.ui.home.DialogoEditarInicio
+import com.example.lector.ui.home.DialogoEliminarInicio
+import com.example.lector.ui.home.HojaComicInicio
+import com.example.lector.ui.home.MarcaSeleccion
+import com.example.lector.ui.home.OpcionInicio
+import com.example.lector.ui.home.rememberAccionesInicio
+import com.example.lector.ui.home.rememberOcultosInicio
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Done
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.DropdownMenuItem
 
 /*
  * Inicio con el diseño de Mochy Music (github.com/realidkroo/Mochy-Music, GPL-3.0: ui/screens/HomeScreen.kt):
@@ -81,12 +97,20 @@ fun HomeScreen(
     onOpen: (Comic) -> Unit,
     onRead: (Comic) -> Unit,
     onAdd: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    ext: com.example.lector.ext.ExtManager? = null,
+    onEliminar: ((Comic) -> Unit)? = null,
 ) {
     if (comics.isEmpty()) {
         InicioVacio(onAdd, modifier)
         return
     }
+    // «Quitar de Inicio» (persistente; vuelven al leerlos otra vez) y las acciones del menú / selección
+    val ocultos = rememberOcultosInicio()
+    val acciones = rememberAccionesInicio(almacen, ext, ocultos)
+    val todos = comics
+    val comics = remember(todos, ocultos.mapa) { ocultos.filtrar(todos).ifEmpty { todos } }
+    val cuantosOcultos = todos.size - comics.size
 
     val featured = remember(comics) {
         comics.firstOrNull { it.id == almacen.ultimoAbierto } ?: comics.maxByOrNull { it.leido } ?: comics.first()
@@ -135,15 +159,32 @@ fun HomeScreen(
     val heroScrollProgressProvider = remember { { heroScrollProgress } }
     val glowIds = remember(recientes, enCurso) { (enCurso + recientes).distinctBy { it.id }.take(2).map { it.id } }
 
+    // ---- Selección múltiple (Komikku) y menú contextual (Mochy) ----
+    var seleccion by remember { mutableStateOf(emptySet<String>()) }
+    var hoja by remember { mutableStateOf<Comic?>(null) }
+    var categoriasDe by remember { mutableStateOf<List<String>?>(null) }
+    var editar by remember { mutableStateOf<Comic?>(null) }
+    var eliminar by remember { mutableStateOf<List<Comic>?>(null) }
+    var menuDescarga by remember { mutableStateOf(false) }
+    val enSeleccion = seleccion.isNotEmpty()
+    LaunchedEffect(comics) { seleccion = seleccion.filterTo(HashSet()) { id -> comics.any { it.id == id } } }
+    BackHandler(enabled = enSeleccion) { seleccion = emptySet() }
+    val seleccionados = remember(seleccion, comics) { comics.filter { it.id in seleccion } }
+    fun alternar(c: Comic) { seleccion = if (c.id in seleccion) seleccion - c.id else seleccion + c.id }
+    val toque: (Comic) -> Unit = { c -> if (enSeleccion) alternar(c) else onOpen(c) }
+    val pulsacionLarga: (Comic) -> Unit = { c -> if (enSeleccion) alternar(c) else hoja = c }
+    val leerOSel: (Comic) -> Unit = { c -> if (enSeleccion) alternar(c) else onRead(c) }
+
     Box(modifier.fillMaxSize().background(LectorColors.Bg)) {
         LazyColumn(state = lazylistState, contentPadding = PaddingValues(bottom = 190.dp)) {
             item(key = "hero", contentType = "hero") {
                 HeroCarousel(
                     items = heroe,
                     almacen = almacen,
-                    onOpen = onOpen,
-                    onRead = onRead,
+                    onOpen = toque,
+                    onRead = leerOSel,
                     heroScrollProgressProvider = heroScrollProgressProvider,
+                    onLongPress = pulsacionLarga,
                 )
             }
 
@@ -156,8 +197,10 @@ fun HomeScreen(
                         onClick = { verRecientes = !verRecientes },
                     )
                 }
-                if (verRecientes) seccionEnFilas("rec", recientesTodos, almacen, onOpen, onRead)
-                else homeItem("recientes_list", revealSeen, "cardRow") { CoverCarousel(recientes, almacen, onOpen) }
+                if (verRecientes) seccionEnFilas("rec", recientesTodos, almacen, toque, leerOSel, seleccion, pulsacionLarga)
+                else homeItem("recientes_list", revealSeen, "cardRow") {
+                    CarruselInicio("rec", recientes, almacen, revealSeen, seleccion, toque, pulsacionLarga)
+                }
                 espacioSeccion("recientes")
             }
 
@@ -170,7 +213,7 @@ fun HomeScreen(
                         onClick = if (enCursoTodos.size > enCurso.size) ({ verEnCurso = !verEnCurso }) else null,
                     )
                 }
-                seccionEnFilas("ec", if (verEnCurso) enCursoTodos else enCurso, almacen, onOpen, onRead, progreso = true)
+                seccionEnFilas("ec", if (verEnCurso) enCursoTodos else enCurso, almacen, toque, leerOSel, seleccion, pulsacionLarga, progreso = true)
                 espacioSeccion("enCurso")
             }
 
@@ -183,15 +226,94 @@ fun HomeScreen(
                         onClick = { verSinLeer = !verSinLeer },
                     )
                 }
-                if (verSinLeer) seccionEnFilas("sl", sinLeer, almacen, onOpen, onRead)
-                else homeItem("sinLeer_list", revealSeen, "cardRow") { CoverCarousel(sinLeer, almacen, onOpen) }
+                if (verSinLeer) seccionEnFilas("sl", sinLeer, almacen, toque, leerOSel, seleccion, pulsacionLarga)
+                else homeItem("sinLeer_list", revealSeen, "cardRow") {
+                    CarruselInicio("sl", sinLeer, almacen, revealSeen, seleccion, toque, pulsacionLarga)
+                }
                 espacioSeccion("sinLeer")
+            }
+
+            if (cuantosOcultos > 0) item(key = "ocultos", contentType = "ocultos") {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = HomeContentInset, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    LText(
+                        if (cuantosOcultos == 1) "1 quitado de Inicio" else "$cuantosOcultos quitados de Inicio",
+                        LectorType.Label, Modifier.weight(1f), color = LectorColors.Muted,
+                    )
+                    ChipSel("Mostrar", false) { ocultos.mostrarTodos() }
+                }
             }
 
             item(key = "bottom_spacer", contentType = "spacer") { Spacer(Modifier.height(30.dp)) }
         }
 
-        HomeTopBar(heroScrollProgressProvider, glowIds, almacen, onAdd)
+        if (enSeleccion) {
+            Box(Modifier.fillMaxWidth().align(Alignment.TopCenter).background(LectorColors.Bg).statusBarsPadding()) {
+                CabeceraSeleccion(
+                    cantidad = seleccion.size,
+                    onCerrar = { seleccion = emptySet() },
+                    onTodo = { seleccion = comics.mapTo(HashSet()) { it.id } },
+                    onInvertir = { seleccion = comics.mapTo(HashSet()) { it.id } - seleccion },
+                )
+            }
+        } else HomeTopBar(heroScrollProgressProvider, glowIds, almacen, onAdd)
+
+        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 76.dp)) {
+            BarraAcciones(
+                visible = enSeleccion,
+                acciones = buildList {
+                    fun fin(f: (List<Comic>) -> Unit) { val l = seleccionados; seleccion = emptySet(); f(l) }
+                    add(AccionBarra(Iconos.OjoTachado, "Quitar de Inicio") { fin(acciones::quitarDeInicio) })
+                    add(AccionBarra(Icons.Rounded.Done, "Leído") { fin { acciones.marcar(it, true) } })
+                    add(AccionBarra(Icons.Rounded.Clear, "No leído") { fin { acciones.marcar(it, false) } })
+                    if (seleccionados.any { it.enLinea }) add(AccionBarra(Iconos.Descargar, "Descargar") { menuDescarga = true })
+                    add(AccionBarra(Icons.Rounded.Menu, "Categorías") { categoriasDe = seleccionados.map { it.id } })
+                    if (seleccionados.any { it.leido > 0 }) add(AccionBarra(Icons.Rounded.Refresh, "Historial") {
+                        fin { l -> acciones.quitarDelHistorial(l.filter { it.leido > 0 }) }
+                    })
+                    if (onEliminar != null) add(AccionBarra(Icons.Rounded.Delete, "Quitar") { eliminar = seleccionados })
+                },
+            )
+            MenuShiori(expanded = menuDescarga, onDismissRequest = { menuDescarga = false }) {
+                DropdownMenuItem(text = { Text("Siguiente capítulo sin leer") }, onClick = {
+                    menuDescarga = false; val l = seleccionados; seleccion = emptySet(); acciones.descargar(l, 1)
+                })
+                DropdownMenuItem(text = { Text("Siguientes 5 sin leer") }, onClick = {
+                    menuDescarga = false; val l = seleccionados; seleccion = emptySet(); acciones.descargar(l, 5)
+                })
+                DropdownMenuItem(text = { Text("Todos los no leídos") }, onClick = {
+                    menuDescarga = false; val l = seleccionados; seleccion = emptySet(); acciones.descargar(l, null)
+                })
+            }
+        }
+    }
+
+    hoja?.let { c ->
+        HojaComicInicio(c, almacen, puedeEliminar = onEliminar != null, onCerrar = { hoja = null }, onElegir = { o ->
+            hoja = null
+            when (o) {
+                OpcionInicio.LEER -> onRead(c)
+                OpcionInicio.FICHA -> onOpen(c)
+                OpcionInicio.SELECCIONAR -> seleccion = setOf(c.id)
+                OpcionInicio.QUITAR_INICIO -> acciones.quitarDeInicio(listOf(c))
+                OpcionInicio.QUITAR_HISTORIAL -> acciones.quitarDelHistorial(listOf(c))
+                OpcionInicio.LEIDO -> acciones.marcar(listOf(c), true)
+                OpcionInicio.NO_LEIDO -> acciones.marcar(listOf(c), false)
+                OpcionInicio.DESCARGAR_1 -> acciones.descargar(listOf(c), 1)
+                OpcionInicio.DESCARGAR_5 -> acciones.descargar(listOf(c), 5)
+                OpcionInicio.CATEGORIAS -> categoriasDe = listOf(c.id)
+                OpcionInicio.EDITAR -> editar = c
+                OpcionInicio.COMPARTIR -> acciones.compartir(c)
+                OpcionInicio.ELIMINAR -> eliminar = listOf(c)
+            }
+        })
+    }
+    categoriasDe?.let { ids -> DialogoCategoriasInicio(ids, almacen) { categoriasDe = null; seleccion = emptySet() } }
+    editar?.let { c -> DialogoEditarInicio(c, almacen) { editar = null } }
+    eliminar?.let { l ->
+        DialogoEliminarInicio(l, onConfirmar = { seleccion = emptySet(); l.forEach { onEliminar?.invoke(it) } }, onCerrar = { eliminar = null })
     }
 }
 
@@ -202,18 +324,29 @@ private fun LazyListScope.espacioSeccion(id: String) {
 /** Una sección desplegada (o «En curso»): filas de Mochy, una por cómic, como items de la lista (6000+ sin problema). */
 private fun LazyListScope.seccionEnFilas(
     prefijo: String, lista: List<Comic>, almacen: Almacen,
-    onOpen: (Comic) -> Unit, onRead: (Comic) -> Unit, progreso: Boolean = false,
+    onOpen: (Comic) -> Unit, onRead: (Comic) -> Unit,
+    seleccion: Set<String>, onLong: (Comic) -> Unit, progreso: Boolean = false,
 ) {
     items(lista, key = { prefijo + it.id }, contentType = { "row" }) { c ->
-        HomeTrackRow(
-            comic = c,
-            almacen = almacen,
-            onClick = { onOpen(c) },
-            onLongClick = null,
-            onMoreClick = { onRead(c) },
-            showProgress = progreso,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = HomeContentInset, vertical = 4.dp),
-        )
+        val enSel = seleccion.isNotEmpty()
+        val sel = c.id in seleccion
+        Box(
+            Modifier.fillMaxWidth().padding(horizontal = HomeContentInset - 8.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        ) {
+            HomeTrackRow(
+                comic = c,
+                almacen = almacen,
+                onClick = { onOpen(c) },
+                onLongClick = { onLong(c) },
+                onMoreClick = if (enSel) null else ({ onRead(c) }),
+                showProgress = progreso,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (enSel) MarcaSeleccion(sel, Modifier.align(Alignment.CenterEnd).padding(end = 6.dp))
+        }
     }
 }
 

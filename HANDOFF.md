@@ -836,3 +836,9 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2bt. PASO 72 (0.63)
 - Descargas (ExtRepos.abrir): 2 reintentos con espera ante 5xx. Actualizar la app: si el enlace de la release falla (HTTP 504), se baja por la API de GitHub (asset url + Accept octet-stream).
+
+## 2bu. PASO 73 (0.64)
+- Ventana de actualización portada de BitChord (ui/bitchord/UpdateAvailableDialog.kt, GPL-3.0) en DialogoActualizacion.kt.
+- Migrar (Explorar): tocar una serie abre su info guardada (ui/migrar/InfoGuardada.kt, estilo MangaScreen de Komikku; carga fuera del hilo principal y usa los datos de la biblioteca si falta caché). fuentesBuscables como Komikku: todas las instaladas de idiomas activos (incluye +18, idioma base y extensiones all/multi).
+- Inicio: menú al mantener (Mochy), selección múltiple con barra, «Quitar de Inicio» persistente (prefs inicio) y más acciones (ui/home/AccionesInicio.kt).
+- Ideas de BitChord pendientes: menú contextual que eleva el elemento con desenfoque, esquinas continuas, indicador de descargas en barra, WebDAV, estadísticas tipo Replay.

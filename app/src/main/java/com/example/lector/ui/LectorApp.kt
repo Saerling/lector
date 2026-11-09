@@ -401,7 +401,7 @@ fun Inicio(
         ) { t ->
             // Cada pestaña guarda su estado (desplazamiento, búsquedas, pestaña interna) al cambiar: nada se reinicia.
             estadoPestanas.SaveableStateProvider(t.name) { when (t) {
-                LectorTab.Home -> HomeScreen(visibles, almacen, onOpen = abrirDetalle, onRead = leerComic, onAdd = alAnadir)
+                LectorTab.Home -> HomeScreen(visibles, almacen, onOpen = abrirDetalle, onRead = leerComic, onAdd = alAnadir, ext = ext, onEliminar = alEliminar)
                 LectorTab.Search -> ExplorarScreen(
                     ext = ext,
                     onRuta = { ruta = it },

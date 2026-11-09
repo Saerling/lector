@@ -74,7 +74,7 @@ fun FuenteNoDisponible(
 
     // Se busca en todas las fuentes de tus idiomas (no solo en las ancladas): lo que importa es encontrarlo.
     // Primero se eligen las fuentes (como al migrar): buscar en más de mil a la vez es lento y gasta batería.
-    val todas = remember(ext.fuentes, ext.idiomas, ext.mostrarNsfw, fuenteId) { fuentesBuscables(ext, fuenteId) }
+    val todas = remember(ext.fuentes, ext.idiomas, ext.instaladas, fuenteId) { fuentesBuscables(ext, fuenteId) }
     var elegidas by remember { mutableStateOf(elegidasGuardadas(ctx, ext, todas)) }
     var eligiendo by rememberSaveable { mutableStateOf(true) }
     // Como Komikku con una fuente que falta: primero se ve el manga con lo que trajo la copia (capítulos, leídos,
@@ -232,62 +232,21 @@ fun FuenteNoDisponible(
 }
 
 
-/** El manga sin su fuente: datos y capítulos guardados (de la copia o de la última vez), con sus leídos. */
+/**
+ * El manga sin su fuente: datos y capítulos guardados (de la copia o de la última vez), con sus leídos. Lo que no esté en
+ * la ficha guardada se toma de la biblioteca (autor, descripción, géneros, recuento de capítulos y leídos).
+ */
 @Composable
 private fun InfoSinFuente(
     ext: ExtManager, almacen: Almacen, fuenteId: Long, manga: MangaFuente, enBiblioteca: Comic?, onBack: () -> Unit, alBuscar: () -> Unit,
 ) {
-    val ficha = remember(fuenteId, manga.url) { com.example.lector.CacheFichas.leer(fuenteId, manga.url) }
-    val caps = ficha?.capitulos.orEmpty()
-    val leidos = ext.leidos.let { caps.count { ext.esLeido(fuenteId, it.url) } }
     val (instalada, disponible) = ext.extensionDeFuente(fuenteId)
-    val titulo = enBiblioteca?.titulo ?: ficha?.detalle?.titulo?.ifBlank { null } ?: manga.titulo
-    Column(Modifier.fillMaxSize().background(LectorColors.Bg).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            BotonAtras(onBack)
-            Spacer(Modifier.width(16.dp))
-            LText(titulo, LectorType.Section, Modifier.weight(1f), maxLines = 1)
-        }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 40.dp)) {
-            item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
-                    val portada = Modifier.width(110.dp).aspectRatio(2f / 3f)
-                    if (enBiblioteca != null) ComicCover(enBiblioteca, almacen, portada, SuaveShape(14.dp))
-                    else ImagenRemota(ficha?.detalle?.portadaUrl ?: manga.portadaUrl, portada.clip(SuaveShape(14.dp)), emptyMap(), fuenteId = fuenteId)
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        androidx.compose.foundation.text.selection.SelectionContainer { LText(titulo, LectorType.Section, maxLines = 4) }
-                        ficha?.detalle?.autor?.takeIf { it.isNotBlank() }?.let { LText(it, LectorType.Label, Modifier.padding(top = 4.dp), color = LectorColors.Muted) }
-                        Spacer(Modifier.height(8.dp))
-                        LText(
-                            if (caps.isNotEmpty()) "${caps.size} capítulos · $leidos leídos" else "Sin capítulos guardados",
-                            LectorType.Body.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-                        )
-                        LText(
-                            "Fuente no instalada" + ((instalada?.nombre ?: disponible?.nombre)?.let { " · $it" } ?: " · id $fuenteId"),
-                            LectorType.Label, Modifier.padding(top = 4.dp), color = LectorColors.Error,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        PillButton("Buscar en otras fuentes", Icons.Rounded.Refresh, alBuscar)
-                    }
-                }
-            }
-            ficha?.detalle?.descripcion?.takeIf { it.isNotBlank() }?.let { d ->
-                item {
-                    androidx.compose.foundation.text.selection.SelectionContainer {
-                        LText(d, LectorType.Body, Modifier.padding(horizontal = 24.dp, vertical = 10.dp), color = LectorColors.Muted)
-                    }
-                }
-            }
-            if (caps.isNotEmpty()) item { TituloSeccion("Capítulos") }
-            items(caps.size, key = { caps[it].url }) { i ->
-                val c = caps[i]
-                val leido = ext.esLeido(fuenteId, c.url)
-                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    LText(c.nombre, LectorType.Body, Modifier.weight(1f), maxLines = 1, color = if (leido) LectorColors.Muted else LectorColors.Text)
-                    if (leido) androidx.compose.material3.Icon(Icons.Rounded.Check, "Leído", tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
-                }
-            }
-        }
-    }
+    com.example.lector.ui.migrar.InfoGuardada(
+        ext, almacen, fuenteId, manga.url, enBiblioteca, manga.titulo, manga.portadaUrl,
+        fuenteTexto = "Fuente no instalada" + ((instalada?.nombre ?: disponible?.nombre)?.let { " · $it" } ?: " · id $fuenteId"),
+        fuenteFalta = true,
+        accion = if (enBiblioteca != null) "Migrar" else "Buscar en otras fuentes",
+        iconoAccion = Icons.Rounded.Refresh,
+        onBack = onBack, onAccion = alBuscar,
+    )
 }

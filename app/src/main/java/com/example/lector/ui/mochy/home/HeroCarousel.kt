@@ -25,6 +25,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
@@ -133,6 +134,7 @@ fun HeroCarousel(
     onRead: (Comic) -> Unit,
     heroScrollProgressProvider: () -> Float = { 0f },
     modifier: Modifier = Modifier,
+    onLongPress: ((Comic) -> Unit)? = null,
 ) {
     val heroHeight = (LocalConfiguration.current.screenHeightDp * HeroHeightFraction).dp
 
@@ -154,6 +156,7 @@ fun HeroCarousel(
                 onOpen = onOpen,
                 onRead = onRead,
                 heroScrollProgressProvider = heroScrollProgressProvider,
+                onLongPress = onLongPress,
             )
         }
     }
@@ -167,6 +170,7 @@ private fun HeroPager(
     onOpen: (Comic) -> Unit,
     onRead: (Comic) -> Unit,
     heroScrollProgressProvider: () -> Float,
+    onLongPress: ((Comic) -> Unit)? = null,
 ) {
     // with one card an infinite pager wraps onto itself and auto-advances against nothing,
     // so a single card is just a static hero
@@ -235,6 +239,7 @@ private fun HeroPager(
                 edgeBlur = edgeBlur,
                 onOpen = { onOpen(item.comic) },
                 onPrimaryClick = { onRead(item.comic) },
+                onLongPress = onLongPress?.let { f -> { f(item.comic) } },
             )
         }
     }
@@ -244,6 +249,7 @@ private fun HeroPager(
 private fun PagerState.offsetOf(page: Int): Float =
     (page - currentPage) - currentPageOffsetFraction
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HeroPage(
     item: HeroCarouselItem,
@@ -253,6 +259,7 @@ private fun HeroPage(
     edgeBlur: Boolean,
     onOpen: () -> Unit,
     onPrimaryClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
 ) {
     PageWipe(pageOffset = pageOffset, curve = wipeCurve, blur = edgeBlur) {
         HeroMedia(
@@ -262,7 +269,7 @@ private fun HeroPage(
             modifier = Modifier
                 .pageMediaDrift(pageOffset)
                 .origenTransicion()
-                .clickable(interactionSource = null, indication = null, onClick = onOpen),
+                .combinedClickable(interactionSource = null, indication = null, onClick = onOpen, onLongClick = onLongPress),
             edgeBlur = edgeBlur,
         )
 

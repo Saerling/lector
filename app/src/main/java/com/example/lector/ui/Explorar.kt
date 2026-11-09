@@ -1015,7 +1015,8 @@ private fun MigrarTab(ext: ExtManager, almacen: com.example.lector.Almacen?, onM
                         ComicCover(c, almacen!!, Modifier.height(46.dp).aspectRatio(2f / 3f), RoundedCornerShape(6.dp))
                     },
                     title = c.titulo,
-                    subtitle = "Pasar a otra fuente",
+                    // Lo guardado (de la copia o de la biblioteca); al tocar se ve su ficha guardada y desde ahí se migra.
+                    subtitle = if (c.paginas > 0) "${c.paginas} capítulos · ${c.ultimaPagina} leídos" else "Ver lo guardado y migrar",
                     onClick = { onMigrar(c) },
                     trailing = { SearchRowGlyph(Icons.Rounded.ArrowForward, "Migrar", { onMigrar(c) }) },
                 )

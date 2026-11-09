@@ -87,11 +87,24 @@ fun MigrarScreen(
 
     val f = destino
     // Paso 0 (como Komikku): elegir en qué fuentes buscar. Se recuerda para la próxima vez.
-    val todas = remember(ext.fuentes, ext.idiomas, ext.mostrarNsfw) { fuentesBuscables(ext, origen.id) }
+    val todas = remember(ext.fuentes, ext.idiomas, ext.instaladas) { fuentesBuscables(ext, origen.id) }
     var elegidas by remember { mutableStateOf(elegidasGuardadas(ctx, ext, todas)) }
     var eligiendo by remember { mutableStateOf(true) }
+    // Desde la pestaña Migrar (sin la ficha abierta detrás): primero se ve lo que hay guardado del manga (lo de la copia:
+    // portada, datos, capítulos y leídos), como en Komikku; «Migrar» sigue con la elección de fuentes.
+    var verInfo by remember { mutableStateOf(capsOrigen == null && comic.urlManga != null) }
+    if (f == null && verInfo) {
+        com.example.lector.ui.migrar.InfoGuardada(
+            ext, almacen, origen.id, comic.urlManga.orEmpty(), comic, comic.titulo, comic.portadaUrl,
+            fuenteTexto = "${origen.nombre} (${origen.lang.uppercase()})", fuenteFalta = false,
+            accion = "Migrar", iconoAccion = Icons.Rounded.ArrowForward,
+            onBack = onBack, onAccion = { verInfo = false },
+        )
+        BackHandler(onBack = onBack)
+        return
+    }
     if (f == null && eligiendo) {
-        SeleccionFuentes(ext, todas, elegidas, onBack) { elegidas = it; eligiendo = false }
+        SeleccionFuentes(ext, todas, elegidas, { if (capsOrigen == null && comic.urlManga != null) verInfo = true else onBack() }) { elegidas = it; eligiendo = false }
         return
     }
     if (f == null) {
@@ -258,10 +271,24 @@ private fun FilaFuenteSel(f: FuenteUI, elegida: Boolean, alTocar: () -> Unit) {
     }
 }
 
-/** Fuentes donde se puede buscar un título (tus idiomas, sin +18 si lo ocultas), sin la de origen. */
-internal fun fuentesBuscables(ext: ExtManager, sinId: Long): List<FuenteUI> =
-    ext.fuentes.filter { it.id != sinId && (ext.mostrarNsfw || !it.nsfw) && it.lang in ext.idiomas }
-        .distinctBy { it.id }.sortedBy { it.nombre.lowercase() }
+/**
+ * Fuentes donde se puede buscar un título, sin la de origen. Como Komikku (MigrationConfigScreen.initSources): todas las
+ * fuentes de catálogo de las extensiones instaladas cuyo idioma tengas activado, ordenadas por «nombre (idioma)»; sin
+ * quitar las +18 (ese ajuste solo oculta extensiones en la lista). Además, una fuente entra si su idioma base
+ * («pt» de «pt-BR») o el de su extensión («all» / «multi») está activado: las extensiones multilingües traen fuentes
+ * con idiomas que no salen en la lista de idiomas y antes se perdían.
+ */
+internal fun fuentesBuscables(ext: ExtManager, sinId: Long): List<FuenteUI> {
+    val idiomas = ext.idiomas
+    val langExt = ext.instaladas.associate { it.pkg to it.lang }
+    fun activo(l: String?) = !l.isNullOrBlank() && (l in idiomas || l.substringBefore('-') in idiomas || l.substringBefore('_') in idiomas)
+    return ext.fuentes.asSequence()
+        .filter { it.id != sinId }
+        .filter { idiomas.isEmpty() || activo(it.lang) || activo(langExt[it.pkg]) || it.lang in setOf("all", "multi", "other", "") }
+        .distinctBy { it.id }
+        .sortedWith(compareBy({ "${it.nombre} (${it.lang})".lowercase() }, { it.id }))
+        .toList()
+}
 
 /** Las elegidas la última vez; si no hay, las ancladas; si tampoco, todas. */
 internal fun elegidasGuardadas(ctx: android.content.Context, ext: ExtManager, todas: List<FuenteUI>): Set<Long> {
