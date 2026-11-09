@@ -752,7 +752,8 @@ private fun NavegarFuente(
                 // Mantener pulsado = el menú de BitChord (añadir/quitar, abrir, buscar en todas, compartir).
                 val foto = com.example.lector.ui.bitchord.rememberHeldPicture()
                 val mod = Modifier.entrada(i % 12).origenTransicion().press3D().pressable(onLongClick = {
-                    scope.launch { fotoRetenida = foto.capture(); mangaRetenido = m }
+                    if (com.example.lector.ui.mochy.EstiloApp.accionDirecta) alternarEnBiblioteca(ctx, almacen, f, m)
+                    else scope.launch { fotoRetenida = foto.capture(); mangaRetenido = m }
                 }) { onManga(m) }.heldPicture(foto)
                 if (enLista) Row(
                     mod.fillMaxWidth().padding(vertical = 2.dp),
@@ -824,9 +825,10 @@ private fun NavegarFuente(
         }
     }
     }
-    com.example.lector.ui.bitchord.HeldContextMenu(
+    // Personalización → Estilo: hoja de Mochy, menú elevado de BitChord o (Directo) ninguno.
+    com.example.lector.ui.mochy.MenuMantener(
         item = mangaRetenido, held = fotoRetenida, hazeState = fondoRetenido, onDismiss = ::soltar,
-        onPreviewClick = { m -> soltar(); onManga(m) },
+        onPreviewClick = { m -> soltar(); onManga(m) }, titulo = { it.titulo }, subtitulo = { f.nombre },
     ) { m ->
         val esta = "${f.id}|${m.url}" in enBiblioteca
         com.example.lector.ui.bitchord.HeldMenuAction(

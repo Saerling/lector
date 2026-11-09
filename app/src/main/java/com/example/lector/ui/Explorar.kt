@@ -451,7 +451,12 @@ private fun NovedadesTab(
             var retenido by remember { mutableStateOf<Pair<FuenteUI, MangaFuente>?>(null) }
             var fotoRetenida by remember { mutableStateOf<com.example.lector.ui.bitchord.HeldItem?>(null) }
             fun soltar() { retenido = null; fotoRetenida = null }
-            val alRetener: (FuenteUI, MangaFuente, com.example.lector.ui.bitchord.HeldItem) -> Unit = { f, m, foto -> fotoRetenida = foto; retenido = f to m }
+            val ctxR = androidx.compose.ui.platform.LocalContext.current
+            val alRetener: (FuenteUI, MangaFuente, com.example.lector.ui.bitchord.HeldItem) -> Unit = { f, m, foto ->
+                // Personalización → Estilo → «Directo»: mantener pulsado añade o quita de la biblioteca, sin menú.
+                if (com.example.lector.ui.mochy.EstiloApp.accionDirecta) alternarEnBiblioteca(ctxR, com.example.lector.Almacen.obtener(ctxR), f, m)
+                else { fotoRetenida = foto; retenido = f to m }
+            }
             Box(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().heldBackdrop(fondoRetenido)) {
             var refrescando by remember { mutableStateOf(false) }
@@ -500,9 +505,9 @@ private fun NovedadesTab(
             val ctxM = androidx.compose.ui.platform.LocalContext.current
             val almM = remember { com.example.lector.Almacen.obtener(ctxM) }
             val enBiblioM = remember(almM.version) { almM.clavesEnLinea() }
-            com.example.lector.ui.bitchord.HeldContextMenu(
+            com.example.lector.ui.mochy.MenuMantener(
                 item = retenido, held = fotoRetenida, hazeState = fondoRetenido, onDismiss = ::soltar,
-                onPreviewClick = { (f, m) -> soltar(); onManga(f, m) },
+                onPreviewClick = { (f, m) -> soltar(); onManga(f, m) }, titulo = { it.second.titulo }, subtitulo = { it.first.nombre },
             ) { (f, m) ->
                 val esta = "${f.id}|${m.url}" in enBiblioM
                 com.example.lector.ui.bitchord.HeldMenuAction(

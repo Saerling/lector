@@ -137,17 +137,25 @@ val EnfasisEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
  * iconos de las apps): la curva entra en el borde sin cambio brusco y se lee como una sola forma suave.
  */
 @Immutable
-data class SuaveShape(val radio: Dp, val exponente: Float = 4f) : Shape {
-    // Delega en ContinuousCornerShape de BitChord (ui/bitchord/ContinuousCornerShape.kt): la esquina continua de
-    // Apple/Figma (cúbica + arco, curvas exactas en vez de la poligonal de 12 tramos de la superelipse de Mochy, y las
-    // cápsulas conservan su extremo semicircular). [exponente] se traduce en el suavizado: 2 = círculo, 4 = iOS.
-    private val continua = com.example.lector.ui.bitchord.ContinuousCornerShape(
-        androidx.compose.foundation.shape.CornerSize(radio), androidx.compose.foundation.shape.CornerSize(radio),
-        androidx.compose.foundation.shape.CornerSize(radio), androidx.compose.foundation.shape.CornerSize(radio),
-        smoothing = ((exponente - 2f) / 2f * com.example.lector.ui.bitchord.GLASS_CORNER_SMOOTHING).coerceIn(0f, 1f),
-    )
+data class SuaveShape(
+    val radio: Dp,
+    val exponente: Float = 4f,
+    /** Personalización → Estilo → Esquinas. Forma parte de la igualdad, así que cambiarla rehace los recortes. */
+    val estilo: com.example.lector.ui.mochy.EstiloApp.Esquinas = com.example.lector.ui.mochy.EstiloApp.esquinas,
+) : Shape {
+    // Mochy: la superelipse de SmoothCornerShape (ui/mochy/SmoothCornerShape.kt), la de siempre.
+    // Continuas: ContinuousCornerShape de BitChord (ui/bitchord/ContinuousCornerShape.kt), la esquina de Apple/Figma
+    // (cúbica + arco; las cápsulas conservan su extremo semicircular). [exponente] se traduce en el suavizado.
+    private val forma: Shape = when (estilo) {
+        com.example.lector.ui.mochy.EstiloApp.Esquinas.MOCHY -> com.example.lector.ui.mochy.SmoothCornerShape(radio, exponente)
+        com.example.lector.ui.mochy.EstiloApp.Esquinas.CONTINUAS -> com.example.lector.ui.bitchord.ContinuousCornerShape(
+            androidx.compose.foundation.shape.CornerSize(radio), androidx.compose.foundation.shape.CornerSize(radio),
+            androidx.compose.foundation.shape.CornerSize(radio), androidx.compose.foundation.shape.CornerSize(radio),
+            smoothing = ((exponente - 2f) / 2f * com.example.lector.ui.bitchord.GLASS_CORNER_SMOOTHING).coerceIn(0f, 1f),
+        )
+    }
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
-        continua.createOutline(size, layoutDirection, density)
+        forma.createOutline(size, layoutDirection, density)
 }
 
 // ───────────────────────── Pulsación ─────────────────────────

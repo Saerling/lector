@@ -388,6 +388,15 @@ fun <T : Any> HeldContextMenu(
 /** Una fila del menú (el IosMenuItem de BitChord, con los estilos de Shiori). */
 @Composable
 fun HeldMenuAction(icon: ImageVector, text: String, destructive: Boolean = false, onClick: () -> Unit) {
+    if (LocalHeldMenuMochy.current) {
+        // Dentro de la hoja de Mochy (ui/mochy/MenuMantener.kt): la píldora de MenuItemRow de sus menús de canción.
+        com.example.lector.ui.mochy.sheet.MenuItemRow(
+            icon = { Icon(icon, null, tint = if (destructive) LectorColors.Error else androidx.compose.material3.LocalContentColor.current) },
+            enabled = true,
+            onClick = onClick,
+        ) { Text(text, color = if (destructive) LectorColors.Error else androidx.compose.ui.graphics.Color.Unspecified) }
+        return
+    }
     val color = if (destructive) LectorColors.Error else LectorColors.Text
     Row(
         Modifier
@@ -401,6 +410,9 @@ fun HeldMenuAction(icon: ImageVector, text: String, destructive: Boolean = false
         Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
     }
 }
+
+/** true dentro de la hoja de Mochy: [HeldMenuAction] se dibuja como fila de menú de Mochy. */
+val LocalHeldMenuMochy = androidx.compose.runtime.staticCompositionLocalOf { false }
 
 private val CARD_RADIUS = 20.dp
 

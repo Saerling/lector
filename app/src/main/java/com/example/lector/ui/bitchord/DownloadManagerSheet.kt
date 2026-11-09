@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,7 +39,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.rounded.List
+import com.example.lector.ui.mochy.pressBounce
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -74,12 +78,24 @@ private fun pendientes(): List<TareaDescarga> = Descargas.cola.filter { it.clave
  */
 @Composable
 fun NavBarDownloadPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    // Personalización → Estilo → Indicador de descargas: si se ve y a qué lado de la barra.
+    val estilo = com.example.lector.ui.mochy.EstiloApp
     AnimatedVisibility(
-        visible = pendientes().isNotEmpty(),
-        modifier = modifier,
+        visible = estilo.verDescargas && pendientes().isNotEmpty(),
+        modifier = modifier.fillMaxWidth().wrapContentWidth(
+            when (estilo.ladoDescargas) {
+                com.example.lector.ui.mochy.EstiloApp.LadoDescargas.IZQUIERDA -> Alignment.Start
+                com.example.lector.ui.mochy.EstiloApp.LadoDescargas.CENTRO -> Alignment.CenterHorizontally
+                com.example.lector.ui.mochy.EstiloApp.LadoDescargas.DERECHA -> Alignment.End
+            },
+        ),
         enter = expandVertically(tween(260), expandFrom = Alignment.Bottom) + scaleIn(tween(260), initialScale = 0.6f) + fadeIn(tween(160, delayMillis = 60)),
         exit = fadeOut(tween(120)) + scaleOut(tween(220, delayMillis = 60), targetScale = 0.6f) + shrinkVertically(tween(220, delayMillis = 60), shrinkTowards = Alignment.Bottom),
-    ) { Box(Modifier.padding(start = 6.dp, bottom = 8.dp)) { DownloadPillBody(onClick) } }
+    ) {
+        val izquierda = estilo.ladoDescargas == com.example.lector.ui.mochy.EstiloApp.LadoDescargas.IZQUIERDA
+        val derecha = estilo.ladoDescargas == com.example.lector.ui.mochy.EstiloApp.LadoDescargas.DERECHA
+        Box(Modifier.padding(start = if (izquierda) 6.dp else 0.dp, end = if (derecha) 6.dp else 0.dp, bottom = 8.dp)) { DownloadPillBody(onClick) }
+    }
 }
 
 /** La misma píldora suelta (posición libre). Se mantiene por compatibilidad; Shiori usa [NavBarDownloadPill]. */
@@ -143,42 +159,43 @@ fun DownloadManagerSheet(onCerrar: () -> Unit, onVerCola: () -> Unit) {
     val ctx = LocalContext.current
     val activas = pendientes()
     val fallidas = Descargas.cola.count { it.clave in Descargas.errores }
+    // Con el aspecto de las hojas de Mochy: cabecera en Inter, sin líneas (el hueco separa) y las acciones en píldoras.
     HojaLector(onCerrar) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, bottom = 8.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Descargas", style = LectorType.Section, color = LectorColors.Text)
+                Text("Descargas", style = LectorType.Section.copy(fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = LectorColors.Text)
                 Text(
                     summary(activas, fallidas),
-                    style = LectorType.Body,
+                    style = LectorType.Body.copy(fontSize = 13.sp),
                     color = if (fallidas > 0 && activas.isEmpty()) LectorColors.Error else LectorColors.Muted,
                 )
             }
             if (activas.isNotEmpty()) {
                 // Only what is still going: a failed row stays for the full queue to retry.
-                TextButton(onClick = { activas.forEach { Descargas.cancelar(ctx, it.clave) } }) {
-                    Text("Cancelar todo", color = LectorColors.Text)
-                }
+                val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                Box(
+                    Modifier.pressBounce(src, pressedScale = 0.94f).clip(CircleShape)
+                        .background(com.example.lector.ui.mochy.sheet.MenuRowSurface)
+                        .clickable(src, null) { activas.forEach { Descargas.cancelar(ctx, it.clave) } }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) { Text("Cancelar todo", style = LectorType.Label.copy(fontSize = 13.sp), color = LectorColors.Text) }
             }
         }
-        HorizontalDivider(thickness = 0.5.dp, color = LectorColors.Linea)
+        Spacer(Modifier.height(12.dp))
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
             items(activas, key = { it.clave }) { t ->
                 DownloadManagerRow(t, Descargas.progreso[t.clave]) { Descargas.cancelar(ctx, t.clave) }
             }
         }
-        HorizontalDivider(thickness = 0.5.dp, color = LectorColors.Linea)
-        Row(
-            Modifier.fillMaxWidth().clickable { onCerrar(); onVerCola() }.padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("Ver la cola completa", style = LectorType.Body, color = LectorColors.Text)
-            Icon(Icons.Rounded.KeyboardArrowRight, null, tint = LectorColors.Muted)
-        }
         Spacer(Modifier.height(12.dp))
+        com.example.lector.ui.mochy.sheet.MenuItemRow(
+            icon = { Icon(Icons.Rounded.List, null) }, enabled = true, onClick = { onCerrar(); onVerCola() },
+            trailing = { Icon(Icons.Rounded.KeyboardArrowRight, null, tint = LectorColors.Muted) },
+        ) { Text("Ver la cola completa") }
+        Spacer(Modifier.height(4.dp))
     }
 }
 

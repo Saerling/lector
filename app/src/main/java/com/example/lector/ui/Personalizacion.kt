@@ -18,6 +18,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -180,7 +183,8 @@ private enum class SeccionP(val titulo: String, val palabras: String) {
     ANIMACION("Animación", "animacion animaciones velocidad movimiento rapido lento quitar"),
     INICIO("Animación de inicio", "inicio arranque agujero negro abrir"),
     RESPUESTA("Respuesta", "luz tocar tactil portada color ficha"),
-    GESTOS("Gestos", "gestos deslizar izquierda derecha capitulos marcar leido descargar");
+    GESTOS("Gestos", "gestos deslizar izquierda derecha capitulos marcar leido descargar"),
+    ESTILO("Estilo", "estilo mochy bitchord esquinas continuas menu mantener pulsado catalogo actualizacion ventana indicador descargas");
 
     fun coincide(q: String): Boolean {
         val palabrasQ = normalizar(q).split(' ').filter { it.isNotBlank() }
@@ -276,6 +280,7 @@ private fun ContenidoSeccion(s: SeccionP, almacen: Almacen) {
             }
         }
         SeccionP.GESTOS -> SeccionGestos()
+        SeccionP.ESTILO -> SeccionEstilo()
     }
 }
 
@@ -494,8 +499,8 @@ private fun TarjetaEfecto(
 
 /** Selector de dos (o más) opciones con una píldora que se desliza a la elegida. */
 @Composable
-private fun SelectorMini(opciones: List<String>, elegida: Int, alElegir: (Int) -> Unit, activo: Boolean) {
-    BoxWithConstraints(Modifier.fillMaxWidth().height(24.dp).clip(RoundedCornerShape(12.dp)).background(ColP.Tarjeta).padding(2.dp)) {
+private fun SelectorMini(opciones: List<String>, elegida: Int, alElegir: (Int) -> Unit, activo: Boolean, fondo: Color = ColP.Tarjeta) {
+    BoxWithConstraints(Modifier.fillMaxWidth().height(24.dp).clip(RoundedCornerShape(12.dp)).background(fondo).padding(2.dp)) {
         val tramo = maxWidth / opciones.size
         val x by animateDpAsState(tramo * elegida, spring(dampingRatio = 0.82f, stiffness = 520f), label = "mini")
         Box(Modifier.offset(x = x).width(tramo).fillMaxHeight().clip(RoundedCornerShape(10.dp)).background(ColP.Texto))
@@ -763,6 +768,77 @@ private fun PortadaColorPrevia(activo: Boolean) {
     }
 }
 
+// ───────────── Estilo: piezas de Mochy (por defecto) o de BitChord ─────────────
+
+@Composable
+private fun SeccionEstilo() {
+    val e = com.example.lector.ui.mochy.EstiloApp
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        TarjetaOpciones(
+            "Esquinas",
+            if (e.esquinas == com.example.lector.ui.mochy.EstiloApp.Esquinas.MOCHY) "La superelipse de Mochy en tarjetas, botones y portadas."
+            else "La esquina continua de BitChord, como la de iOS.",
+            com.example.lector.ui.mochy.EstiloApp.Esquinas.entries, e.esquinas, { it.nombre }, { e.elegir(it) },
+        ) {
+            // A 26 dp de radio sobre 64 dp se ve bien la diferencia entre las dos curvas.
+            Box(Modifier.size(64.dp).clip(SuaveShape(26.dp, estilo = e.esquinas)).background(ColP.Arte))
+        }
+        TarjetaOpciones(
+            "Mantener pulsado en catálogos",
+            when (e.menuMantener) {
+                com.example.lector.ui.mochy.EstiloApp.MenuMantener.MOCHY -> "Abre una hoja con la portada y sus acciones."
+                com.example.lector.ui.mochy.EstiloApp.MenuMantener.ELEVADO -> "La portada se levanta y el fondo se desenfoca (BitChord)."
+                com.example.lector.ui.mochy.EstiloApp.MenuMantener.DIRECTO -> "Añade o quita de la biblioteca al momento, sin menú."
+            },
+            com.example.lector.ui.mochy.EstiloApp.MenuMantener.entries, e.menuMantener, { it.nombre }, { e.elegir(it) },
+        )
+        TarjetaOpciones(
+            "Ventana de actualización",
+            if (e.ventanaActualizacion == com.example.lector.ui.mochy.EstiloApp.VentanaActualizacion.MOCHY) "Una hoja desde abajo con las novedades y botones en píldora."
+            else "Una alerta centrada al estilo de iOS.",
+            com.example.lector.ui.mochy.EstiloApp.VentanaActualizacion.entries, e.ventanaActualizacion, { it.nombre }, { e.elegir(it) },
+        )
+        Column(Modifier.fillMaxWidth().clip(FormaTarjeta).background(ColP.Tarjeta).padding(SangriaTexto)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LText("Indicador de descargas", EstiloEtiquetaTarjeta, Modifier.weight(1f), color = ColP.Texto.copy(alpha = 0.9f))
+                Interruptor(e.verDescargas, { e.elegirVerDescargas(it) })
+            }
+            Spacer(Modifier.height(6.dp))
+            LText("Una píldora encima de la barra mientras bajan capítulos; tócala para ver la cola.", EstiloPie, color = LectorColors.Muted)
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.graphicsLayer { alpha = if (e.verDescargas) 1f else 0.45f }) {
+                SelectorMini(
+                    com.example.lector.ui.mochy.EstiloApp.LadoDescargas.entries.map { it.nombre }, e.ladoDescargas.ordinal,
+                    { e.elegir(com.example.lector.ui.mochy.EstiloApp.LadoDescargas.entries[it]) }, e.verDescargas, fondo = ColP.Fila,
+                )
+            }
+        }
+    }
+}
+
+/** Tarjeta con un título, una línea que explica la opción elegida y el selector de píldora; [previa] va a la derecha. */
+@Composable
+private fun <T> TarjetaOpciones(
+    titulo: String, explicacion: String, opciones: List<T>, elegida: T, nombre: (T) -> String, alElegir: (T) -> Unit,
+    previa: (@Composable () -> Unit)? = null,
+) {
+    Column(Modifier.fillMaxWidth().clip(FormaTarjeta).background(ColP.Tarjeta).padding(SangriaTexto)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                LText(titulo, EstiloEtiquetaTarjeta, color = ColP.Texto.copy(alpha = 0.9f))
+                Spacer(Modifier.height(6.dp))
+                androidx.compose.animation.AnimatedContent(
+                    explicacion, label = "explica",
+                    transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
+                ) { LText(it, EstiloPie, color = LectorColors.Muted) }
+            }
+            if (previa != null) { Spacer(Modifier.width(14.dp)); previa() }
+        }
+        Spacer(Modifier.height(12.dp))
+        SelectorMini(opciones.map(nombre), opciones.indexOf(elegida).coerceAtLeast(0), { alElegir(opciones[it]) }, true, fondo = ColP.Fila)
+    }
+}
+
 /** Velocidad global de las animaciones (AppMotion de Mochy): se entrega al Recomposer de la ventana. */
 object MovimientoApp {
     private var prefs: android.content.SharedPreferences? = null
@@ -779,6 +855,7 @@ object MovimientoApp {
         val p = ctx.getSharedPreferences("aspecto", android.content.Context.MODE_PRIVATE).also { prefs = it }
         activado = p.getBoolean("animaciones", true)
         velocidad = p.getFloat("velocidad_anim", 1f)
+        com.example.lector.ui.mochy.EstiloApp.iniciar(ctx)
         val res = ctx.contentResolver
         fun leer() = android.provider.Settings.Global.getFloat(res, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
         escalaSistema = leer()

@@ -854,3 +854,8 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Indicador de descargas: pastilla sobre la barra de navegación (izquierda). HeldContextMenu también en Novedades.
 - ModoContenido (SFW/NSFW, prefs modo_contenido) en Seguridad bajo incógnito; filtra Inicio, Biblioteca, Historial, Actualizaciones, Explorar y búsqueda global.
 - Extensiones: setRequireUserAction(NOT_REQUIRED) en API 31+ (+permiso UPDATE_PACKAGES_WITHOUT_USER_ACTION); «Actualizar todas» en segundo plano y seguidas.
+
+## 2bx. PASO 76 (0.67)
+- Modos SFW/NSFW también en Más → Lectura.
+- Actualizaciones: hoja de filtros desplazable y rediseñada; Próximos con calendario estilo Mochy (pager, portadas en días) y estado en EstadoActualizaciones.
+- Personalización → Estilo (EstiloElegido, prefs aspecto): esquinas Mochy/Continuas, pulsación larga Mochy/Elevado/Directo, ventana de actualización Mochy (HojaActualizacion.kt)/BitChord, indicador de descargas on/off + posición. Todo por defecto Mochy. WebDAV/Replay/descargas restilizados a Mochy.

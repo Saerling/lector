@@ -47,7 +47,8 @@ import com.example.lector.ui.LectorColors
 import com.example.lector.ui.LectorType
 import com.example.lector.ui.Mov
 import com.example.lector.ui.PaginaAjustes
-import com.example.lector.ui.StatCard
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.em
 import com.example.lector.ui.SuaveShape
 import com.example.lector.ui.TituloSeccion
 import com.example.lector.ui.entrada
@@ -87,78 +88,108 @@ fun ReplayScreen(almacen: Almacen, onBack: () -> Unit) {
     val per = ReplayPeriodo.entries[periodo]
     val r by produceState<ResumenReplay?>(null, per, almacen.historialLinea) { value = ReplayEstadisticas.resumen(almacen, per) }
 
+    // Con las piezas de Mochy: tarjetas sobre LectorColors.Card con la superelipse, números en Inter con el
+    // cuentakilómetros (OdometerNumber) y las secciones con el título de SettingsGroup.
     PaginaAjustes("Replay", onBack) {
         FilaChips(ReplayPeriodo.entries.map { it.chip }, periodo) { periodo = it }
         val s = r ?: return@PaginaAjustes
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
-            LText(s.etiqueta, LectorType.Label, color = LectorColors.Muted)
-            LText("${s.capitulos}", LectorType.Display.copy(fontSize = 56.sp, lineHeight = 60.sp), color = MaterialTheme.colorScheme.primary)
-            LText(if (s.capitulos == 1) "capítulo leído" else "capítulos leídos", LectorType.Section)
-            if (s.tiempoMs > 60_000) LText("${duracionReplay(s.tiempoMs)} leyendo", LectorType.Body, color = LectorColors.Muted)
+        val acento = MaterialTheme.colorScheme.primary
+        TarjetaReplay(Modifier.padding(top = 8.dp)) {
+            Column(Modifier.padding(horizontal = 22.dp, vertical = 20.dp)) {
+                LText(s.etiqueta, EstiloEtiqueta, color = LectorColors.Muted)
+                Spacer(Modifier.height(6.dp))
+                com.example.lector.ui.mochy.OdometerNumber("${s.capitulos}", fontSize = 56.sp, color = acento)
+                LText(if (s.capitulos == 1) "capítulo leído" else "capítulos leídos", EstiloTituloFila.copy(fontSize = 17.sp))
+                if (s.tiempoMs > 60_000) LText("${duracionReplay(s.tiempoMs)} leyendo", EstiloDetalle, Modifier.padding(top = 2.dp), color = LectorColors.Muted)
+            }
         }
         if (s.vacio) {
             LText(
                 "Todavía no hay lecturas en este periodo. Shiori anota cada capítulo que abres desde ahora (y los del historial); " +
                     "todo se queda en el teléfono.",
-                LectorType.Body, Modifier.padding(24.dp), color = LectorColors.Muted,
+                EstiloDetalle, Modifier.padding(horizontal = 24.dp, vertical = 14.dp), color = LectorColors.Muted,
             )
         }
 
-        Row(Modifier.padding(horizontal = 24.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("${s.rachaActual}", "Racha actual (días)", Modifier.weight(1f).entrada(1))
-            StatCard("${s.rachaMaxima}", "Mejor racha", Modifier.weight(1f).entrada(2))
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DatoReplay("${s.rachaActual}", "Racha actual (días)", Modifier.weight(1f).entrada(1))
+            DatoReplay("${s.rachaMaxima}", "Mejor racha", Modifier.weight(1f).entrada(2))
         }
-        Row(Modifier.padding(horizontal = 24.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("${s.mangas.size}", "Mangas distintos", Modifier.weight(1f).entrada(3))
-            StatCard("${s.diasLeyendo}", "Días leyendo", Modifier.weight(1f).entrada(4))
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DatoReplay("${s.mangas.size}", "Mangas distintos", Modifier.weight(1f).entrada(3))
+            DatoReplay("${s.diasLeyendo}", "Días leyendo", Modifier.weight(1f).entrada(4))
         }
 
         if (s.mangas.isNotEmpty()) {
             TituloSeccion("Lo que más leíste")
-            s.mangas.take(10).forEachIndexed { i, m ->
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp).entrada(i),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    LText("${i + 1}", LectorType.Section, Modifier.width(28.dp), color = if (i < 3) MaterialTheme.colorScheme.primary else LectorColors.Muted)
-                    ImagenRemota(m.portadaUrl, Modifier.size(44.dp, 62.dp).clip(SuaveShape(10.dp)).background(LectorColors.CardHigh))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        LText(m.titulo, LectorType.Body, maxLines = 2)
-                        LText(if (m.caps == 1) "1 capítulo" else "${m.caps} capítulos", LectorType.Label, color = LectorColors.Muted)
+            TarjetaReplay {
+                Column(Modifier.padding(vertical = 8.dp)) {
+                    s.mangas.take(10).forEachIndexed { i, m ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).entrada(i),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            LText("${i + 1}", EstiloTituloFila, Modifier.width(28.dp), color = if (i < 3) acento else LectorColors.Muted)
+                            ImagenRemota(m.portadaUrl, Modifier.size(44.dp, 62.dp).clip(SuaveShape(10.dp)).background(LectorColors.CardHigh))
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                LText(m.titulo, EstiloTituloFila, maxLines = 2)
+                                LText(if (m.caps == 1) "1 capítulo" else "${m.caps} capítulos", EstiloDetalle, color = LectorColors.Muted)
+                            }
+                        }
                     }
                 }
             }
         }
 
         TituloSeccion("Capítulos por semana")
-        Barras(s.porSemana)
+        TarjetaReplay { Barras(s.porSemana) }
         TituloSeccion("Capítulos por mes")
-        Barras(s.porMes)
+        TarjetaReplay { Barras(s.porMes) }
 
         if (s.generos.isNotEmpty()) {
             TituloSeccion("Géneros favoritos")
             val max = s.generos.first().caps.coerceAtLeast(1)
-            s.generos.take(8).forEachIndexed { i, g -> BarraHorizontal(g.nombre, g.caps, max, i) }
+            TarjetaReplay { Column(Modifier.padding(vertical = 10.dp)) { s.generos.take(8).forEachIndexed { i, g -> BarraHorizontal(g.nombre, g.caps, max, i) } } }
         }
 
         if (!s.vacio) {
             TituloSeccion("Curiosidades")
-            s.horaPico?.let { h ->
-                LText("Lees sobre todo ${franja(h)} (hacia las ${h}:00)", LectorType.Body, Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
-            }
-            s.diaMasActivo?.let { d ->
-                val f = d.format(DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", Locale("es")))
-                LText("Tu día más lector: $f (${s.diaMasActivoCaps} capítulos)", LectorType.Body, Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
-            }
-            s.desde?.let { d ->
-                LText(
-                    "Registro desde el ${d.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale("es")))}",
-                    LectorType.Label, Modifier.padding(horizontal = 24.dp, vertical = 4.dp), color = LectorColors.Muted,
-                )
+            TarjetaReplay {
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    s.horaPico?.let { h -> LText("Lees sobre todo ${franja(h)} (hacia las ${h}:00)", EstiloTituloFila.copy(fontWeight = FontWeight.Medium)) }
+                    s.diaMasActivo?.let { d ->
+                        val f = d.format(DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", Locale("es")))
+                        LText("Tu día más lector: $f (${s.diaMasActivoCaps} capítulos)", EstiloTituloFila.copy(fontWeight = FontWeight.Medium))
+                    }
+                    s.desde?.let { d ->
+                        LText("Registro desde el ${d.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale("es")))}", EstiloDetalle, color = LectorColors.Muted)
+                    }
+                }
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+private val EstiloEtiqueta = androidx.compose.ui.text.TextStyle(fontFamily = com.example.lector.ui.LectorFont, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+private val EstiloTituloFila = androidx.compose.ui.text.TextStyle(fontFamily = com.example.lector.ui.LectorFont, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 19.sp, letterSpacing = (-0.01).em)
+private val EstiloDetalle = androidx.compose.ui.text.TextStyle(fontFamily = com.example.lector.ui.LectorFont, fontWeight = FontWeight.Normal, fontSize = 13.sp, lineHeight = 18.sp)
+
+/** Tarjeta de Mochy (la de SettingsGroup «Classic»): fondo de tarjeta, superelipse de 24 dp, 16 dp de margen. */
+@Composable
+private fun TarjetaReplay(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Box(modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(SuaveShape(24.dp)).background(LectorColors.Card)) { content() }
+}
+
+/** Un dato suelto: número grande en Inter y su etiqueta debajo. */
+@Composable
+private fun DatoReplay(valor: String, etiqueta: String, modifier: Modifier = Modifier) {
+    Column(modifier.clip(SuaveShape(22.dp)).background(LectorColors.Card).padding(horizontal = 18.dp, vertical = 16.dp)) {
+        com.example.lector.ui.mochy.OdometerNumber(valor, fontSize = 30.sp, color = LectorColors.Text, letterSpacing = (-1).sp)
+        Spacer(Modifier.height(2.dp))
+        LText(etiqueta, EstiloDetalle, color = LectorColors.Muted, maxLines = 1)
     }
 }
 
@@ -168,7 +199,7 @@ private fun Barras(datos: List<Pair<String, Int>>) {
     val max = datos.maxOfOrNull { it.second }?.coerceAtLeast(1) ?: 1
     val acento = MaterialTheme.colorScheme.primary
     Row(
-        Modifier.fillMaxWidth().height(140.dp).padding(horizontal = 24.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().height(156.dp).padding(horizontal = 18.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
@@ -191,10 +222,10 @@ private fun Barras(datos: List<Pair<String, Int>>) {
 
 @Composable
 private fun BarraHorizontal(nombre: String, n: Int, max: Int, i: Int) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)) {
         Row {
-            LText(nombre, LectorType.Body, Modifier.weight(1f), maxLines = 1)
-            LText("$n", LectorType.Body, color = LectorColors.Muted)
+            LText(nombre, EstiloTituloFila, Modifier.weight(1f), maxLines = 1)
+            LText("$n", EstiloTituloFila, color = LectorColors.Muted)
         }
         Spacer(Modifier.height(6.dp))
         var lleno by remember { mutableStateOf(false) }

@@ -33,7 +33,10 @@ import com.example.lector.bitchord.WebDavAjustes
 import com.example.lector.bitchord.WebDavClient
 import com.example.lector.bitchord.WebDavCopias
 import com.example.lector.ui.Avisos
-import com.example.lector.ui.CampoTextoShiori
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.draw.clip
 import com.example.lector.ui.DialogoAlerta
 import com.example.lector.ui.Divisor
 import com.example.lector.ui.FilaAjuste
@@ -81,23 +84,20 @@ fun WebdavScreen(onBack: () -> Unit) {
         LText(
             "Sube tus copias de seguridad a tu propio servidor WebDAV (Nextcloud, ownCloud, un NAS…) y restáuralas desde ahí. " +
                 "La contraseña se queda solo en este teléfono y no va dentro de las copias.",
-            LectorType.Label.copy(fontSize = 13.sp), Modifier.padding(horizontal = 24.dp), color = LectorColors.Muted,
+            LectorType.Label.copy(fontSize = 13.sp, lineHeight = 18.sp), Modifier.padding(horizontal = 24.dp).padding(bottom = 4.dp), color = LectorColors.Muted,
         )
         TituloSeccion("Servidor")
-        val campo = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-        CampoTextoShiori(
-            url, { url = it; estado = null }, campo, singleLine = true,
-            label = { Text("Dirección") },
-            placeholder = { Text("https://nube.ejemplo.com/remote.php/dav/files/yo") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-        )
-        CampoTextoShiori(usuario, { usuario = it; estado = null }, campo, singleLine = true, label = { Text("Usuario") })
-        CampoTextoShiori(
-            clave, { clave = it; estado = null }, campo, singleLine = true, label = { Text("Contraseña o clave de aplicación") },
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        )
-        CampoTextoShiori(carpeta, { carpeta = it }, campo, singleLine = true, label = { Text("Carpeta en el servidor") })
+        // Los cuatro campos en una tarjeta de Mochy (la de SettingsGroup): etiqueta pequeña encima y el texto debajo,
+        // sin contornos de Material.
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(com.example.lector.ui.SuaveShape(24.dp))
+                .background(LectorColors.Card).padding(vertical = 6.dp),
+        ) {
+            CampoMochy("Dirección", url, { url = it; estado = null }, "https://nube.ejemplo.com/remote.php/dav/files/yo", tipo = KeyboardType.Uri)
+            CampoMochy("Usuario", usuario, { usuario = it; estado = null })
+            CampoMochy("Contraseña o clave de aplicación", clave, { clave = it; estado = null }, tipo = KeyboardType.Password, oculto = true)
+            CampoMochy("Carpeta en el servidor", carpeta, { carpeta = it })
+        }
         Spacer(Modifier.height(4.dp))
         FilaAjuste(
             Icons.Rounded.Check, if (probando) "Probando…" else "Probar conexión",
@@ -171,5 +171,30 @@ fun WebdavScreen(onBack: () -> Unit) {
             },
             dismissButton = { TextButton(onClick = { pedirUltima = false; confirmar = null }) { Text("Cancelar") } },
         )
+    }
+}
+
+/** Un campo dentro de la tarjeta: etiqueta de 12 sp atenuada y el valor en Inter 15 sp; el cursor en el acento. */
+@Composable
+private fun CampoMochy(
+    etiqueta: String, valor: String, alCambiar: (String) -> Unit, ejemplo: String? = null,
+    tipo: KeyboardType = KeyboardType.Text, oculto: Boolean = false,
+) {
+    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+        LText(etiqueta, LectorType.Label.copy(fontSize = 12.sp), color = LectorColors.Muted)
+        Spacer(Modifier.height(4.dp))
+        Box {
+            if (valor.isEmpty() && ejemplo != null) {
+                LText(ejemplo, LectorType.Body.copy(fontSize = 15.sp), color = LectorColors.Muted.copy(alpha = 0.6f), maxLines = 1)
+            }
+            androidx.compose.foundation.text.BasicTextField(
+                valor, alCambiar, Modifier.fillMaxWidth(), singleLine = true,
+                textStyle = LectorType.Body.copy(fontSize = 15.sp, color = LectorColors.Text),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(acento),
+                visualTransformation = if (oculto) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(keyboardType = tipo),
+            )
+        }
     }
 }
