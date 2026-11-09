@@ -4,7 +4,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.runtime.remember
 import com.example.lector.ui.mochy.RoundedHighlight
-import com.example.lector.ui.mochy.SmoothCornerShape
 import com.example.lector.ui.mochy.TopToaster
 import com.example.lector.ui.mochy.pressBounce
 import com.example.lector.ui.mochy.press3D as mochyPress3D
@@ -139,10 +138,16 @@ val EnfasisEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
  */
 @Immutable
 data class SuaveShape(val radio: Dp, val exponente: Float = 4f) : Shape {
-    // Delega en SmoothCornerShape de Mochy (ui/mochy/SmoothCornerShape.kt): la misma superelipse.
-    private val mochy = SmoothCornerShape(radio, exponente)
+    // Delega en ContinuousCornerShape de BitChord (ui/bitchord/ContinuousCornerShape.kt): la esquina continua de
+    // Apple/Figma (cúbica + arco, curvas exactas en vez de la poligonal de 12 tramos de la superelipse de Mochy, y las
+    // cápsulas conservan su extremo semicircular). [exponente] se traduce en el suavizado: 2 = círculo, 4 = iOS.
+    private val continua = com.example.lector.ui.bitchord.ContinuousCornerShape(
+        androidx.compose.foundation.shape.CornerSize(radio), androidx.compose.foundation.shape.CornerSize(radio),
+        androidx.compose.foundation.shape.CornerSize(radio), androidx.compose.foundation.shape.CornerSize(radio),
+        smoothing = ((exponente - 2f) / 2f * com.example.lector.ui.bitchord.GLASS_CORNER_SMOOTHING).coerceIn(0f, 1f),
+    )
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
-        mochy.createOutline(size, layoutDirection, density)
+        continua.createOutline(size, layoutDirection, density)
 }
 
 // ───────────────────────── Pulsación ─────────────────────────

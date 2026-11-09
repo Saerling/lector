@@ -87,7 +87,9 @@ fun MigrarScreen(
 
     val f = destino
     // Paso 0 (como Komikku): elegir en qué fuentes buscar. Se recuerda para la próxima vez.
-    val todas = remember(ext.fuentes, ext.idiomas, ext.instaladas) { fuentesBuscables(ext, origen.id) }
+    remember { com.example.lector.ui.migrar.OpcionesMigrar.iniciar(ctx); com.example.lector.ui.migrar.HistorialMigraciones.iniciar(ctx) }
+    val todasIdiomas = com.example.lector.ui.migrar.OpcionesMigrar.todasFuentes
+    val todas = remember(ext.fuentes, ext.idiomas, ext.instaladas, todasIdiomas) { fuentesBuscables(ext, origen.id) }
     var elegidas by remember { mutableStateOf(elegidasGuardadas(ctx, ext, todas)) }
     var eligiendo by remember { mutableStateOf(true) }
     // Desde la pestaña Migrar (sin la ficha abierta detrás): primero se ve lo que hay guardado del manga (lo de la copia:
@@ -251,6 +253,16 @@ suspend fun migrarComic(
     check(almacen.migrarEnLinea(comic, f.id, m.url, portada, ficha.capitulos.size, leidos)) { "No se pudo migrar" }
     // Los capítulos que hay ahora son la base: solo lo que salga después contará como novedad.
     almacen.registrarCapitulos(f.id, m.url, ficha.detalle.titulo.ifBlank { m.titulo }, portada, ficha.capitulos)
+    // Historial de migraciones (Más → Migraciones recientes).
+    runCatching {
+        com.example.lector.ui.migrar.HistorialMigraciones.registrar(
+            com.example.lector.ui.migrar.Migracion(
+                "migrar", comic.titulo,
+                origenId, com.example.lector.ui.migrar.HistorialMigraciones.nombreFuente(ext, origenId), comic.urlManga,
+                f.id, "${f.nombre} (${f.lang.uppercase()})", m.url, portada, leidos,
+            )
+        )
+    }
 }
 
 @Composable
@@ -276,15 +288,18 @@ private fun FilaFuenteSel(f: FuenteUI, elegida: Boolean, alTocar: () -> Unit) {
  * fuentes de catálogo de las extensiones instaladas cuyo idioma tengas activado, ordenadas por «nombre (idioma)»; sin
  * quitar las +18 (ese ajuste solo oculta extensiones en la lista). Además, una fuente entra si su idioma base
  * («pt» de «pt-BR») o el de su extensión («all» / «multi») está activado: las extensiones multilingües traen fuentes
- * con idiomas que no salen en la lista de idiomas y antes se perdían.
+ * con idiomas que no salen en la lista de idiomas y antes se perdían. Con [todosIdiomas] («Todas las fuentes») entran
+ * todas las de las extensiones instaladas y de confianza, sin mirar el idioma.
  */
-internal fun fuentesBuscables(ext: ExtManager, sinId: Long): List<FuenteUI> {
+internal fun fuentesBuscables(
+    ext: ExtManager, sinId: Long, todosIdiomas: Boolean = com.example.lector.ui.migrar.OpcionesMigrar.todasFuentes,
+): List<FuenteUI> {
     val idiomas = ext.idiomas
     val langExt = ext.instaladas.associate { it.pkg to it.lang }
     fun activo(l: String?) = !l.isNullOrBlank() && (l in idiomas || l.substringBefore('-') in idiomas || l.substringBefore('_') in idiomas)
     return ext.fuentes.asSequence()
         .filter { it.id != sinId }
-        .filter { idiomas.isEmpty() || activo(it.lang) || activo(langExt[it.pkg]) || it.lang in setOf("all", "multi", "other", "") }
+        .filter { todosIdiomas || idiomas.isEmpty() || activo(it.lang) || activo(langExt[it.pkg]) || it.lang in setOf("all", "multi", "other", "") }
         .distinctBy { it.id }
         .sortedWith(compareBy({ "${it.nombre} (${it.lang})".lowercase() }, { it.id }))
         .toList()
@@ -319,6 +334,15 @@ internal fun SeleccionFuentes(ext: ExtManager, todas: List<FuenteUI>, inicial: S
             BotonRedondoTema(Icons.Rounded.Clear, "Ninguna", { elegidas = emptySet() })
         }
         Box(Modifier.padding(horizontal = 16.dp)) { CampoBusqueda(filtro, { filtro = it }, "Buscar fuentes") }
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Sin filtro de idioma: todas las fuentes de todas las extensiones instaladas (también las multilingües).
+            ChipSel("Todas las fuentes (todos los idiomas)", com.example.lector.ui.migrar.OpcionesMigrar.todasFuentes) {
+                com.example.lector.ui.migrar.OpcionesMigrar.alternar(ctx)
+            }
+            Spacer(Modifier.width(8.dp))
+            LText("${todas.size}", LectorType.Label, color = LectorColors.Muted)
+        }
+        val pendientes = com.example.lector.ui.migrar.extensionesPendientes(ext)
         val visibles = todas.filter { filtro.isBlank() || it.nombre.contains(filtro.trim(), true) }
         val (si, no) = visibles.partition { it.id in elegidas }
         Box(Modifier.weight(1f)) {
@@ -327,6 +351,13 @@ internal fun SeleccionFuentes(ext: ExtManager, todas: List<FuenteUI>, inicial: S
                 items(si, key = { "s${it.id}" }) { o -> FilaFuenteSel(o, true) { elegidas = elegidas - o.id } }
                 if (no.isNotEmpty()) item { LText("Disponibles", LectorType.Label, Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp), color = LectorColors.Muted) }
                 items(no, key = { "n${it.id}" }) { o -> FilaFuenteSel(o, false) { elegidas = elegidas + o.id } }
+                if (pendientes.isNotEmpty()) item {
+                    LText(
+                        "Instaladas pero sin usar (confía en ellas para buscar ahí)", LectorType.Label,
+                        Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp), color = LectorColors.Muted,
+                    )
+                }
+                items(pendientes, key = { "p${it.pkg}" }) { e -> com.example.lector.ui.migrar.FilaExtPendiente(ext, e) }
             }
             Box(Modifier.align(Alignment.BottomEnd).padding(20.dp).navigationBarsPadding()) {
                 PillButton("Continuar (${elegidas.size})", Icons.Rounded.ArrowForward, {

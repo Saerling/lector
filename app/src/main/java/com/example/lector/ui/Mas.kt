@@ -31,7 +31,7 @@ import com.example.lector.ext.ExtManager
 enum class Ruta {
     Categorias, Estadisticas, Datos, Ajustes, Apariencia, AjBiblioteca, AjSeguimiento,
     AjVisor, AjDescargas, AjExplorar, AjSeguridad, AjAvanzado, AcercaDe,
-    Descargas, BusquedaGlobal, MigrarSerie,
+    Descargas, BusquedaGlobal, MigrarSerie, MigracionesRecientes,
     // Explorar / extensiones
     ListadosExt, ExtDetalle, FuenteDetalle,
     // Ficha de un manga de una fuente + lector online
@@ -98,6 +98,7 @@ fun MasScreen(almacen: Almacen, onRuta: (Ruta) -> Unit, onAdd: () -> Unit, onAdd
         )
         BurbujaMas(Icons.Rounded.Menu, "Categorías", null, Modifier.entrada(i++), onClick = { onRuta(Ruta.Categorias) })
         BurbujaMas(Icons.Rounded.Info, "Estadísticas", null, Modifier.entrada(i++), onClick = { onRuta(Ruta.Estadisticas) })
+        BurbujaMas(Icons.Rounded.Refresh, "Migraciones recientes", "Lo que has movido de una fuente a otra", Modifier.entrada(i++), onClick = { onRuta(Ruta.MigracionesRecientes) })
         BurbujaMas(Icons.Rounded.Share, "Datos y almacenamiento", null, Modifier.entrada(i++), onClick = { onRuta(Ruta.Datos) })
 
         GrupoMas("App", Modifier.entrada(i++))
@@ -168,8 +169,12 @@ fun EstadisticasScreen(comics: List<Comic>, almacen: Almacen, ext: ExtManager, o
         comics.filter { it.enLinea }.groupingBy { it.fuenteId }.eachCount().entries.sortedByDescending { it.value }.take(6)
             .map { (id, n) -> (ext.fuentes.firstOrNull { it.id == id }?.nombre ?: "Fuente $id") to n }
     }
+    // Replay (de BitChord): subpantalla propia, sin ruta nueva.
+    var verReplay by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    if (verReplay) { com.example.lector.ui.bitchord.ReplayScreen(almacen) { verReplay = false }; return }
 
     PaginaAjustes("Estadísticas", onBack) {
+        com.example.lector.ui.bitchord.ReplayTarjeta(almacen) { verReplay = true }
         // Anillo de la biblioteca (terminados / en curso / sin empezar) que se dibuja al entrar.
         AnilloBiblioteca(terminados, enCurso, sinEmpezar, comics.size)
         TituloSeccion("Biblioteca")

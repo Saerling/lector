@@ -156,6 +156,8 @@ fun InfoGuardada(
                     }
                 }
             }
+            // En qué extensión estaba (instalada o en tus listados), con Instalar / Confiar.
+            item(key = "ext") { TarjetaExtension(ext, fuenteId, Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
             if (descripcion != null || generos.isNotEmpty()) item(key = "desc") { Descripcion(descripcion, generos) }
             item(key = "caps_cab") {
                 // ChapterHeader de Komikku: «N capítulos» y, aparte, cuántos llevas leídos.

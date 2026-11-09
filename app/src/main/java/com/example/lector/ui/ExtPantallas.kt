@@ -48,6 +48,8 @@ import com.example.lector.ext.*
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import kotlinx.coroutines.launch
+import com.example.lector.ui.bitchord.heldBackdrop
+import com.example.lector.ui.bitchord.heldPicture
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.layout.layout
@@ -352,6 +354,8 @@ fun FuenteDetalleScreen(
     ext: ExtManager, fuenteId: Long, onManga: (MangaFuente) -> Unit,
     // Género que se acaba de tocar en una ficha: se busca nada más abrir (y se avisa al terminar).
     generoBuscar: String? = null, alConsumirGenero: () -> Unit = {},
+    // «Buscar en todas» del menú de mantener pulsado una portada (búsqueda global con el título).
+    onBuscarGlobal: ((String) -> Unit)? = null,
     onBack: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -383,7 +387,7 @@ fun FuenteDetalleScreen(
             } else {
                 NavegarFuente(
                     f, motor, onManga, onBack, if (configurable != null) ({ ajustes = true }) else null,
-                    generoInicial = generoBuscar, alConsumirGenero = alConsumirGenero,
+                    generoInicial = generoBuscar, alConsumirGenero = alConsumirGenero, onBuscarGlobal = onBuscarGlobal,
                 )
             }
         }
@@ -420,6 +424,7 @@ private fun NavegarFuente(
     f: FuenteUI, motor: MotorFuentes, onManga: (MangaFuente) -> Unit, onBack: () -> Unit,
     onAjustes: (() -> Unit)? = null,
     generoInicial: String? = null, alConsumirGenero: () -> Unit = {},
+    onBuscarGlobal: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
@@ -626,6 +631,13 @@ private fun NavegarFuente(
         }
     }
     val margen = 20.dp
+    // Menú de mantener pulsado de BitChord (ui/bitchord/HeldContextMenu.kt): la portada se levanta y la página se desenfoca.
+    val fondoRetenido = remember { com.example.lector.ui.bitchord.HeldBackdrop() }
+    var mangaRetenido by remember { mutableStateOf<MangaFuente?>(null) }
+    var fotoRetenida by remember { mutableStateOf<com.example.lector.ui.bitchord.HeldItem?>(null) }
+    fun soltar() { mangaRetenido = null; fotoRetenida = null }
+    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().heldBackdrop(fondoRetenido)) {
     ArtistPageScaffold(
         title = f.nombre, bannerHeight = alturaBanner, scrollProgress = progreso, onBack = onBack,
         banner = { IconBackdrop { IconoExt(f.pkg, null, Modifier.fillMaxSize()) } },
@@ -737,7 +749,11 @@ private fun NavegarFuente(
             itemsIndexed(visibles, key = { _, m -> m.url }) { i, m ->
                 val esta = "${f.id}|${m.url}" in enBiblioteca
                 // Mantener pulsado = añadir o quitar de la biblioteca (como en Komikku).
-                val mod = Modifier.entrada(i % 12).origenTransicion().press3D().pressable(onLongClick = { alternarEnBiblioteca(ctx, almacen, f, m) }) { onManga(m) }
+                // Mantener pulsado = el menú de BitChord (añadir/quitar, abrir, buscar en todas, compartir).
+                val foto = com.example.lector.ui.bitchord.rememberHeldPicture()
+                val mod = Modifier.entrada(i % 12).origenTransicion().press3D().pressable(onLongClick = {
+                    scope.launch { fotoRetenida = foto.capture(); mangaRetenido = m }
+                }) { onManga(m) }.heldPicture(foto)
                 if (enLista) Row(
                     mod.fillMaxWidth().padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -806,6 +822,23 @@ private fun NavegarFuente(
                 }
             }
         }
+    }
+    }
+    com.example.lector.ui.bitchord.HeldContextMenu(
+        item = mangaRetenido, held = fotoRetenida, hazeState = fondoRetenido, onDismiss = ::soltar,
+        onPreviewClick = { m -> soltar(); onManga(m) },
+    ) { m ->
+        val esta = "${f.id}|${m.url}" in enBiblioteca
+        com.example.lector.ui.bitchord.HeldMenuAction(
+            if (esta) Icons.Rounded.Delete else Icons.Rounded.Add, if (esta) "Quitar de la biblioteca" else "Añadir a la biblioteca", destructive = esta,
+        ) { soltar(); alternarEnBiblioteca(ctx, almacen, f, m) }
+        com.example.lector.ui.bitchord.HeldMenuAction(Icons.Rounded.Info, "Abrir ficha") { soltar(); onManga(m) }
+        if (onBuscarGlobal != null) com.example.lector.ui.bitchord.HeldMenuAction(Icons.Rounded.Search, "Buscar en todas") { soltar(); onBuscarGlobal(m.titulo) }
+        com.example.lector.ui.bitchord.HeldMenuAction(Icons.Rounded.Share, "Compartir") {
+            soltar()
+            compartirTexto(ctx, runCatching { motor.urlManga(f, m) }.getOrNull()?.let { "${m.titulo}\n$it" } ?: m.titulo)
+        }
+    }
     }
 }
 

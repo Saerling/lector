@@ -842,3 +842,8 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Migrar (Explorar): tocar una serie abre su info guardada (ui/migrar/InfoGuardada.kt, estilo MangaScreen de Komikku; carga fuera del hilo principal y usa los datos de la biblioteca si falta caché). fuentesBuscables como Komikku: todas las instaladas de idiomas activos (incluye +18, idioma base y extensiones all/multi).
 - Inicio: menú al mantener (Mochy), selección múltiple con barra, «Quitar de Inicio» persistente (prefs inicio) y más acciones (ui/home/AccionesInicio.kt).
 - Ideas de BitChord pendientes: menú contextual que eleva el elemento con desenfoque, esquinas continuas, indicador de descargas en barra, WebDAV, estadísticas tipo Replay.
+
+## 2bv. PASO 74 (0.65)
+- Inicio: pulsar largo selecciona y activa el modo selección (barra superior + BarraAcciones con ⋮ → HojaMasInicio).
+- Historial de migraciones (ui/migrar/HistorialMigraciones.kt, Ruta.MigracionesRecientes, desde Más y Explorar→Migrar). Selección de fuentes: «Todas las fuentes (todos los idiomas)», extensión original con Confiar/Instalar, no confiables en gris.
+- BitChord: HeldContextMenu en el catálogo de fuentes, SuaveShape = ContinuousCornerShape, indicador + hoja de descargas, WebDAV (bitchord/WebDav*, Ajustes→Datos), Replay (bitchord/ReplayEstadisticas.kt, en Estadísticas).

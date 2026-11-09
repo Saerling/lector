@@ -86,6 +86,8 @@ fun Inicio(
     var detalleId by rememberSaveable { mutableStateOf<String?>(null) }
     // Explorar / extensiones: gestor único + qué extensión o fuente se está viendo.
     val contexto = LocalContext.current
+    // Replay (de BitChord): anota en el teléfono cada capítulo que se abre.
+    LaunchedEffect(Unit) { com.example.lector.bitchord.ReplayRegistro.iniciar(contexto, almacen) }
     val ext = remember { ExtManager.obtener(contexto) }
     var extPkg by rememberSaveable { mutableStateOf<String?>(null) }
     var fuenteId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -524,6 +526,9 @@ fun Inicio(
                             vueltaFicha = Ruta.BusquedaGlobal; ruta = Ruta.Ficha
                         },
                     ) { ruta = null } }
+                    Ruta.MigracionesRecientes -> com.example.lector.ui.migrar.MigracionesRecientesScreen(
+                        onAbrir = { m -> abrirEnLinea(m.aId, m.aUrl.orEmpty(), m.titulo, m.portada, null) },
+                    ) { ruta = null }
                     Ruta.MigrarSerie -> {
                         val c = comics.firstOrNull { it.id == migrarId }
                         val origen = c?.let { x -> ext.fuentes.firstOrNull { it.id == x.fuenteId } }
@@ -589,6 +594,7 @@ fun Inicio(
                             ext, fuenteId ?: 0L,
                             onManga = { mangaSel = it; desdeNovedades = false; reanudar = null; ruta = Ruta.Ficha },
                             generoBuscar = generoBuscar, alConsumirGenero = { generoBuscar = null },
+                            onBuscarGlobal = { t -> consultaGlobal = t; ruta = Ruta.BusquedaGlobal },
                         ) { ruta = null } }
                         Ruta.Ficha -> {
                             val m = mangaSel
@@ -687,6 +693,12 @@ fun Inicio(
             } else abrirDetalle(c)
         }
         IslaCopia(Modifier.align(Alignment.TopCenter))
+        // Indicador de descargas de BitChord (ui/bitchord/DownloadManagerSheet.kt): solo mientras hay capítulos bajando o en cola.
+        var hojaDescargas by remember { mutableStateOf(false) }
+        if (ruta != Ruta.Descargas) com.example.lector.ui.bitchord.TopBarDownloadButton(
+            { hojaDescargas = true }, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 6.dp, end = 12.dp),
+        )
+        if (hojaDescargas) com.example.lector.ui.bitchord.DownloadManagerSheet({ hojaDescargas = false }) { ruta = Ruta.Descargas }
         InformeCopia()
 
         // Avisos (en lugar de Toast): píldora que cae desde arriba. Si hay una copia en marcha, debajo de su píldora.

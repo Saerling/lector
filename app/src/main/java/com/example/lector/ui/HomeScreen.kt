@@ -54,17 +54,17 @@ import com.example.lector.ui.home.CarruselInicio
 import com.example.lector.ui.home.DialogoCategoriasInicio
 import com.example.lector.ui.home.DialogoEditarInicio
 import com.example.lector.ui.home.DialogoEliminarInicio
-import com.example.lector.ui.home.HojaComicInicio
+import com.example.lector.ui.home.HojaMasInicio
 import com.example.lector.ui.home.MarcaSeleccion
 import com.example.lector.ui.home.OpcionInicio
 import com.example.lector.ui.home.rememberAccionesInicio
 import com.example.lector.ui.home.rememberOcultosInicio
 import androidx.activity.compose.BackHandler
-import androidx.compose.material.icons.rounded.Clear
-import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Menu
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.DropdownMenuItem
 
 /*
@@ -159,20 +159,25 @@ fun HomeScreen(
     val heroScrollProgressProvider = remember { { heroScrollProgress } }
     val glowIds = remember(recientes, enCurso) { (enCurso + recientes).distinctBy { it.id }.take(2).map { it.id } }
 
-    // ---- Selección múltiple (Komikku) y menú contextual (Mochy) ----
+    // ---- Selección múltiple (Komikku): mantener pulsado selecciona; «⋮» abre el resto de acciones ----
     var seleccion by remember { mutableStateOf(emptySet<String>()) }
-    var hoja by remember { mutableStateOf<Comic?>(null) }
+    var hojaMas by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     var categoriasDe by remember { mutableStateOf<List<String>?>(null) }
     var editar by remember { mutableStateOf<Comic?>(null) }
     var eliminar by remember { mutableStateOf<List<Comic>?>(null) }
     var menuDescarga by remember { mutableStateOf(false) }
     val enSeleccion = seleccion.isNotEmpty()
     LaunchedEffect(comics) { seleccion = seleccion.filterTo(HashSet()) { id -> comics.any { it.id == id } } }
+    LaunchedEffect(enSeleccion) { if (!enSeleccion) hojaMas = false }
     BackHandler(enabled = enSeleccion) { seleccion = emptySet() }
     val seleccionados = remember(seleccion, comics) { comics.filter { it.id in seleccion } }
     fun alternar(c: Comic) { seleccion = if (c.id in seleccion) seleccion - c.id else seleccion + c.id }
     val toque: (Comic) -> Unit = { c -> if (enSeleccion) alternar(c) else onOpen(c) }
-    val pulsacionLarga: (Comic) -> Unit = { c -> if (enSeleccion) alternar(c) else hoja = c }
+    val pulsacionLarga: (Comic) -> Unit = { c ->
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        if (enSeleccion) alternar(c) else seleccion = setOf(c.id)
+    }
     val leerOSel: (Comic) -> Unit = { c -> if (enSeleccion) alternar(c) else onRead(c) }
 
     Box(modifier.fillMaxSize().background(LectorColors.Bg)) {
@@ -267,13 +272,9 @@ fun HomeScreen(
                     fun fin(f: (List<Comic>) -> Unit) { val l = seleccionados; seleccion = emptySet(); f(l) }
                     add(AccionBarra(Iconos.OjoTachado, "Quitar de Inicio") { fin(acciones::quitarDeInicio) })
                     add(AccionBarra(Icons.Rounded.Done, "Leído") { fin { acciones.marcar(it, true) } })
-                    add(AccionBarra(Icons.Rounded.Clear, "No leído") { fin { acciones.marcar(it, false) } })
                     if (seleccionados.any { it.enLinea }) add(AccionBarra(Iconos.Descargar, "Descargar") { menuDescarga = true })
                     add(AccionBarra(Icons.Rounded.Menu, "Categorías") { categoriasDe = seleccionados.map { it.id } })
-                    if (seleccionados.any { it.leido > 0 }) add(AccionBarra(Icons.Rounded.Refresh, "Historial") {
-                        fin { l -> acciones.quitarDelHistorial(l.filter { it.leido > 0 }) }
-                    })
-                    if (onEliminar != null) add(AccionBarra(Icons.Rounded.Delete, "Quitar") { eliminar = seleccionados })
+                    add(AccionBarra(Icons.Rounded.MoreVert, "Más") { hojaMas = true })
                 },
             )
             MenuShiori(expanded = menuDescarga, onDismissRequest = { menuDescarga = false }) {
@@ -290,23 +291,20 @@ fun HomeScreen(
         }
     }
 
-    hoja?.let { c ->
-        HojaComicInicio(c, almacen, puedeEliminar = onEliminar != null, onCerrar = { hoja = null }, onElegir = { o ->
-            hoja = null
+    if (hojaMas && seleccionados.isNotEmpty()) {
+        HojaMasInicio(seleccionados, almacen, puedeEliminar = onEliminar != null, onCerrar = { hojaMas = false }, onElegir = { o ->
+            hojaMas = false
+            val l = seleccionados
+            val uno = l.first()
+            fun fin(f: () -> Unit) { seleccion = emptySet(); f() }
             when (o) {
-                OpcionInicio.LEER -> onRead(c)
-                OpcionInicio.FICHA -> onOpen(c)
-                OpcionInicio.SELECCIONAR -> seleccion = setOf(c.id)
-                OpcionInicio.QUITAR_INICIO -> acciones.quitarDeInicio(listOf(c))
-                OpcionInicio.QUITAR_HISTORIAL -> acciones.quitarDelHistorial(listOf(c))
-                OpcionInicio.LEIDO -> acciones.marcar(listOf(c), true)
-                OpcionInicio.NO_LEIDO -> acciones.marcar(listOf(c), false)
-                OpcionInicio.DESCARGAR_1 -> acciones.descargar(listOf(c), 1)
-                OpcionInicio.DESCARGAR_5 -> acciones.descargar(listOf(c), 5)
-                OpcionInicio.CATEGORIAS -> categoriasDe = listOf(c.id)
-                OpcionInicio.EDITAR -> editar = c
-                OpcionInicio.COMPARTIR -> acciones.compartir(c)
-                OpcionInicio.ELIMINAR -> eliminar = listOf(c)
+                OpcionInicio.NO_LEIDO -> fin { acciones.marcar(l, false) }
+                OpcionInicio.QUITAR_HISTORIAL -> fin { acciones.quitarDelHistorial(l.filter { it.leido > 0 }) }
+                OpcionInicio.DESCARGAR_5 -> fin { acciones.descargar(l, 5) }
+                OpcionInicio.FICHA -> fin { onOpen(uno) }
+                OpcionInicio.EDITAR -> fin { editar = uno }
+                OpcionInicio.COMPARTIR -> fin { acciones.compartir(uno) }
+                OpcionInicio.ELIMINAR -> eliminar = l
             }
         })
     }

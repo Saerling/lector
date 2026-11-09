@@ -684,6 +684,10 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
         }
     }
 
+    // Copias en WebDAV (de BitChord): subpantalla propia, sin ruta nueva.
+    var verWebdav by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    if (verWebdav) { com.example.lector.ui.bitchord.WebdavScreen { verWebdav = false }; return }
+
     val tamImagenes = remember(version) { Formatter.formatShortFileSize(contexto, Imagenes.tamanoDisco()) }
     PaginaAjustes("Datos y almacenamiento", onBack) {
         TituloSeccion("Carpeta de la app")
@@ -715,6 +719,13 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
         FilaAjuste(Icons.Rounded.Share, "Exportar para Mihon / Komikku", "Archivo .tachibk con tus mangas de fuentes, capítulos leídos, categorías e historial") {
             crearTachibk.launch(com.example.lector.Tachibk.nombreArchivo())
         }
+        FilaAjuste(
+            Icons.Rounded.Refresh, "Copias en WebDAV",
+            com.example.lector.bitchord.WebDavAjustes(contexto).let { w ->
+                if (w.configurado) "${com.example.lector.bitchord.WebDavClient.hostOf(w.url)}${if (w.autoSubir) " · sube las automáticas" else ""}"
+                else "Nextcloud, ownCloud, NAS…: subir y restaurar copias"
+            },
+        ) { verWebdav = true }
 
         Divisor()
         TituloSeccion("Copias automáticas")

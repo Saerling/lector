@@ -222,20 +222,23 @@ fun MarcaSeleccion(seleccionado: Boolean, modifier: Modifier = Modifier) {
     }
 }
 
-/** Qué pidió la hoja; HomeScreen decide (abrir, leer, seleccionar…) y lo demás lo hace [AccionesInicio]. */
-enum class OpcionInicio { LEER, FICHA, SELECCIONAR, QUITAR_INICIO, QUITAR_HISTORIAL, LEIDO, NO_LEIDO, DESCARGAR_1, DESCARGAR_5, CATEGORIAS, EDITAR, COMPARTIR, ELIMINAR }
+/** Acciones secundarias de la selección (las que no caben en [com.example.lector.ui.BarraAcciones]); HomeScreen las ejecuta. */
+enum class OpcionInicio { NO_LEIDO, QUITAR_HISTORIAL, EDITAR, COMPARTIR, FICHA, ELIMINAR, DESCARGAR_5 }
 
-/** Menú contextual de un cómic (la hoja de Mochy al mantener pulsado): cabecera y filas-píldora. */
+/** «⋮» de la barra de selección: tarjeta con el resto de acciones (cabecera con la portada si hay uno solo). */
 @Composable
-fun HojaComicInicio(comic: Comic, almacen: Almacen, puedeEliminar: Boolean, onElegir: (OpcionInicio) -> Unit, onCerrar: () -> Unit) {
+fun HojaMasInicio(lista: List<Comic>, almacen: Almacen, puedeEliminar: Boolean, onElegir: (OpcionInicio) -> Unit, onCerrar: () -> Unit) {
+    val uno = lista.singleOrNull()
     HojaLector(onCerrar) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            val forma = RoundedCornerShape(10.dp)
-            ComicCover(comic, almacen, Modifier.width(46.dp).aspectRatio(2f / 3f).clip(forma), forma)
-            Spacer(Modifier.width(14.dp))
+            if (uno != null) {
+                val forma = RoundedCornerShape(10.dp)
+                ComicCover(uno, almacen, Modifier.width(46.dp).aspectRatio(2f / 3f).clip(forma), forma)
+                Spacer(Modifier.width(14.dp))
+            }
             Column(Modifier.weight(1f)) {
-                Text(comic.titulo, style = LectorType.Section, maxLines = 2, overflow = TextOverflow.Ellipsis, color = LectorColors.Text)
-                Text(comic.textoPagina(), style = LectorType.Label.copy(fontSize = 13.sp), maxLines = 1, color = LectorColors.Muted)
+                Text(uno?.titulo ?: "${lista.size} seleccionados", style = LectorType.Section, maxLines = 2, overflow = TextOverflow.Ellipsis, color = LectorColors.Text)
+                if (uno != null) Text(uno.textoPagina(), style = LectorType.Label.copy(fontSize = 13.sp), maxLines = 1, color = LectorColors.Muted)
             }
         }
         Column(
@@ -246,20 +249,14 @@ fun HojaComicInicio(comic: Comic, almacen: Almacen, puedeEliminar: Boolean, onEl
             fun op(icono: ImageVector, texto: String, o: OpcionInicio) =
                 MenuItemRow(icon = { Icon(icono, null) }, enabled = true, onClick = { onElegir(o) }) { Text(texto) }
 
-            op(Icons.Rounded.PlayArrow, if (comic.leido > 0) "Seguir leyendo" else "Empezar a leer", OpcionInicio.LEER)
-            op(Icons.Rounded.Info, "Ver ficha", OpcionInicio.FICHA)
-            op(Icons.Rounded.CheckCircle, "Seleccionar varios", OpcionInicio.SELECCIONAR)
-            op(Iconos.OjoTachado, "Quitar de Inicio", OpcionInicio.QUITAR_INICIO)
-            if (comic.leido > 0) op(Icons.Rounded.Refresh, "Quitar del historial", OpcionInicio.QUITAR_HISTORIAL)
-            if (!comic.terminado()) op(Icons.Rounded.Done, "Marcar como leído", OpcionInicio.LEIDO)
-            if (comic.progresoLectura() > 0f) op(Icons.Rounded.Clear, "Marcar como no leído", OpcionInicio.NO_LEIDO)
-            if (comic.enLinea) {
-                op(Iconos.Descargar, "Descargar el siguiente capítulo", OpcionInicio.DESCARGAR_1)
-                op(Iconos.Descargar, "Descargar los 5 siguientes", OpcionInicio.DESCARGAR_5)
+            if (lista.any { it.progresoLectura() > 0f }) op(Icons.Rounded.Clear, "Marcar como no leído", OpcionInicio.NO_LEIDO)
+            if (lista.any { it.leido > 0 }) op(Icons.Rounded.Refresh, "Quitar del historial", OpcionInicio.QUITAR_HISTORIAL)
+            if (lista.any { it.enLinea }) op(Iconos.Descargar, "Descargar los 5 siguientes", OpcionInicio.DESCARGAR_5)
+            if (uno != null) {
+                op(Icons.Rounded.Info, "Ver ficha", OpcionInicio.FICHA)
+                op(Icons.Rounded.Edit, "Editar información", OpcionInicio.EDITAR)
+                if (uno.enLinea) op(Icons.Rounded.Share, "Compartir", OpcionInicio.COMPARTIR)
             }
-            op(Icons.Rounded.Menu, "Categorías", OpcionInicio.CATEGORIAS)
-            op(Icons.Rounded.Edit, "Editar información", OpcionInicio.EDITAR)
-            if (comic.enLinea) op(Icons.Rounded.Share, "Compartir", OpcionInicio.COMPARTIR)
             if (puedeEliminar) op(Icons.Rounded.Delete, "Quitar de la biblioteca", OpcionInicio.ELIMINAR)
         }
     }

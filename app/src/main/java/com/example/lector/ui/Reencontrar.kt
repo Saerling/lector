@@ -74,7 +74,9 @@ fun FuenteNoDisponible(
 
     // Se busca en todas las fuentes de tus idiomas (no solo en las ancladas): lo que importa es encontrarlo.
     // Primero se eligen las fuentes (como al migrar): buscar en más de mil a la vez es lento y gasta batería.
-    val todas = remember(ext.fuentes, ext.idiomas, ext.instaladas, fuenteId) { fuentesBuscables(ext, fuenteId) }
+    remember { com.example.lector.ui.migrar.OpcionesMigrar.iniciar(ctx); com.example.lector.ui.migrar.HistorialMigraciones.iniciar(ctx) }
+    val todasIdiomas = com.example.lector.ui.migrar.OpcionesMigrar.todasFuentes
+    val todas = remember(ext.fuentes, ext.idiomas, ext.instaladas, fuenteId, todasIdiomas) { fuentesBuscables(ext, fuenteId) }
     var elegidas by remember { mutableStateOf(elegidasGuardadas(ctx, ext, todas)) }
     var eligiendo by rememberSaveable { mutableStateOf(true) }
     // Como Komikku con una fuente que falta: primero se ve el manga con lo que trajo la copia (capítulos, leídos,

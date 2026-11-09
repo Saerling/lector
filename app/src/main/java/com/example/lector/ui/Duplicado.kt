@@ -76,6 +76,9 @@ fun DialogoDuplicado(ext: ExtManager, almacen: Almacen, alRecargar: () -> Unit, 
     if (p != null) ultimo = p
     var migrando by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // Para que migrarComic deje constancia en «Migraciones recientes».
+    val ctxHist = androidx.compose.ui.platform.LocalContext.current
+    remember { com.example.lector.ui.migrar.HistorialMigraciones.iniciar(ctxHist) }
     fun cerrar() { if (!migrando) Duplicados.pedido = null }
 
     AnimatedVisibility(p != null, enter = fadeIn(tween(200)), exit = fadeOut(tween(160))) {

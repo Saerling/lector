@@ -156,7 +156,7 @@ fun ExplorarScreen(
                         ext, consulta, false, { consulta = it }, onExt,
                         onConfiar = { porConfiar = it }, onRepos = { onRuta(Ruta.ListadosExt) }
                     )
-                    else -> MigrarTab(ext, almacen, onMigrar)
+                    else -> MigrarTab(ext, almacen, onMigrar) { onRuta(Ruta.MigracionesRecientes) }
                 }
             }
             }
@@ -979,10 +979,15 @@ private fun EstadoProgreso(pr: Progreso, alReintentar: () -> Unit) {
 // ───────────────────────── Migrar ─────────────────────────
 
 @Composable
-private fun MigrarTab(ext: ExtManager, almacen: com.example.lector.Almacen?, onMigrar: (com.example.lector.Comic) -> Unit) {
+private fun MigrarTab(
+    ext: ExtManager, almacen: com.example.lector.Almacen?, onMigrar: (com.example.lector.Comic) -> Unit, onRecientes: () -> Unit = {},
+) {
     // Como en Komikku: tus series agrupadas por fuente; elige una para pasarla a otra fuente.
     val series = remember(almacen?.version) { almacen?.cargar().orEmpty().filter { it.enLinea } }
-    if (series.isEmpty()) {
+    val ctxHist = LocalContext.current
+    remember { com.example.lector.ui.migrar.HistorialMigraciones.iniciar(ctxHist) }
+    val recientes = com.example.lector.ui.migrar.HistorialMigraciones.lista
+    if (series.isEmpty() && recientes.isEmpty()) {
         Vacio("Aquí puedes mover tus series de una fuente a otra. Añade a la biblioteca algún manga de una fuente.", icono = Icons.Rounded.Share)
         return
     }
@@ -993,6 +998,16 @@ private fun MigrarTab(ext: ExtManager, almacen: com.example.lector.Almacen?, onM
     }
     val abajo = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     androidx.compose.foundation.lazy.LazyColumn(contentPadding = PaddingValues(top = LocalArriba.current, bottom = abajo + 190.dp)) {
+        // Recientes: las últimas migraciones y el acceso al historial completo.
+        if (recientes.isNotEmpty()) item(key = "recientes") {
+            Row(Modifier.padding(horizontal = SearchHorizontalPadding).padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                ChipSel("Recientes (${recientes.size})", false, onClick = onRecientes)
+            }
+            Column {
+                recientes.take(3).forEach { m -> com.example.lector.ui.migrar.FilaMigracion(m, onRecientes) }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
         item(key = "intro") {
             Text(
                 "Elige una serie para buscarla en otra fuente y pasar tu progreso.",
