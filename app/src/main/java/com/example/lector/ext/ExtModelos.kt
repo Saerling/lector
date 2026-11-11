@@ -39,6 +39,8 @@ data class ExtInstalada(
     val libVersion: Double = 0.0,
     val firmas: List<String> = emptyList(),
     val errorCarga: String? = null,
+    // Extensión privada (Komikku): su APK está en la carpeta de la app, no instalado en Android.
+    val privada: Boolean = false,
 )
 
 /** Una fuente lista para usar (de una extensión instalada y de confianza). */

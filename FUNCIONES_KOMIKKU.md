@@ -49,9 +49,9 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Aviso de actualizaciones de extensiones | ✅ | |
 | Feed multi‑fuente | ✅ | Novedades con fuentes y búsquedas guardadas. |
 | Combinar varias entradas (merge) | ✅ | Una entrada en la biblioteca, chips por fuente en la ficha (0.25). |
-| Portada panorámica | ❌ | |
+| Portada panorámica | ✅ | Historial y Actualizaciones; Personalización → Estilo (0.71). |
 | Sincronización en la nube | ❌ | |
-| Extensiones privadas | ❌ | |
+| Extensiones privadas | ✅ | Ajustes → Explorar; también desde un archivo .apk (0.71). |
 | Grupos de traducción ocultos | ✅ | Por manga, en Filtros de capítulos (0.22). |
 | Descargador | ✅ | Por páginas, reanudable, un capítulo por fuente, reintentos (0.21). |
 | Abrir enlaces de la web en la app | ✅ | Compartir enlace → fuentes de esa web → ficha o búsqueda global (0.23). |
@@ -61,4 +61,4 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Número de capítulo reconocido del nombre | ✅ | ChapterRecognition de Mihon (0.70). |
 | Capítulos resubidos conservan leído/marcador | ✅ | Por número de capítulo (0.70). |
 | Saltar capítulos duplicados en el lector | ✅ | Ajustes del lector (0.70). |
-| Restricciones de revisión (sin leer / no empezados / completados) | ✅ | Ajustes → Biblioteca (0.70). Falta el intervalo inteligente. |
+| Restricciones de revisión (sin leer / no empezados / completados) | ✅ | Con revisión inteligente y «solo una vez» de la fuente (0.71). |

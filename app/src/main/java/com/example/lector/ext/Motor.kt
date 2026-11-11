@@ -24,6 +24,8 @@ data class DetalleManga(
     val generos: List<String>,
     val estado: Int,
     val portadaUrl: String?,
+    // UpdateStrategy.ONLY_FETCH_ONCE de la fuente (one-shots, galerías): no hace falta volver a revisarlo.
+    val soloUnaVez: Boolean = false,
 )
 
 data class CapituloFuente(

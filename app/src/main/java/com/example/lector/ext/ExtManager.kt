@@ -731,8 +731,17 @@ class ExtManager private constructor(private val app: Context) {
             .getOrDefault(emptyList())
             .filter { CargadorExt.esExtension(it) }
             .map { it.packageName }
-        instaladasRaw = nombres.mapNotNull { n ->
-            runCatching { CargadorExt.leer(pm, pm.getPackageInfo(n, CargadorExt.FLAGS)) }.getOrNull()
+        // Instaladas en Android + privadas (carpeta de la app); si una está en los dos sitios, la de versión mayor.
+        val paquetes = LinkedHashMap<String, Pair<android.content.pm.PackageInfo, Boolean>>()
+        nombres.forEach { n -> runCatching { pm.getPackageInfo(n, CargadorExt.FLAGS) }.getOrNull()?.let { paquetes[n] = it to false } }
+        CargadorExt.privadas(app).forEach { p ->
+            val ya = paquetes[p.packageName]?.first
+            if (ya == null || androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(p) > androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(ya)) {
+                paquetes[p.packageName] = p to true
+            }
+        }
+        instaladasRaw = paquetes.values.mapNotNull { (p, priv) ->
+            runCatching { CargadorExt.leer(pm, p, priv) }.getOrNull()
         }.sortedBy { it.nombre.lowercase() }
         fuentesCargadas.keys.filter { k -> instaladasRaw.none { it.pkg == k } }.forEach { fuentesCargadas.remove(it) }
         reducirDisponibles()
@@ -816,10 +825,39 @@ class ExtManager private constructor(private val app: Context) {
     /** Progreso de «Actualizar todas»: (hechas, total) o null si no está en marcha. */
     var actualizandoTodas by mutableStateOf<Pair<Int, Int>?>(null); private set
 
+    /** Como el instalador «Privado» de Komikku: las extensiones se guardan en la app, sin instalarse en Android. */
+    var extPrivadas by mutableStateOf(prefs.getBoolean("ext_privadas", false)); private set
+    fun cambiarExtPrivadas(v: Boolean) { extPrivadas = v; prefs.edit().putBoolean("ext_privadas", v).apply() }
+
+    /** Instala un APK ya en disco como extensión privada. Devuelve el error, o null si fue bien. */
+    suspend fun instalarPrivadaDe(apk: File): String? = withContext(Dispatchers.IO) {
+        runCatching { CargadorExt.instalarPrivada(app, apk) }.fold(
+            { leerInstaladas(); cargarFuentesReales(it); null },
+            { it.message ?: "No se pudo instalar" },
+        )
+    }
+
     fun instalar(e: ExtDisponible) {
         if (e.apkUrl.isBlank()) return
         val actual = progreso[e.pkg]?.fase
         if (actual == Fase.DESCARGANDO || actual == Fase.INSTALANDO) return
+        // Privada si así se eligió o si la que hay ya lo es (su actualización va al mismo sitio).
+        if (extPrivadas || instaladasRaw.any { it.pkg == e.pkg && it.privada }) {
+            scope.launch {
+                try {
+                    progreso[e.pkg] = Progreso(Fase.DESCARGANDO, 0)
+                    val apk = File(File(app.cacheDir, "ext").apply { mkdirs() }, "${e.pkg}.apk")
+                    ExtRepos.descargarA(e.apkUrl, apk) { progreso[e.pkg] = Progreso(Fase.DESCARGANDO, it) }
+                    progreso[e.pkg] = Progreso(Fase.INSTALANDO)
+                    val error = instalarPrivadaDe(apk)
+                    apk.delete()
+                    if (error == null) progreso.remove(e.pkg) else progreso[e.pkg] = Progreso(Fase.ERROR, error = error)
+                } catch (t: Throwable) {
+                    progreso[e.pkg] = Progreso(Fase.ERROR, error = t.message ?: "Error al descargar")
+                }
+            }
+            return
+        }
         if (!app.packageManager.canRequestPackageInstalls()) {
             com.example.lector.ui.Avisos.mostrar("Permite instalar apps desde Lector y vuelve a pulsar Instalar")
             runCatching {
@@ -877,6 +915,11 @@ class ExtManager private constructor(private val app: Context) {
     }
 
     fun desinstalar(pkg: String) {
+        if (instaladasRaw.any { it.pkg == pkg && it.privada }) {
+            CargadorExt.quitarPrivada(app, pkg)
+            refrescarInstaladas()
+            return
+        }
         runCatching {
             app.startActivity(
                 Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

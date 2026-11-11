@@ -99,6 +99,24 @@ internal fun calcularIntervalo(fechasSubida: List<Long>, fechasDeteccion: List<L
 }
 
 /**
+ * FetchInterval.calculateNextUpdate de Mihon/Komikku: cuándo se espera el próximo capítulo, a partir de la última
+ * novedad y del intervalo. Si lleva más de 10 ciclos sin novedades el intervalo se dobla (hasta 28 días), así los
+ * mangas parados se revisan cada vez menos. 0 si no hay fechas.
+ */
+fun proximaRevision(fechasSubida: List<Long>, fechasDeteccion: List<Long>, zona: ZoneId = ZoneId.systemDefault()): Long {
+    val ultimaMs = (fechasSubida + fechasDeteccion).filter { it > 0L }.maxOrNull() ?: return 0L
+    val intervalo = calcularIntervalo(fechasSubida, fechasDeteccion, zona)
+    val ultima = Instant.ofEpochMilli(ultimaMs).atZone(zona).toLocalDate()
+    val desde = ChronoUnit.DAYS.between(ultima, LocalDate.now(zona)).toInt().coerceAtLeast(0)
+    var paso = intervalo
+    while (paso < MAX_INTERVALO && desde / paso + 1 > 10) paso = (paso * 2).coerceAtMost(MAX_INTERVALO)
+    val ciclo = desde / paso
+    // Mihon multiplica por el intervalo original, lo que deja la fecha en el pasado para los mangas parados (se
+    // revisarían siempre); aquí se usa el paso ampliado: un manga parado se revisa como mucho cada 28 días.
+    return ultima.plusDays((ciclo + 1L) * paso).atStartOfDay(zona).toInstant().toEpochMilli()
+}
+
+/**
  * Como GetUpcomingManga: mangas en emisión (o de estado desconocido, que en Shiori es lo habitual) con su próxima fecha
  * esperada = última novedad + intervalo. Si esa fecha ya pasó, se avanza de intervalo en intervalo hasta hoy; los que
  * llevan mucho sin novedades (más de 4 intervalos y 2 meses) se dejan fuera.

@@ -101,13 +101,19 @@ object RevisorBiblioteca {
         ext.esperarListo()
         val motor = Motor.actual ?: error("El motor de fuentes no está listo")
         val asign = alm.asignaciones()
+        val zona = java.time.ZoneId.systemDefault()
+        val finDeHoy = java.time.LocalDate.now(zona).plusDays(1).atStartOfDay(zona).toInstant().toEpochMilli()
         val lista = alm.cargar().filter { c ->
             c.enLinea &&
                 (categoria == null || categoria in asign[c.id].orEmpty()) &&
                 // Saltar los terminados (estado «Completado» y nada por leer), como la opción de Komikku.
                 !(alm.actSaltarTerminados && c.estado == 2 && c.sinLeer == 0 && c.paginas > 0) &&
                 !(alm.actSaltarSinLeer && c.sinLeer > 0) &&
-                !(alm.actSaltarNoEmpezados && c.paginas > 0 && c.ultimaPagina == 0)
+                !(alm.actSaltarNoEmpezados && c.paginas > 0 && c.ultimaPagina == 0) &&
+                // Como Komikku: lo que la fuente marca «solo una vez» no se vuelve a pedir, y con la revisión inteligente
+                // se saltan los que no esperan capítulo hasta después de hoy.
+                !(c.soloUnaVez && c.paginas > 0) &&
+                !(alm.actInteligente && c.proximaRevision > finDeHoy)
         }
         Actualizador.total = lista.size
         Actualizador.hechas = 0
@@ -139,7 +145,11 @@ object RevisorBiblioteca {
                                 c.fuenteId, url, ficha.detalle.autor, ficha.detalle.estado, ficha.detalle.generos,
                                 ficha.detalle.descripcion, ficha.detalle.portadaUrl, ficha.capitulos.maxOfOrNull { it.fecha } ?: 0L,
                             )
-                            alm.actualizarComic(c.id) { it.copy(ultimaRevision = System.currentTimeMillis()) }
+                            val detectados = alm.actualizaciones.filter { it.fuenteId == c.fuenteId && it.urlManga == url }.map { it.detectado }
+                            val proxima = com.example.lector.ui.actualizaciones.proximaRevision(ficha.capitulos.map { it.fecha }, detectados, zona)
+                            alm.actualizarComic(c.id) {
+                                it.copy(ultimaRevision = System.currentTimeMillis(), soloUnaVez = ficha.detalle.soloUnaVez, proximaRevision = proxima)
+                            }
                             if (n.isNotEmpty()) {
                                 nuevos[c.titulo] = n.size
                                 if (alm.descargarNuevos) withContext(Dispatchers.Main) {

@@ -42,6 +42,9 @@ data class Comic(
     val editado: Boolean = false,
     // La portada guardada la eligió el usuario (no se sustituye por la de la fuente).
     val portadaPropia: Boolean = false,
+    // Revisión inteligente (Komikku): la fuente dice que no cambia, y cuándo se espera el próximo capítulo (0 = no se sabe).
+    val soloUnaVez: Boolean = false,
+    val proximaRevision: Long = 0L,
 ) {
     val enLinea: Boolean get() = urlManga != null
 
@@ -357,6 +360,7 @@ class Almacen private constructor(private val contexto: Context) {
     // Como las restricciones de Komikku («con capítulos sin leer» y «sin empezar»). Apagadas por defecto.
     var actSaltarSinLeer by prefBool(prefs, "act_saltar_sin_leer", false)
     var actSaltarNoEmpezados by prefBool(prefs, "act_saltar_no_empezados", false)
+    var actInteligente by prefBool(prefs, "act_inteligente", false)
     var descargarNuevos by prefBool(prefs, "descargar_nuevos", false)
     var revisarExtensiones by prefBool(prefs, "revisar_ext", true)
     var ultimaRevisionExt by prefLong(prefs, "ult_revision_ext", 0L)
@@ -725,6 +729,8 @@ class Almacen private constructor(private val contexto: Context) {
                 ultimoCapitulo = o.optLong("ult_cap", 0L),
                 editado = o.optBoolean("editado", false),
                 portadaPropia = o.optBoolean("portada_propia", false),
+                soloUnaVez = o.optBoolean("una_vez", false),
+                proximaRevision = o.optLong("prox_rev", 0L),
             )
         }
     }.getOrDefault(emptyList())
@@ -747,6 +753,8 @@ class Almacen private constructor(private val contexto: Context) {
         .put("ult_cap", ultimoCapitulo)
         .put("editado", editado)
         .put("portada_propia", portadaPropia)
+        .put("una_vez", soloUnaVez)
+        .put("prox_rev", proximaRevision)
 
     private fun guardar(lista: List<Comic>) {
         synchronized(this) {
@@ -912,7 +920,7 @@ class Almacen private constructor(private val contexto: Context) {
         "paleta", "color_portada", "modo_tema", "zonas_toque", "teclas_volumen", "mantener_encendida", "modo_visor",
         "zonas_visor", "invertir_zonas", "escala_pagina", "recortar_webtoon", "dividir_dobles", "invertir_division",
         "relleno_lateral", "animar_paginas", "mostrar_numero", "pantalla_completa", "invertir_volumen",
-        "mostrar_transiciones", "precarga", "velocidad_auto", "doble_toque_zoom", "pasar_capitulo_solo", "saltar_duplicados", "act_saltar_sin_leer", "act_saltar_no_empezados",
+        "mostrar_transiciones", "precarga", "velocidad_auto", "doble_toque_zoom", "pasar_capitulo_solo", "saltar_duplicados", "act_saltar_sin_leer", "act_saltar_no_empezados", "act_inteligente",
         "fondo_lector", "orientacion", "brillo_on", "brillo", "grises", "invertir", "tinte", "tinte_intensidad",
         "recortar_bordes", "vista", "columnas", "mostrar_pagina", "insignia_progreso", "agrupar", "f_descargados",
         "f_sin_leer", "f_empezados", "f_terminados", "f_seguimiento", "f_locales", "ins_sin_leer", "ins_descargas",

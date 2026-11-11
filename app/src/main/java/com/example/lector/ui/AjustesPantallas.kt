@@ -461,6 +461,7 @@ fun AjBibliotecaScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> U
         }
         FilaSwitch("Saltar los completados", "No revisa los mangas terminados y sin capítulos por leer", almacen.actSaltarTerminados) { almacen.actSaltarTerminados = it }
         FilaSwitch("Saltar los que tienen capítulos sin leer", "Solo revisa los mangas que llevas al día", almacen.actSaltarSinLeer) { almacen.actSaltarSinLeer = it }
+        FilaSwitch("Revisión inteligente", "Solo revisa los mangas que esperan capítulo hoy, según su ritmo de publicación (como Komikku). Los parados se revisan cada vez menos", almacen.actInteligente) { almacen.actInteligente = it }
         FilaSwitch("Saltar los no empezados", "No revisa los mangas de los que aún no has leído nada", almacen.actSaltarNoEmpezados) { almacen.actSaltarNoEmpezados = it }
         FilaSwitch("Descargar los capítulos nuevos", "Los pone en la cola de descargas al encontrarlos", almacen.descargarNuevos) { almacen.descargarNuevos = it }
         LText(
@@ -569,6 +570,18 @@ fun AjExplorarScreen(almacen: Almacen, ext: ExtManager, onBack: () -> Unit, onRu
     val scope = rememberCoroutineScope()
     var idiomas by remember { mutableStateOf(false) }
     var revisando by remember { mutableStateOf(false) }
+    val elegirApk = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val error = withContext(Dispatchers.IO) {
+                val tmp = java.io.File(java.io.File(ctx.cacheDir, "ext").apply { mkdirs() }, "archivo.apk")
+                runCatching {
+                    ctx.contentResolver.openInputStream(uri)!!.use { e -> tmp.outputStream().use { e.copyTo(it) } }
+                    ext.instalarPrivadaDe(tmp)
+                }.getOrElse { it.message ?: "No se pudo leer el archivo" }.also { tmp.delete() }
+            }
+            Avisos.mostrar(error ?: "Extensión instalada. Si no aparece en Fuentes, pulsa «Confiar» en Extensiones")
+        }
+    }
     PaginaAjustes("Explorar", onBack) {
         FilaAjuste(Icons.Rounded.List, "Listados de extensiones", "${ext.repos.size} listados") { onRuta(Ruta.ListadosExt) }
         FilaAjuste(Icons.Rounded.Place, "Idiomas", ext.idiomas.take(8).joinToString(" ") { bandera(it) }) { idiomas = true }
@@ -585,6 +598,8 @@ fun AjExplorarScreen(almacen: Almacen, ext: ExtManager, onBack: () -> Unit, onRu
         FilaSwitch("Avisar de actualizaciones de extensiones", "Revisa cada 12 horas", almacen.revisarExtensiones) {
             almacen.revisarExtensiones = it; Programador.programar(ctx)
         }
+        FilaSwitch("Extensiones privadas", "Se guardan dentro de Shiori sin instalarse en Android: sin permisos ni confirmaciones", ext.extPrivadas) { ext.cambiarExtPrivadas(it) }
+        FilaAjuste(Icons.Rounded.Add, "Instalar una extensión desde un archivo", "Un .apk de extensión; se instala como privada") { elegirApk.launch(arrayOf("application/vnd.android.package-archive", "application/octet-stream")) }
         FilaAjuste(Icons.Rounded.Refresh, if (revisando) "Revisando…" else "Buscar actualizaciones ahora", null) {
             if (!revisando) {
                 revisando = true

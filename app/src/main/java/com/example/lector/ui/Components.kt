@@ -80,6 +80,7 @@ fun LText(
 @Composable
 fun ComicCover(comic: Comic, almacen: Almacen, modifier: Modifier = Modifier, shape: Shape = FormaPortada) {
     val portada = rememberPortada(almacen, comic.id)
+    if (portada != null) androidx.compose.runtime.SideEffect { com.example.lector.ui.mochy.EstiloApp.anotarPortada("c:" + comic.id, portada.width, portada.height) }
     Box(modifier.clip(shape).background(LectorColors.CardHigh), contentAlignment = Alignment.Center) {
         when {
             portada != null ->

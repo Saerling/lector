@@ -873,3 +873,10 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Lector: «Saltar capítulos duplicados» (prefs saltar_duplicados; al terminar marca leídas las otras versiones del mismo número).
 - Revisión de biblioteca: «Saltar los que tienen capítulos sin leer» y «Saltar los no empezados» (apagados por defecto).
 - Pendiente de Komikku: update_strategy (ONLY_FETCH_ONCE), intervalo inteligente de revisión, portada panorámica, sincronización, extensiones privadas.
+
+## 2cb. PASO 80 (0.71) — Lo que faltaba de Komikku (compilado; tests locales)
+- Revisión inteligente: `Comic.soloUnaVez` (UpdateStrategy.ONLY_FETCH_ONCE, vía `DetalleManga.soloUnaVez`) y `Comic.proximaRevision` (`proximaRevision()` en ui/actualizaciones/Proximos.kt, FetchInterval de Mihon; los parados cada 28 días como mucho). Interruptor «Revisión inteligente» (prefs act_inteligente, apagado). Test: ProximaRevisionTest.
+- Extensiones privadas (ExtensionLoader de Komikku): APK en `filesDir/exts/<pkg>.ext`, `CargadorExt.info/privadas/instalarPrivada/quitarPrivada`, `ExtInstalada.privada`. Ajustes → Explorar: interruptor (prefs ext_privadas) e «Instalar desde un archivo». Sin probar en un dispositivo.
+- Portada panorámica: `EstiloApp.panoramica` (Personalización → Estilo), filas de Historial y Actualizaciones 1,6× de ancho si la portada es apaisada.
+- Prueba de recomendaciones: toca la primera portada si el título no está en pantalla.
+- Sigue faltando: sincronización entre dispositivos (solo hay copias y WebDAV).

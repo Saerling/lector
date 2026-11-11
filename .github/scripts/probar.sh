@@ -116,6 +116,13 @@ adb shell am force-stop com.example.lector; adb logcat -c
 adb shell am start -n com.example.lector/.MainActivity --es destino "probar:eu.kanade.tachiyomi.extension.es.anzmanga\|autorec"
 sleep 45
 volcar rec0.xml; tocar rec0.xml "One Punch-Man" >/dev/null
+# Con el diseño nuevo el título queda bajo la portada, fuera de la pantalla: si no se abrió la ficha, se toca la
+# primera portada de la cuadrícula (One Punch-Man es la primera de Populares).
+sleep 5
+if ! adb logcat -d | grep -q "ficha abierta"; then
+  TAM=$(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1); W=${TAM%x*}; H=${TAM#*x}
+  adb shell input tap $((W/4)) $((H*93/100))
+fi
 for i in $(seq 1 24); do adb logcat -d | grep -q "recomendación «" && break; sleep 5; done
 sleep 20
 adb exec-out screencap -p > "captura-$ETIQUETA-recomendada.png"

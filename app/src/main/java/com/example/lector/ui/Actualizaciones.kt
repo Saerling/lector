@@ -429,7 +429,8 @@ private fun VacioActualizaciones(titulo: String, texto: String, enMarcha: Boolea
 private fun PortadaActualizacion(a: ActualizacionCap, comic: Comic?, almacen: Almacen) {
     // Tocar la portada abre el manga (su ficha), no el capítulo.
     val forma = SuaveShape(LibraryRowCoverCorner)
-    Box(Modifier.size(LibraryRowCoverSize).clip(forma).background(LibraryColors.TileHigh).clickable { abrirMangaAct(a) }) {
+    val factor = com.example.lector.ui.mochy.EstiloApp.factorAncho(comic?.let { "c:" + it.id }, comic?.portadaUrl, a.portadaUrl)
+    Box(Modifier.size(LibraryRowCoverSize * factor, LibraryRowCoverSize).clip(forma).background(LibraryColors.TileHigh).clickable { abrirMangaAct(a) }) {
         if (comic != null) ComicCover(comic, almacen, Modifier.fillMaxSize(), forma)
         else ImagenRemota(a.portadaUrl, Modifier.fillMaxSize(), rememberCabeceras(a.fuenteId), fuenteId = a.fuenteId)
     }

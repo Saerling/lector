@@ -78,7 +78,7 @@ object CacheFichas {
 
     private fun leerDetalle(r: JsonReader): DetalleManga {
         var titulo = ""; var autor: String? = null; var artista: String? = null; var desc: String? = null
-        val generos = ArrayList<String>(); var estado = 0; var portada: String? = null
+        val generos = ArrayList<String>(); var estado = 0; var portada: String? = null; var una = false
         r.beginObject()
         while (r.hasNext()) when (r.nextName()) {
             "titulo" -> titulo = r.texto().orEmpty()
@@ -88,10 +88,11 @@ object CacheFichas {
             "generos" -> { r.beginArray(); while (r.hasNext()) r.texto()?.let { generos += it }; r.endArray() }
             "estado" -> estado = r.nextInt()
             "portada" -> portada = r.texto()
+            "una" -> una = r.nextBoolean()
             else -> r.skipValue()
         }
         r.endObject()
-        return DetalleManga(titulo, autor, artista, desc, generos, estado, portada)
+        return DetalleManga(titulo, autor, artista, desc, generos, estado, portada, una)
     }
 
     private fun leerCapitulo(r: JsonReader): CapituloFuente {
@@ -128,6 +129,7 @@ object CacheFichas {
                     .name("descripcion").value(d.descripcion)
                 w.name("generos").beginArray(); d.generos.forEach { w.value(it) }; w.endArray()
                 w.name("estado").value(d.estado.toLong()).name("portada").value(d.portadaUrl)
+                if (d.soloUnaVez) w.name("una").value(true)
                 w.endObject()
                 w.name("caps").beginArray()
                 f.capitulos.forEach { c ->

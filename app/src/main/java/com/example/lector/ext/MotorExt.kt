@@ -149,6 +149,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
                 generos = m.getGenres().orEmpty(),
                 estado = m.status,
                 portadaUrl = m.thumbnail_url ?: manga.portadaUrl,
+                soloUnaVez = m.update_strategy == eu.kanade.tachiyomi.source.model.UpdateStrategy.ONLY_FETCH_ONCE,
             ),
             capitulos = capitulos,
             memo = m.memo.aTexto() ?: entrada.memo.aTexto(),

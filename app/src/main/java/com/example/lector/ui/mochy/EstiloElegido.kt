@@ -22,6 +22,19 @@ object EstiloApp {
     var ventanaActualizacion by mutableStateOf(VentanaActualizacion.MOCHY); private set
     var verDescargas by mutableStateOf(true); private set
     var ladoDescargas by mutableStateOf(LadoDescargas.IZQUIERDA); private set
+    // Portada panorámica de Komikku: las portadas apaisadas se muestran a lo ancho en Historial y Actualizaciones.
+    var panoramica by mutableStateOf(false); private set
+    fun elegirPanoramica(v: Boolean) { panoramica = v; prefs?.edit()?.putBoolean("estilo_panoramica", v)?.apply() }
+
+    /** Portadas que resultaron apaisadas al cargarse (alto/ancho <= 0,75, como RatioSwitchToPanorama). */
+    private val anchas = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
+    fun anotarPortada(clave: String?, ancho: Int, alto: Int) {
+        if (clave.isNullOrBlank() || ancho <= 0) return
+        val ancha = alto.toFloat() / ancho <= 0.75f
+        if (anchas[clave] != ancha && (ancha || clave in anchas)) anchas[clave] = ancha
+    }
+    /** Ancho de la portada de una fila: 1,6 veces más si la opción está activa y alguna de las claves es apaisada. */
+    fun factorAncho(vararg claves: String?): Float = if (panoramica && claves.any { it != null && anchas[it] == true }) 1.6f else 1f
 
     private inline fun <reified E : Enum<E>> leer(p: android.content.SharedPreferences, clave: String, def: E): E =
         p.getString(clave, null)?.let { n -> enumValues<E>().firstOrNull { it.name == n } } ?: def
@@ -32,6 +45,7 @@ object EstiloApp {
         menuMantener = leer(p, "estilo_menu", MenuMantener.MOCHY)
         ventanaActualizacion = leer(p, "estilo_actualizacion", VentanaActualizacion.MOCHY)
         verDescargas = p.getBoolean("estilo_descargas", true)
+        panoramica = p.getBoolean("estilo_panoramica", false)
         ladoDescargas = leer(p, "estilo_descargas_lado", LadoDescargas.IZQUIERDA)
     }
 

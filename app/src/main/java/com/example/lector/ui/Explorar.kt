@@ -1266,6 +1266,10 @@ fun IconoExt(pkg: String, url: String?, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val local = remember(pkg) {
         runCatching { ctx.packageManager.getApplicationIcon(pkg).toBitmap(128, 128).asImageBitmap() }.getOrNull()
+            // Extensión privada: el icono se saca de su APK guardado en la app.
+            ?: runCatching {
+                com.example.lector.ext.CargadorExt.info(ctx, pkg)?.first?.applicationInfo?.loadIcon(ctx.packageManager)?.toBitmap(128, 128)?.asImageBitmap()
+            }.getOrNull()
     }
     val forma = SuaveShape(12.dp)
     if (local != null) Image(local, null, modifier.clip(forma), contentScale = ContentScale.Crop)
@@ -1442,7 +1446,10 @@ fun ImagenRemota(
         if (!url.isNullOrBlank()) {
             val cargada = img ?: Imagenes.cargar(url, cabeceras, maxLado, fuenteId)
             img = cargada
-            if (cargada != null) onCargada?.invoke(cargada)
+            if (cargada != null) {
+                com.example.lector.ui.mochy.EstiloApp.anotarPortada(url, cargada.width, cargada.height)
+                onCargada?.invoke(cargada)
+            }
         }
     }
     // La portada nueva aparece con un fundido; la que ya estaba en caché empieza directamente en 1f.

@@ -283,7 +283,11 @@ private fun FilaHistorialBase(
         onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); alQuitar() },
         modifier = modifier.fillMaxWidth().padding(horizontal = SearchHorizontalPadding, vertical = 3.dp),
         cover = {
-            Box(Modifier.size(LibraryRowCoverSize).clip(formaPortada).background(LibraryColors.TileHigh)) {
+            val factor = when (item) {
+                is ItemHistorial.Local -> com.example.lector.ui.mochy.EstiloApp.factorAncho("c:" + item.comic.id)
+                is ItemHistorial.EnLinea -> com.example.lector.ui.mochy.EstiloApp.factorAncho(item.comic?.let { "c:" + it.id }, item.comic?.portadaUrl, item.entrada.portadaUrl)
+            }
+            Box(Modifier.size(LibraryRowCoverSize * factor, LibraryRowCoverSize).clip(formaPortada).background(LibraryColors.TileHigh)) {
                 val portada = Modifier.fillMaxSize()
                 when (item) {
                     is ItemHistorial.Local -> ComicCover(item.comic, almacen, portada, formaPortada)

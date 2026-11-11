@@ -813,6 +813,14 @@ private fun SeccionEstilo() {
                 )
             }
         }
+        Column(Modifier.fillMaxWidth().clip(FormaTarjeta).background(ColP.Tarjeta).padding(SangriaTexto)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LText("Portada panorámica", EstiloEtiquetaTarjeta, Modifier.weight(1f), color = ColP.Texto.copy(alpha = 0.9f))
+                Interruptor(e.panoramica, { e.elegirPanoramica(it) })
+            }
+            Spacer(Modifier.height(6.dp))
+            LText("Las portadas apaisadas se muestran a lo ancho en Historial y Actualizaciones, como en Komikku.", EstiloPie, color = LectorColors.Muted)
+        }
     }
 }
 
