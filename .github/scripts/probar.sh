@@ -11,7 +11,7 @@ adb shell pm grant com.example.lector android.permission.POST_NOTIFICATIONS || t
 echo "########## APK $ETIQUETA ##########" >> fallos.txt
 probar() {
   local url="$1" pkg="$2"
-  curl -sL -o ext.apk "$url" && adb install -r ext.apk
+  curl -sL -o ext.apk "$url" && adb install -r ext.apk || echo "===== $pkg: EL APK NO SE PUDO INSTALAR ($url) =====" >> fallos.txt
   adb shell am force-stop com.example.lector
   adb logcat -c
   adb shell am start -n com.example.lector/.MainActivity --es destino "probar:$pkg"
@@ -42,11 +42,19 @@ adb shell am force-stop com.example.lector; adb logcat -c
 adb shell am start -n com.example.lector/.MainActivity --es destino "probar-repo:https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/repo.json"
 sleep 25
 { echo "===== listado Nyora ====="; adb logcat -d | grep "LectorPrueba" | tail -5; } >> fallos.txt
-probar "https://github.com/keiyoushi/extensions/releases/download/d0c0864/tachiyomi-es.cerberusseries-v1.6.1.apk" eu.kanade.tachiyomi.extension.es.cerberusseries
-probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-es.anzmanga-v1.6.0.apk" eu.kanade.tachiyomi.extension.es.anzmanga
-probar "https://github.com/keiyoushi/extensions/releases/download/4c8cda7/tachiyomi-all.webtoons-v1.6.2.apk" eu.kanade.tachiyomi.extension.all.webtoons
-probar "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-all.myreadingmanga-v1.6.0.apk" eu.kanade.tachiyomi.extension.all.myreadingmanga
-probar "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tachiyomi-all.imhentai-v1.6.25.apk" eu.kanade.tachiyomi.extension.all.imhentai
+# Las direcciones de los APK se piden a los listados de la app (las fijas de «releases» de Keiyoushi dejaron de existir
+# y la prueba llevaba tiempo sin instalar nada: «fuente=null»).
+adb shell am force-stop com.example.lector; adb logcat -c
+adb shell am start -n com.example.lector/.MainActivity --es destino "probar-url:cerberusseries,anzmanga,webtoons,myreadingmanga,imhentai"
+for i in $(seq 1 30); do [ "$(adb logcat -d | grep -c 'LectorPrueba: url ')" -ge 5 ] && break; sleep 4; done
+adb logcat -d | grep "LectorPrueba: url " | sed 's/.*LectorPrueba: url //' > catalogo.txt
+while read -r corto pkg url <&4; do
+  case "$url" in
+    http*) probar "$url" "$pkg" ;;
+    *) echo "===== $corto: NO ESTÁ EN LOS LISTADOS (no se probó) =====" >> fallos.txt ;;
+  esac
+done 4< catalogo.txt
+[ -s catalogo.txt ] || echo "===== CATÁLOGO: los listados no respondieron (no se probó ninguna extensión) =====" >> fallos.txt
 # Las dos extensiones de Nyora (normal y 18+) traen fuentes repetidas: antes cerraban las listas de fuentes.
 probar "https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/apk/eu.kanade.tachiyomi.extension.all.nyoralocal.apk" eu.kanade.tachiyomi.extension.all.nyoralocal
 probar "https://raw.githubusercontent.com/Nyora-Manga/nyora-mihon/main/apk/eu.kanade.tachiyomi.extension.all.nyoralocal18.apk" eu.kanade.tachiyomi.extension.all.nyoralocal18
