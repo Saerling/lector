@@ -132,6 +132,14 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
         val entrada = sManga(fuente, manga)
         val r = s.getMangaUpdate(entrada, emptyList(), fetchDetails = true, fetchChapters = true)
         val m = r.manga
+        // Como SyncChaptersWithSource de Komikku: el número de cada capítulo se reconoce de su nombre si la fuente no lo da.
+        val tituloNum = m.title.ifBlank { manga.titulo }
+        val capitulos = r.chapters.map {
+            CapituloFuente(
+                it.url, it.name, it.date_upload, it.scanlator?.takeIf { x -> x.isNotBlank() },
+                ReconocerCapitulo.numero(tituloNum, it.name, it.chapter_number), it.memo.aTexto(),
+            )
+        }
         FichaManga(
             detalle = DetalleManga(
                 titulo = m.title.ifBlank { manga.titulo },
@@ -142,9 +150,7 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
                 estado = m.status,
                 portadaUrl = m.thumbnail_url ?: manga.portadaUrl,
             ),
-            capitulos = r.chapters.map {
-                CapituloFuente(it.url, it.name, it.date_upload, it.scanlator?.takeIf { x -> x.isNotBlank() }, it.chapter_number, it.memo.aTexto())
-            },
+            capitulos = capitulos,
             memo = m.memo.aTexto() ?: entrada.memo.aTexto(),
         ).also {
             // Estado viejo («fuente|url») de un manga aún sin migrar: solo para los capítulos que ya conocía (nunca
@@ -154,6 +160,19 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
                 com.example.lector.CacheFichas.leer(fuente.id, manga.url)?.capitulos?.forEach { c -> antes += c.url }
                 antes += com.example.lector.Almacen.obtener(ctx).capitulosConocidos(fuente.id, manga.url)
                 ext.migrarMangaSiHace(fuente.id, manga.url, antes)
+            }
+            // Capítulos resubidos con otra dirección: heredan leído/marcador/página del que tenía su número y no
+            // cuentan como nuevos (antes salían todos sin leer y como novedad).
+            runCatching {
+                val previa = com.example.lector.CacheFichas.leer(fuente.id, manga.url)?.capitulos
+                if (!previa.isNullOrEmpty() && it.capitulos.isNotEmpty()) {
+                    val ahora = it.capitulos.mapTo(HashSet()) { c -> c.url }
+                    val antes = previa.mapTo(HashSet()) { c -> c.url }
+                    val quitados = previa.filter { c -> c.url !in ahora }
+                    val anadidos = it.capitulos.filter { c -> c.url !in antes }
+                    val heredados = ext.heredarEstado(fuente.id, manga.url, quitados, anadidos, tituloNum)
+                    if (heredados.isNotEmpty()) com.example.lector.Almacen.obtener(ctx).darPorConocidos(fuente.id, manga.url, heredados)
+                }
             }
             com.example.lector.CacheFichas.guardar(fuente.id, manga.url, it) // queda guardada en el móvil
         }

@@ -62,7 +62,12 @@ object CacheFichas {
                     else -> r.skipValue()
                 }
                 r.endObject()
-                FichaManga(detalle ?: return@use null, caps, memo, t)
+                val d = detalle ?: return@use null
+                // Fichas guardadas antes de reconocer el número de capítulo: se completa al leer.
+                val lista = if (caps.none { it.numero == -1f }) caps else caps.map {
+                    if (it.numero != -1f) it else it.copy(numero = com.example.lector.ext.ReconocerCapitulo.numero(d.titulo, it.nombre))
+                }
+                FichaManga(d, lista, memo, t)
             }
         }.getOrNull() ?: return null
         synchronized(recientes) { recientes[k] = f }

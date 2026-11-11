@@ -866,3 +866,10 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 
 ## 2bz. PASO 78 (0.69)
 - Ficha: salir mientras se actualiza ya no muestra «No se pudo actualizar: The coroutine scope left the composition» (se relanza la CancellationException).
+
+## 2ca. PASO 79 (0.70) — Lógica de capítulos como Komikku (compilado y con tests locales)
+- `ext/ReconocerCapitulo.kt`: copia de ChapterRecognition de Mihon (+ «Capítulo/Cap./Episodio/Tomo/Temporada»). `MotorExt.ficha` da número a cada capítulo si la fuente no lo trae (antes -1: sin orden por número, insignia «#», seguimiento por conteo). `CacheFichas.leer` completa las fichas viejas. Tests: `app/src/test/.../ReconocerCapituloTest.kt` (los de Mihon; `gradle testDebugUnitTest`).
+- Capítulos resubidos con otra dirección (SyncChaptersWithSource): `ExtManager.heredarEstado` pasa leído/marcador/página por número y `Almacen.darPorConocidos` evita que salgan como novedad.
+- Lector: «Saltar capítulos duplicados» (prefs saltar_duplicados; al terminar marca leídas las otras versiones del mismo número).
+- Revisión de biblioteca: «Saltar los que tienen capítulos sin leer» y «Saltar los no empezados» (apagados por defecto).
+- Pendiente de Komikku: update_strategy (ONLY_FETCH_ONCE), intervalo inteligente de revisión, portada panorámica, sincronización, extensiones privadas.

@@ -1522,12 +1522,9 @@ fun AjustesPantalla(almacen: Almacen) {
     }
 }
 
-/** Número de capítulo sacado del nombre («Capítulo 12.5: …» → 12.5). */
-private fun numeroCapitulo(nombre: String): Float? {
-    val m = Regex("""(?i)(?:cap[ií]tulo|chapter|cap\.?|ch\.?|ep\.?)\s*(\d+(?:\.\d+)?)""").find(nombre)
-        ?: Regex("""(\d+(?:\.\d+)?)""").find(nombre)
-    return m?.groupValues?.get(1)?.toFloatOrNull()
-}
+/** Número de capítulo sacado del nombre («Capítulo 12.5: …» → 12.5), con el reconocedor de Komikku. */
+private fun numeroCapitulo(nombre: String): Float? =
+    com.example.lector.ext.ReconocerCapitulo.numero("", nombre).takeIf { it >= 0f }
 
 /** Cuántos capítulos enteros faltan entre dos (0 si son seguidos o no se sabe). */
 private fun huecoCapitulos(a: String, b: String): Int {

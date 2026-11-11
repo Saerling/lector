@@ -207,6 +207,7 @@ class Almacen private constructor(private val contexto: Context) {
     var invertirZonas by prefEnum(prefs, "invertir_zonas", InvertirZonas.NO)
     var escalaPagina by prefEnum(prefs, "escala_pagina", EscalaPagina.AJUSTAR)
     var recortarWebtoon by prefBool(prefs, "recortar_webtoon", false)
+    var saltarDuplicados by prefBool(prefs, "saltar_duplicados", false)
     var dividirDobles by prefBool(prefs, "dividir_dobles", false)
     var invertirDivision by prefBool(prefs, "invertir_division", false)
     var rellenoLateral by prefInt(prefs, "relleno_lateral", 0) // % de cada lado en webtoon
@@ -353,6 +354,9 @@ class Almacen private constructor(private val contexto: Context) {
     var actSoloWifi by prefBool(prefs, "act_wifi", true)
     var actSoloCargando by prefBool(prefs, "act_cargando", false)
     var actSaltarTerminados by prefBool(prefs, "act_saltar_terminados", true)
+    // Como las restricciones de Komikku («con capítulos sin leer» y «sin empezar»). Apagadas por defecto.
+    var actSaltarSinLeer by prefBool(prefs, "act_saltar_sin_leer", false)
+    var actSaltarNoEmpezados by prefBool(prefs, "act_saltar_no_empezados", false)
     var descargarNuevos by prefBool(prefs, "descargar_nuevos", false)
     var revisarExtensiones by prefBool(prefs, "revisar_ext", true)
     var ultimaRevisionExt by prefLong(prefs, "ult_revision_ext", 0L)
@@ -908,7 +912,7 @@ class Almacen private constructor(private val contexto: Context) {
         "paleta", "color_portada", "modo_tema", "zonas_toque", "teclas_volumen", "mantener_encendida", "modo_visor",
         "zonas_visor", "invertir_zonas", "escala_pagina", "recortar_webtoon", "dividir_dobles", "invertir_division",
         "relleno_lateral", "animar_paginas", "mostrar_numero", "pantalla_completa", "invertir_volumen",
-        "mostrar_transiciones", "precarga", "velocidad_auto", "doble_toque_zoom", "pasar_capitulo_solo",
+        "mostrar_transiciones", "precarga", "velocidad_auto", "doble_toque_zoom", "pasar_capitulo_solo", "saltar_duplicados", "act_saltar_sin_leer", "act_saltar_no_empezados",
         "fondo_lector", "orientacion", "brillo_on", "brillo", "grises", "invertir", "tinte", "tinte_intensidad",
         "recortar_bordes", "vista", "columnas", "mostrar_pagina", "insignia_progreso", "agrupar", "f_descargados",
         "f_sin_leer", "f_empezados", "f_terminados", "f_seguimiento", "f_locales", "ins_sin_leer", "ins_descargas",
@@ -1607,6 +1611,13 @@ class Almacen private constructor(private val contexto: Context) {
         actualizaciones = lista
         guardarActualizaciones(lista)
         return nuevos
+    }
+
+    /** Capítulos que no son novedad (resubidos con otra dirección): se anotan como conocidos si el manga ya tenía base. */
+    @Synchronized
+    fun darPorConocidos(fuenteId: Long, urlManga: String, urls: Set<String>) {
+        val ya = conocidos.leer(fuenteId, urlManga) ?: return
+        if (!ya.containsAll(urls)) conocidos.guardar(fuenteId, urlManga, ya + urls)
     }
 
     private fun olvidarCapitulos(fuenteId: Long, urlManga: String) {

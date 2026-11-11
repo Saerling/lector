@@ -1323,11 +1323,27 @@ fun LeerOnlineScreen(
         return
     }
     val alm = almacen ?: remember { Almacen.obtener(ctx) }
-    val enOrden = remember(capitulos) { capitulos.asReversed() }
+    // Como «Saltar capítulos duplicados» de Komikku: de los capítulos con el mismo número (varios grupos de traducción)
+    // queda el que se abre o, si no, el del mismo grupo; así la lectura continua no repite el capítulo.
+    val (capsLeer, indiceLeer) = remember(capitulos, indiceInicial, alm.saltarDuplicados) {
+        val actual = capitulos.getOrNull(indiceInicial)
+        if (!alm.saltarDuplicados || actual == null) capitulos to indiceInicial
+        else {
+            val elegido = HashMap<Float, CapituloFuente>()
+            capitulos.forEach { c ->
+                if (c.numero < 0f) return@forEach
+                val ya = elegido[c.numero]
+                if (ya == null || c === actual || (ya !== actual && ya.scanlator != actual.scanlator && c.scanlator == actual.scanlator)) elegido[c.numero] = c
+            }
+            val lista = capitulos.filter { it.numero < 0f || elegido[it.numero] === it }
+            lista to lista.indexOf(actual).coerceAtLeast(0)
+        }
+    }
+    val enOrden = remember(capsLeer) { capsLeer.asReversed() }
     val caps = remember(enOrden, f.id) {
         enOrden.map { c -> CapVisor("${f.id}|${manga?.url}|${c.url}", nombreCapitulo(c), OrigenFuente(alm, motor, f, c, manga?.url.orEmpty())) }
     }
-    val inicio = (capitulos.lastIndex - indiceInicial).coerceIn(0, caps.lastIndex)
+    val inicio = (capsLeer.lastIndex - indiceLeer).coerceIn(0, caps.lastIndex)
     val comic = remember(manga, alm.version) { manga?.let { alm.comicEnLinea(f.id, it.url) } }
     val urlM = manga?.url ?: comic?.urlManga.orEmpty()
     // Capítulos terminados en esta sesión: si está activado «borrar al leer», se borran al salir o al pasar al siguiente.
@@ -1374,6 +1390,10 @@ fun LeerOnlineScreen(
         alTerminarCapitulo = { i ->
             val c = enOrden[i]
             ext.marcarLeido(f.id, urlM, c.url)
+            // Con los duplicados saltados, las otras versiones del mismo capítulo también quedan leídas.
+            if (alm.saltarDuplicados && c.numero >= 0f) {
+                ext.marcarLeidos(f.id, urlM, capitulos.filter { it.numero == c.numero && it.url != c.url }.map { it.url })
+            }
             terminados += c.url
             if (manga != null) {
                 alm.actualizarProgresoEnLinea(f.id, manga.url, capitulos.count { ext.esLeido(f.id, urlM, it.url) }, capitulos.size)

@@ -1179,13 +1179,37 @@ class ExtManager private constructor(private val app: Context) {
     fun esMarcado(fuenteId: Long, urlManga: String, url: String) =
         claveTexto(fuenteId, urlManga, url) in marcados || (!migrado && "$fuenteId|$url" in restoMarcados)
 
-    /** Número del capítulo: el de la fuente o, si no lo da, el que aparece en el nombre (-1 si no hay). */
-    fun numeroReconocido(c: CapituloFuente): Float {
-        if (c.numero >= 0f) return c.numero
-        val n = c.nombre.lowercase()
-        val r = Regex("(?:cap[ií]tulo|cap\\.?|chapter|ch\\.?|episodio|ep\\.?|#)\\s*(\\d+(?:[.,]\\d+)?)").find(n)
-            ?: Regex("(\\d+(?:[.,]\\d+)?)").find(n)
-        return r?.groupValues?.get(1)?.replace(',', '.')?.toFloatOrNull() ?: -1f
+    /** Número del capítulo: el de la fuente o, si no lo da, el reconocido en el nombre como Komikku (-1 si no hay). */
+    fun numeroReconocido(c: CapituloFuente, tituloManga: String = ""): Float =
+        ReconocerCapitulo.numero(tituloManga, c.nombre, c.numero)
+
+    /**
+     * Como SyncChaptersWithSource de Komikku: cuando la fuente resube capítulos con otra dirección (los [quitados] ya no
+     * están y aparecen [anadidos]), el nuevo con el mismo número hereda leído, marcador y página. Devuelve las
+     * direcciones que heredaron (no son capítulos nuevos de verdad).
+     */
+    fun heredarEstado(
+        fuenteId: Long, urlManga: String, quitados: List<CapituloFuente>, anadidos: List<CapituloFuente>, titulo: String,
+    ): Set<String> {
+        if (quitados.isEmpty() || anadidos.isEmpty()) return emptySet()
+        val porNumero = HashMap<Float, MutableList<CapituloFuente>>()
+        quitados.forEach { q -> numeroReconocido(q, titulo).takeIf { it >= 0f }?.let { n -> porNumero.getOrPut(n) { ArrayList() } += q } }
+        if (porNumero.isEmpty()) return emptySet()
+        val heredados = HashSet<String>()
+        var cl = false; var cp = false; val nm = HashSet<String>()
+        for (a in anadidos) {
+            val viejos = porNumero[numeroReconocido(a, titulo).takeIf { it >= 0f } ?: continue] ?: continue
+            heredados += a.url
+            if (viejos.any { esLeido(fuenteId, urlManga, it.url) } && leidosH.add(claveLeido(fuenteId, urlManga, a.url))) cl = true
+            if (viejos.any { esMarcado(fuenteId, urlManga, it.url) }) nm += claveTexto(fuenteId, urlManga, a.url)
+            val pag = viejos.maxOf { paginaDe(fuenteId, urlManga, it.url) }
+            val k = claveTexto(fuenteId, urlManga, a.url)
+            if (pag > 0 && k !in paginasCap) { paginasCap[k] = pag; cp = true }
+        }
+        if (cl) guardarLeidos()
+        if (nm.isNotEmpty()) { marcados = marcados + nm; guardarMarcados() }
+        if (cp) guardarPaginasCap()
+        return heredados
     }
 
     fun alternarMarcado(fuenteId: Long, urlManga: String, url: String) {

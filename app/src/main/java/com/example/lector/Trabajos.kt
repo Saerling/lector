@@ -105,7 +105,9 @@ object RevisorBiblioteca {
             c.enLinea &&
                 (categoria == null || categoria in asign[c.id].orEmpty()) &&
                 // Saltar los terminados (estado «Completado» y nada por leer), como la opción de Komikku.
-                !(alm.actSaltarTerminados && c.estado == 2 && c.sinLeer == 0 && c.paginas > 0)
+                !(alm.actSaltarTerminados && c.estado == 2 && c.sinLeer == 0 && c.paginas > 0) &&
+                !(alm.actSaltarSinLeer && c.sinLeer > 0) &&
+                !(alm.actSaltarNoEmpezados && c.paginas > 0 && c.ultimaPagina == 0)
         }
         Actualizador.total = lista.size
         Actualizador.hechas = 0

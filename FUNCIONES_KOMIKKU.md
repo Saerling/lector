@@ -58,3 +58,7 @@ Leyenda: ✅ lo tenemos · 🟡 parcial · ❌ falta
 | Ahorro de datos | ✅ | wsrv.nl (WebP 1080 px), Avanzado → Red (0.24). |
 | Vista previa de páginas | ✅ | 8 miniaturas del primer capítulo, bajo pedido (0.24). |
 | Lectura continua entre capítulos | ✅ | Paginado y tira, hacia delante y hacia atrás (0.23). |
+| Número de capítulo reconocido del nombre | ✅ | ChapterRecognition de Mihon (0.70). |
+| Capítulos resubidos conservan leído/marcador | ✅ | Por número de capítulo (0.70). |
+| Saltar capítulos duplicados en el lector | ✅ | Ajustes del lector (0.70). |
+| Restricciones de revisión (sin leer / no empezados / completados) | ✅ | Ajustes → Biblioteca (0.70). Falta el intervalo inteligente. |

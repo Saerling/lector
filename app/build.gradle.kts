@@ -15,7 +15,7 @@ android {
         // En GitHub Actions el número sube solo en cada compilación (1000 + número de ejecución): así cada versión
         // publicada es mayor que la anterior y Android la instala como actualización. Compilado a mano: 9.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.let { 1000 + it } ?: 9
-        versionName = "0.69"
+        versionName = "0.70"
     }
 
     // Una sola firma fija para todas las versiones (antes cada compilación de GitHub creaba una clave de depuración
@@ -103,4 +103,5 @@ dependencies {
     implementation("com.github.mihonapp:injekt:91edab2317")
     // Motor de JavaScript que usan las extensiones (JavaScriptEngine), la misma librería y versión que Komikku.
     implementation("com.github.zhanghai.quickjs-java:quickjs-android:547f5b1597")
+    testImplementation("junit:junit:4.13.2")
 }

@@ -460,6 +460,8 @@ fun AjBibliotecaScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> U
             FilaSwitch("Solo cargando", null, almacen.actSoloCargando) { almacen.actSoloCargando = it; reprogramar() }
         }
         FilaSwitch("Saltar los completados", "No revisa los mangas terminados y sin capítulos por leer", almacen.actSaltarTerminados) { almacen.actSaltarTerminados = it }
+        FilaSwitch("Saltar los que tienen capítulos sin leer", "Solo revisa los mangas que llevas al día", almacen.actSaltarSinLeer) { almacen.actSaltarSinLeer = it }
+        FilaSwitch("Saltar los no empezados", "No revisa los mangas de los que aún no has leído nada", almacen.actSaltarNoEmpezados) { almacen.actSaltarNoEmpezados = it }
         FilaSwitch("Descargar los capítulos nuevos", "Los pone en la cola de descargas al encontrarlos", almacen.descargarNuevos) { almacen.descargarNuevos = it }
         LText(
             "Las revisiones automáticas avisan con una notificación de los capítulos nuevos. Android puede retrasarlas para ahorrar batería.",
