@@ -211,6 +211,8 @@ class Almacen private constructor(private val contexto: Context) {
     var escalaPagina by prefEnum(prefs, "escala_pagina", EscalaPagina.AJUSTAR)
     var recortarWebtoon by prefBool(prefs, "recortar_webtoon", false)
     var saltarDuplicados by prefBool(prefs, "saltar_duplicados", false)
+    var saltarLeidos by prefBool(prefs, "saltar_leidos", false)
+    var borrarMarcados by prefBool(prefs, "borrar_marcados", false)
     var dividirDobles by prefBool(prefs, "dividir_dobles", false)
     var invertirDivision by prefBool(prefs, "invertir_division", false)
     var rellenoLateral by prefInt(prefs, "relleno_lateral", 0) // % de cada lado en webtoon
@@ -920,7 +922,7 @@ class Almacen private constructor(private val contexto: Context) {
         "paleta", "color_portada", "modo_tema", "zonas_toque", "teclas_volumen", "mantener_encendida", "modo_visor",
         "zonas_visor", "invertir_zonas", "escala_pagina", "recortar_webtoon", "dividir_dobles", "invertir_division",
         "relleno_lateral", "animar_paginas", "mostrar_numero", "pantalla_completa", "invertir_volumen",
-        "mostrar_transiciones", "precarga", "velocidad_auto", "doble_toque_zoom", "pasar_capitulo_solo", "saltar_duplicados", "act_saltar_sin_leer", "act_saltar_no_empezados", "act_inteligente",
+        "mostrar_transiciones", "precarga", "velocidad_auto", "doble_toque_zoom", "pasar_capitulo_solo", "saltar_duplicados", "saltar_leidos", "borrar_marcados", "act_saltar_sin_leer", "act_saltar_no_empezados", "act_inteligente",
         "fondo_lector", "orientacion", "brillo_on", "brillo", "grises", "invertir", "tinte", "tinte_intensidad",
         "recortar_bordes", "vista", "columnas", "mostrar_pagina", "insignia_progreso", "agrupar", "f_descargados",
         "f_sin_leer", "f_empezados", "f_terminados", "f_seguimiento", "f_locales", "ins_sin_leer", "ins_descargas",

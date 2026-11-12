@@ -255,6 +255,7 @@ fun AjustesVisorContenido(
         }
         FilaSwitch("Animar el cambio de página", null, almacen.animarPaginas) { almacen.animarPaginas = it }
         FilaSwitch("Doble toque para ampliar", null, almacen.dobleToqueZoom) { almacen.dobleToqueZoom = it }
+        FilaSwitch("Saltar capítulos leídos", "Al pasar de capítulo no entra en los que ya leíste (se aplica al abrir un capítulo)", almacen.saltarLeidos) { almacen.saltarLeidos = it }
         FilaSwitch("Saltar capítulos duplicados", "Si varios grupos traducen el mismo capítulo, se lee uno solo (se aplica al abrir un capítulo)", almacen.saltarDuplicados) { almacen.saltarDuplicados = it }
         FilaSwitch("Teclas de volumen", "Bajar el volumen avanza y subirlo retrocede", almacen.teclasVolumen) { almacen.elegirTeclasVolumen(it) }
         if (almacen.teclasVolumen) {

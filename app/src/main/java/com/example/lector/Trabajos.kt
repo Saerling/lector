@@ -120,12 +120,16 @@ object RevisorBiblioteca {
         val hechas = AtomicInteger(0)
         val nuevos = java.util.concurrent.ConcurrentHashMap<String, Int>()
         val errores = java.util.Collections.synchronizedList(ArrayList<ErrorActualizacion>())
-        val limite = Semaphore(4)
+        // Como LibraryUpdateJob de Komikku: varias fuentes a la vez (5), pero cada fuente de una en una, para no
+        // cargar una sola web con peticiones seguidas (menos «429» y bloqueos).
+        val limite = Semaphore(5)
+        val porFuente = java.util.concurrent.ConcurrentHashMap<Long, kotlinx.coroutines.sync.Mutex>()
         val fuentes = ext.fuentes
         coroutineScope {
             lista.map { c ->
                 async {
-                    limite.withPermit {
+                    porFuente.getOrPut(c.fuenteId) { kotlinx.coroutines.sync.Mutex() }.lock()
+                    try { limite.withPermit {
                         if (Actualizador.cancelado) throw CancellationException("Cancelada")
                         val url = c.urlManga.orEmpty()
                         val f = fuentes.firstOrNull { it.id == c.fuenteId }
@@ -166,7 +170,7 @@ object RevisorBiblioteca {
                             Actualizador.hechas = h
                             alProgreso(h, lista.size, c.titulo)
                         }
-                    }
+                    } } finally { porFuente[c.fuenteId]?.unlock() }
                 }
             }.awaitAll()
         }

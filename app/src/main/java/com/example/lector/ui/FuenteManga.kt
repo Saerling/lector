@@ -385,7 +385,12 @@ fun FichaMangaScreen(
         if (PruebaAuto.abrirRecomendacion && !recs.isNullOrEmpty()) {
             PruebaAuto.abrirRecomendacion = false
             kotlinx.coroutines.delay(1500)
-            abrirRecomendacion(recs.first())
+            // La primera que la fuente tenga (antes solo se probaba la primera y, si no estaba, la prueba no decía nada).
+            for (r in recs.take(8)) {
+                val hallado = runCatching { buscarEnFuente(motor, f, r.titulos.ifEmpty { listOf(r.titulo) }) }.getOrNull()
+                android.util.Log.i("LectorPrueba", "recomendación «${r.titulo}» en ${f.nombre}: ${hallado?.titulo ?: "no está"}")
+                if (hallado != null) { alAbrirOtro(f, hallado); break }
+            }
         }
     }
 
@@ -1325,17 +1330,20 @@ fun LeerOnlineScreen(
     val alm = almacen ?: remember { Almacen.obtener(ctx) }
     // Como «Saltar capítulos duplicados» de Komikku: de los capítulos con el mismo número (varios grupos de traducción)
     // queda el que se abre o, si no, el del mismo grupo; así la lectura continua no repite el capítulo.
-    val (capsLeer, indiceLeer) = remember(capitulos, indiceInicial, alm.saltarDuplicados) {
+    val (capsLeer, indiceLeer) = remember(capitulos, indiceInicial, alm.saltarDuplicados, alm.saltarLeidos) {
         val actual = capitulos.getOrNull(indiceInicial)
-        if (!alm.saltarDuplicados || actual == null) capitulos to indiceInicial
+        if ((!alm.saltarDuplicados && !alm.saltarLeidos) || actual == null) capitulos to indiceInicial
         else {
+            // «Saltar capítulos leídos» de Mihon: al pasar de capítulo no se entra en los ya leídos.
+            val base = if (!alm.saltarLeidos) capitulos else capitulos.filter { it === actual || !ext.esLeido(f.id, manga?.url.orEmpty(), it.url) }
+            if (!alm.saltarDuplicados) return@remember base to base.indexOf(actual).coerceAtLeast(0)
             val elegido = HashMap<Float, CapituloFuente>()
-            capitulos.forEach { c ->
+            base.forEach { c ->
                 if (c.numero < 0f) return@forEach
                 val ya = elegido[c.numero]
                 if (ya == null || c === actual || (ya !== actual && ya.scanlator != actual.scanlator && c.scanlator == actual.scanlator)) elegido[c.numero] = c
             }
-            val lista = capitulos.filter { it.numero < 0f || elegido[it.numero] === it }
+            val lista = base.filter { it.numero < 0f || elegido[it.numero] === it }
             lista to lista.indexOf(actual).coerceAtLeast(0)
         }
     }
@@ -1350,7 +1358,8 @@ fun LeerOnlineScreen(
     val terminados = remember { mutableSetOf<String>() }
     fun borrarLeidos(salvo: String?) {
         if (!alm.borrarAlLeer) return
-        terminados.filter { it != salvo }.forEach { url ->
+        // Como Mihon: los capítulos con marcador no se borran salvo que se permita en Ajustes → Descargas.
+        terminados.filter { it != salvo && (alm.borrarMarcados || !ext.esMarcado(f.id, urlM, it)) }.forEach { url ->
             if (alm.estaDescargado(f.id, urlM, url)) alm.borrarDescarga(f.id, urlM, url)
             terminados.remove(url)
         }

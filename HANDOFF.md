@@ -880,3 +880,10 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Portada panorámica: `EstiloApp.panoramica` (Personalización → Estilo), filas de Historial y Actualizaciones 1,6× de ancho si la portada es apaisada.
 - Prueba de recomendaciones: toca la primera portada si el título no está en pantalla.
 - Sigue faltando: sincronización entre dispositivos (solo hay copias y WebDAV).
+
+## 2cc. PASO 81 (0.72) — Comparación completa y remates
+- `COMPARACION_KOMIKKU.md`: opciones que faltan por menú, código copiable y optimizaciones, con orden sugerido.
+- Lector: «Saltar capítulos leídos» (prefs saltar_leidos). Descargas: «borrar al leer» respeta los capítulos con marcador (prefs borrar_marcados).
+- Avanzado: «Borrar los datos de WebView» y «Revocar la confianza en extensiones desconocidas» (`ExtManager.revocarConfianza`).
+- Revisión de biblioteca agrupada por fuente (5 fuentes a la vez, cada una en serie), como LibraryUpdateJob.
+- Prueba: «autorec» abre la primera recomendación que la fuente tenga (hasta 8).

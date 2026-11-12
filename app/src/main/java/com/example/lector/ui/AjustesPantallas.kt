@@ -492,6 +492,7 @@ fun AjDescargasScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> Un
         Divisor()
         TituloSeccion("Al leer")
         FilaSwitch("Borrar al terminar de leer", "Borra el capítulo descargado cuando lo terminas", almacen.borrarAlLeer) { almacen.borrarAlLeer = it }
+        if (almacen.borrarAlLeer) FilaSwitch("Borrar también los capítulos con marcador", null, almacen.borrarMarcados) { almacen.borrarMarcados = it }
         LText("Descargar por adelantado (mangas de la biblioteca)", LectorType.Body.copy(fontSize = 15.sp), Modifier.padding(start = 24.dp, top = 10.dp))
         val opciones = listOf(0, 1, 2, 3, 5, 10)
         FilaChips(listOf("No", "1", "2", "3", "5", "10"), opciones.indexOf(almacen.descargarAdelante).coerceAtLeast(0)) {
@@ -867,6 +868,9 @@ fun AjAvanzadoScreen(almacen: Almacen, onBack: () -> Unit) {
     }
     PaginaAjustes("Avanzado", onBack) {
         TituloSeccion("Extensiones")
+        FilaAjuste(Icons.Rounded.Delete, "Revocar la confianza en extensiones desconocidas", "Las que no vienen de tus listados vuelven a pedir «Confiar»") {
+            com.example.lector.ext.ExtManager.obtener(ctx).revocarConfianza(); Avisos.mostrar("Confianza revocada")
+        }
         FilaAjuste(Icons.Rounded.Refresh, "Diagnóstico de extensiones", "Escanea las extensiones instaladas y dice por qué falta alguna. Se puede copiar para enviarlo.") {
             Avisos.mostrar("Escaneando extensiones…")
             escanear()
@@ -885,6 +889,13 @@ fun AjAvanzadoScreen(almacen: Almacen, onBack: () -> Unit) {
         }
         FilaAjuste(Icons.Rounded.Delete, "Borrar las cookies", "Cierra las sesiones iniciadas en los sitios de las fuentes") {
             CookieManager.getInstance().removeAllCookies { Avisos.mostrar("Cookies borradas") }
+        }
+        FilaAjuste(Icons.Rounded.Delete, "Borrar los datos de WebView", "Caché y almacenamiento del navegador interno (Cloudflare, inicios de sesión)") {
+            runCatching {
+                android.webkit.WebStorage.getInstance().deleteAllData()
+                android.webkit.WebView(ctx).apply { clearCache(true); clearHistory(); destroy() }
+            }
+            Avisos.mostrar("Datos de WebView borrados")
         }
         FilaAjuste(Icons.Rounded.Delete, "Vaciar la caché de red", null) {
             File(ctx.cacheDir, "network_cache").deleteRecursively()

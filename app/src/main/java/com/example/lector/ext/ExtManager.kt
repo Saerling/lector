@@ -756,6 +756,13 @@ class ExtManager private constructor(private val app: Context) {
         scope.launch { cargarFuentesReales(e.pkg) }
     }
 
+    /** Como «Revoke trusted unknown extensions» de Mihon. */
+    fun revocarConfianza() {
+        confiadas.clear()
+        prefs.edit().putStringSet("confiadas", emptySet()).apply()
+        confiadasVersion++
+    }
+
     fun dejarDeConfiar(e: ExtInstalada) {
         confiadas -= "${e.pkg}:${e.firma}"
         prefs.edit().putStringSet("confiadas", confiadas.toSet()).apply()
