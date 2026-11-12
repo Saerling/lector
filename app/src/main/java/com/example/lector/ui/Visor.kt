@@ -1362,6 +1362,7 @@ private fun MenuPagina(
                 }
                 else {
                     OpcionPagina(Icons.Rounded.Share, "Compartir página") { conBytes { compartirImagen(ctx, it, titulo) } }
+                    OpcionPagina(Icons.Rounded.Add, "Copiar al portapapeles") { conBytes { copiarImagen(ctx, it) } }
                     OpcionPagina(Iconos.Descargar, "Guardar en el teléfono") { conBytes { Avisos.mostrar(guardarImagen(ctx, it, titulo, pagina)) } }
                     if (usarComoPortada != null) {
                         OpcionPagina(Icons.Rounded.Star, "Usar como portada") { conBytes { usarComoPortada(it); Avisos.mostrar("Portada cambiada") } }
@@ -1398,6 +1399,18 @@ private fun extensionImagen(b: ByteArray): String = when {
 }
 
 private fun mimeDe(ext: String) = when (ext) { "png" -> "image/png"; "webp" -> "image/webp"; "gif" -> "image/gif"; else -> "image/jpeg" }
+
+/** Copia una imagen al portapapeles (como «Copy to clipboard» del lector de Mihon). */
+suspend fun copiarImagen(ctx: Context, bytes: ByteArray) {
+    val ext = extensionImagen(bytes)
+    val archivo = withContext(Dispatchers.IO) {
+        File(File(ctx.cacheDir, "compartir").apply { mkdirs() }, "copiada.$ext").apply { writeBytes(bytes) }
+    }
+    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.archivos", archivo)
+    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    cm.setPrimaryClip(android.content.ClipData.newUri(ctx.contentResolver, "Página", uri))
+    if (android.os.Build.VERSION.SDK_INT < 33) Avisos.mostrar("Página copiada")
+}
 
 /** Comparte una imagen con otras apps (vía FileProvider). */
 suspend fun compartirImagen(ctx: Context, bytes: ByteArray, texto: String) {

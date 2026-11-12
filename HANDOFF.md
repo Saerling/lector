@@ -893,3 +893,8 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Descargas.encolar: no encola con menos de 200 MB libres. NetworkHelper: agente de usuario de prefs `user_agent`.
 - `FilaCategoriasExcluidas` (AjustesPantallas) reutiliza `DialogoAsignarCategorias`.
 - Lo que queda está en `COMPARACION_KOMIKKU.md` §4.
+
+## 2ce. PASO 83 (0.74) — Menús fuera de Ajustes + prueba de todas las pantallas de ajustes
+- WebView con menú ⋮, «Solo descargados» en Más (usa `fDescargados`), «Borrar cookies» en el detalle de extensión, `copiarImagen` en el menú de página.
+- Prueba: intent `probar-ruta:<Ruta>` (LectorApp) y bloque «Ajustes» en probar.sh: abre 15 pantallas, las desplaza, detecta cierres y comprueba que están las opciones nuevas (`falta`). Aviso «Ajustes» en el run.
+- `COMPARACION_KOMIKKU.md` §3b: menús cotejados y lo que sigue faltando.

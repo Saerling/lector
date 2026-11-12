@@ -80,6 +80,15 @@ fun MasScreen(almacen: Almacen, onRuta: (Ruta) -> Unit, onAdd: () -> Unit, onAdd
             Modifier.entrada(i++), destacado = almacen.incognito, onClick = { almacen.incognito = !almacen.incognito },
         ) { Interruptor(almacen.incognito, { almacen.incognito = it }) }
         run {
+            // «Downloaded only» de Mihon: la biblioteca muestra solo lo que tiene capítulos descargados.
+            val solo = almacen.fDescargados == com.example.lector.Tri.INCLUIR
+            fun cambiar(v: Boolean) { almacen.fDescargados = if (v) com.example.lector.Tri.INCLUIR else com.example.lector.Tri.IGNORAR }
+            BurbujaMas(
+                Iconos.Descargar, "Solo descargados", "La biblioteca muestra solo lo que puedes leer sin conexión",
+                Modifier.entrada(i++), destacado = solo, onClick = { cambiar(!solo) },
+            ) { Interruptor(solo, { cambiar(it) }) }
+        }
+        run {
             val sfw = com.example.lector.ModoContenido.modo == com.example.lector.ModoContenido.Modo.SFW
             val nsfw = com.example.lector.ModoContenido.modo == com.example.lector.ModoContenido.Modo.NSFW
             BurbujaMas(

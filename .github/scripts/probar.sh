@@ -92,6 +92,30 @@ while read -r corto pkg url <&3; do
   adb uninstall "$pkg" >/dev/null 2>&1 || true
 done 3< madara.txt
 
+# ---- Ajustes: abrir cada pantalla, desplazarla entera y comprobar que no se cierra y que están las opciones nuevas ----
+echo "===== Ajustes =====" >> fallos.txt
+TAM=$(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1); W=${TAM%x*}; H=${TAM#*x}
+for r in Ajustes Apariencia AjBiblioteca AjSeguimiento AjVisor AjDescargas AjExplorar AjSeguridad AjAvanzado Datos Categorias Estadisticas AcercaDe Descargas MigracionesRecientes; do
+  adb shell am force-stop com.example.lector; adb logcat -c
+  adb shell am start -n com.example.lector/.MainActivity --es destino "probar-ruta:$r" >/dev/null
+  sleep 7; : > "textos-$r.txt"
+  for k in 1 2 3 4 5; do
+    volcar "ui-ruta.xml"; grep -o 'text="[^"]*"' ui-ruta.xml | sed 's/text=//' >> "textos-$r.txt"
+    adb shell input swipe $((W/2)) $((H*78/100)) $((W/2)) $((H*30/100)) 300; sleep 1
+  done
+  n=$(sort -u "textos-$r.txt" | grep -vc '^""$')
+  if adb shell pidof com.example.lector >/dev/null && ! adb logcat -d | grep -q "FATAL EXCEPTION"; then echo "$r: bien ($n textos)" >> fallos.txt
+  else { echo "$r: SE CERRÓ"; adb logcat -d | grep -A12 "FATAL EXCEPTION" | head -14; } >> fallos.txt; fi
+done
+falta() { grep -qF "$2" "textos-$1.txt" || echo "FALTA EN $1: $2" >> fallos.txt; }
+falta AjBiblioteca "Categoría por defecto al añadir"; falta AjBiblioteca "Revisión inteligente"; falta AjBiblioteca "Categorías que no se revisan"
+falta AjBiblioteca "Marcar leído el capítulo repetido"; falta AjDescargas "Borrar al marcar como leído"; falta AjSeguimiento "Subir el progreso al marcar como leído"
+falta AjExplorar "Extensiones privadas"; falta AjSeguridad "Ocultar el contenido de las notificaciones"; falta AjAvanzado "Agente de usuario"
+falta AjAvanzado "Borrar los datos de WebView"; falta AjAvanzado "Revocar la confianza en extensiones desconocidas"
+falta Datos "Exportar la lista de la biblioteca"; falta Datos "Limpiar datos de mangas que no tienes"
+falta AjVisor "Saltar capítulos leídos"; falta AjVisor "Saltar capítulos duplicados"; falta AjVisor "Girar las páginas anchas"
+echo "Opciones nuevas comprobadas" >> fallos.txt
+
 # ---- Recomendaciones: abrir una desde la ficha (en la MISMA fuente) y volver con «atrás» a la ficha de antes ----
 # Toca el centro del primer elemento con ese texto (o, con $3, el primero que esté por debajo de ese texto).
 tocar() {

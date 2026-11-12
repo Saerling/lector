@@ -176,6 +176,10 @@ fun Inicio(
             }
             else -> {
                 val depurable = (contexto.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                // Prueba del emulador: «probar-ruta:AjBiblioteca» abre esa pantalla de ajustes directamente.
+                if (destino?.startsWith("probar-ruta:") == true && depurable) {
+                    runCatching { Ruta.valueOf(destino.removePrefix("probar-ruta:")) }.getOrNull()?.let { ruta = it }
+                }
                 if (destino?.startsWith("probar:") == true && depurable) {
                     paquetePrueba = destino.removePrefix("probar:").substringBefore('|')
                     if (destino.endsWith("|autorec")) PruebaAuto.abrirRecomendacion = true

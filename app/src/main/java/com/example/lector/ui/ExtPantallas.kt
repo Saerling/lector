@@ -274,6 +274,17 @@ fun ExtDetalleScreen(ext: ExtManager, pkg: String, onBack: () -> Unit) {
                         if (a != null && !e.confiable) CircleAction(Icons.Rounded.Check, "Confiar", { ext.confiar(e) })
                         if (e.confiable) CircleAction(Icons.Rounded.Close, "Dejar de confiar", { ext.dejarDeConfiar(e) })
                         if (a != null || !e.confiable) CircleAction(Icons.Rounded.Info, "Información de la app", abrirInfo)
+                        CircleAction(Icons.Rounded.Refresh, "Borrar cookies", {
+                            val n = runCatching {
+                                val cm = android.webkit.CookieManager.getInstance()
+                                ext.fuentes.filter { it.pkg == e.pkg && it.baseUrl.startsWith("http") }.map { it.baseUrl }.distinct().sumOf { url ->
+                                    val cs = cm.getCookie(url)?.split(';').orEmpty()
+                                    cs.forEach { c -> cm.setCookie(url, c.substringBefore('=').trim() + "=; Max-Age=-1") }
+                                    cs.size
+                                }.also { cm.flush() }
+                            }.getOrDefault(0)
+                            Avisos.mostrar("$n cookies borradas")
+                        })
                         CircleAction(Icons.Rounded.Delete, "Desinstalar", { ext.desinstalar(e.pkg) })
                     }
                 }

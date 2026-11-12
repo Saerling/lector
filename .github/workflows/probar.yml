@@ -46,6 +46,8 @@ jobs:
           echo "::notice title=Pruebas finales::${msg2}"
           msg3=$(grep -E "restaurar ms=|crear ms=|Java Heap|TOTAL PSS|LA APP|FATAL" fallos.txt | cut -c1-420 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::notice title=Copias::${msg3}"
+          msg4=$(sed -n '/===== Ajustes/,/Opciones nuevas comprobadas/p' fallos.txt | cut -c1-300 | sed -e 's/%/%25/g' | head -60 | awk '{printf "%s%%0A", $0}')
+          echo "::notice title=Ajustes::${msg4}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -1,5 +1,7 @@
 package com.example.lector.ui
 
+import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.rounded.MoreVert
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
@@ -60,6 +62,29 @@ fun WebViewScreen(url: String, tituloInicial: String, cabeceras: Map<String, Str
             BotonAtras({ alVolver() })
             Spacer(Modifier.width(14.dp))
             LText(titulo, LectorType.Section.copy(fontSize = 18.sp), Modifier.weight(1f), maxLines = 1)
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                Box(
+                    Modifier.size(44.dp).pressable { menu = true }.clip(CircleShape).background(LectorColors.PillFill), Alignment.Center,
+                ) { Icon(Icons.Rounded.MoreVert, "Más", tint = LectorColors.Text) }
+                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                    @Composable fun op(t: String, f: () -> Unit) =
+                        androidx.compose.material3.DropdownMenuItem({ androidx.compose.material3.Text(t) }, { menu = false; f() })
+                    op("Atrás") { if (web?.canGoBack() == true) web?.goBack() }
+                    op("Adelante") { if (web?.canGoForward() == true) web?.goForward() }
+                    op("Recargar") { web?.reload() }
+                    op("Compartir enlace") { compartirTexto(ctx, actual) }
+                    op("Borrar las cookies de este sitio") {
+                        runCatching {
+                            val cm = android.webkit.CookieManager.getInstance()
+                            cm.getCookie(actual)?.split(';')?.forEach { c -> cm.setCookie(actual, c.substringBefore('=').trim() + "=; Max-Age=-1") }
+                            cm.flush()
+                        }
+                        Avisos.mostrar("Cookies del sitio borradas"); web?.reload()
+                    }
+                }
+            }
+            Spacer(Modifier.width(8.dp))
             Box(
                 Modifier.size(44.dp).pressable {
                     runCatching {

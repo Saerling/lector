@@ -1,4 +1,4 @@
-# Shiori 0.73 frente a Komikku y Mihon — qué falta, qué copiar y qué optimizar
+# Shiori 0.74 frente a Komikku y Mihon — qué falta, qué copiar y qué optimizar
 
 Método (2026-11-11): se sacaron todos los ajustes de las pantallas de Komikku (`presentation/more/settings/screen/*`, 27 pantallas)
 y se buscaron uno a uno en el código de Shiori por palabras clave. **«Falta» significa que la búsqueda no encontró nada**; alguno
@@ -116,6 +116,24 @@ Ya copiados: source‑api, red (Cloudflare, límites, DoH), ChapterRecognition, 
 | Biblioteca y estado | Base de datos SQLite (SQLDelight) con consultas | Shiori guarda JSON y archivos por manga; con 6500 mangas restaurar tarda ~29 s y crear copia ~40 s en el emulador. Migrar es un trabajo grande |
 | Descargas | Caché de descargas en memoria con renovación | Shiori ya usa un conjunto en memoria |
 | `press3D`/`pressableCon` con `composed {}` | — | Pendiente desde el paso 9: pasar a `Modifier.Node` |
+
+## 3b. Menús que no son de Ajustes (cotejados en 0.74)
+Se sacaron las entradas de 30 archivos de Komikku (hoja de biblioteca, hoja de capítulos, ficha, selección, actualizaciones,
+historial, explorar, extensiones, cola de descargas, Más, WebView, seguimiento y lector) y se buscaron en Shiori.
+
+Añadido en 0.74: menú del WebView (atrás, adelante, recargar, compartir, borrar cookies del sitio) · «Solo descargados» en Más ·
+borrar las cookies de una extensión · copiar una página al portapapeles.
+
+Sigue faltando:
+| Menú | Entrada | Nota |
+|---|---|---|
+| Biblioteca → Filtro | Subido de tono («lewd»), intervalo propio | Hay modos SFW/NSFW; no existe intervalo por manga. |
+| Biblioteca → Orden | Puntuación del seguimiento | Depende de traer la puntuación. |
+| Biblioteca → Vista | Esconder las pestañas de categorías, icono de la fuente como insignia | |
+| Fuentes | Excluir una fuente del ahorro de datos | |
+| Extensión | Activar/desactivar todas sus fuentes, incógnito por extensión, abrir su repositorio, etiquetas «obsoleta/redundante» | |
+| Seguimiento | Fechas de inicio y fin, puntuación, seguimiento privado | |
+| Lector | Zona inicial del zoom, modo de mezcla del filtro de color, margen central y páginas dobles | |
 
 ## 4. Lo que queda, por tamaño
 Mediano (una sesión cada uno): seguimiento con puntuación/estado y traer progreso · GIF animados y páginas dobles lado a lado ·
