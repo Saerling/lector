@@ -68,6 +68,11 @@ class CapitulosConocidos(carpetaBase: File) {
         return File(carpeta, h)
     }
 
+    fun limpiar(conservar: Set<Pair<Long, String>>): Int {
+        val nombres = conservar.mapTo(HashSet()) { archivo(it.first, it.second).name }
+        return carpeta.listFiles()?.count { it.isFile && it.name !in nombres && it.delete() } ?: 0
+    }
+
     /** null = nunca se registró (no es lo mismo que una lista vacía). */
     fun leer(fuenteId: Long, urlManga: String): Set<String>? {
         val f = archivo(fuenteId, urlManga)

@@ -448,6 +448,14 @@ fun AjBibliotecaScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> U
             }
         }
         FilaAjuste(Icons.Rounded.Menu, "Categorías", "Crear, ordenar, ocultar y renombrar") { onRuta(Ruta.Categorias) }
+        run {
+            val cats = almacen.categorias()
+            val opciones = listOf("" to "Preguntar siempre", "-" to "Ninguna, sin preguntar") + cats.map { it.id to it.nombre }
+            val i = opciones.indexOfFirst { it.first == almacen.catDefecto }.coerceAtLeast(0)
+            FilaAjuste(Icons.Rounded.Add, "Categoría por defecto al añadir", opciones[i].second + " · toca para cambiar") {
+                almacen.catDefecto = opciones[(i + 1) % opciones.size].first
+            }
+        }
 
         Divisor()
         TituloSeccion("Buscar capítulos nuevos automáticamente")
@@ -463,7 +471,10 @@ fun AjBibliotecaScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> U
         FilaSwitch("Saltar los que tienen capítulos sin leer", "Solo revisa los mangas que llevas al día", almacen.actSaltarSinLeer) { almacen.actSaltarSinLeer = it }
         FilaSwitch("Revisión inteligente", "Solo revisa los mangas que esperan capítulo hoy, según su ritmo de publicación (como Komikku). Los parados se revisan cada vez menos", almacen.actInteligente) { almacen.actInteligente = it }
         FilaSwitch("Saltar los no empezados", "No revisa los mangas de los que aún no has leído nada", almacen.actSaltarNoEmpezados) { almacen.actSaltarNoEmpezados = it }
+        FilaCategoriasExcluidas(almacen, "Categorías que no se revisan", almacen.actCatExcluidas) { almacen.actCatExcluidas = it }
+        FilaSwitch("Marcar leído el capítulo repetido", "Si sale otra versión de un capítulo cuyo número ya leíste, queda leída", almacen.marcarDuplicadosNuevos) { almacen.marcarDuplicadosNuevos = it }
         FilaSwitch("Descargar los capítulos nuevos", "Los pone en la cola de descargas al encontrarlos", almacen.descargarNuevos) { almacen.descargarNuevos = it }
+        if (almacen.descargarNuevos) FilaCategoriasExcluidas(almacen, "Categorías que no se descargan solas", almacen.descCatExcluidas) { almacen.descCatExcluidas = it }
         LText(
             "Las revisiones automáticas avisan con una notificación de los capítulos nuevos. Android puede retrasarlas para ahorrar batería.",
             LectorType.Label.copy(fontSize = 13.sp), Modifier.padding(horizontal = 24.dp, vertical = 8.dp), color = LectorColors.Muted,
@@ -492,7 +503,8 @@ fun AjDescargasScreen(almacen: Almacen, onBack: () -> Unit, onRuta: (Ruta) -> Un
         Divisor()
         TituloSeccion("Al leer")
         FilaSwitch("Borrar al terminar de leer", "Borra el capítulo descargado cuando lo terminas", almacen.borrarAlLeer) { almacen.borrarAlLeer = it }
-        if (almacen.borrarAlLeer) FilaSwitch("Borrar también los capítulos con marcador", null, almacen.borrarMarcados) { almacen.borrarMarcados = it }
+        FilaSwitch("Borrar al marcar como leído", "También cuando lo marcas a mano desde la ficha", almacen.borrarAlMarcar) { almacen.borrarAlMarcar = it }
+        if (almacen.borrarAlLeer || almacen.borrarAlMarcar) FilaSwitch("Borrar también los capítulos con marcador", null, almacen.borrarMarcados) { almacen.borrarMarcados = it }
         LText("Descargar por adelantado (mangas de la biblioteca)", LectorType.Body.copy(fontSize = 15.sp), Modifier.padding(start = 24.dp, top = 10.dp))
         val opciones = listOf(0, 1, 2, 3, 5, 10)
         FilaChips(listOf("No", "1", "2", "3", "5", "10"), opciones.indexOf(almacen.descargarAdelante).coerceAtLeast(0)) {
@@ -528,6 +540,8 @@ fun AjSeguimientoScreen(almacen: Almacen, onBack: () -> Unit) {
     val contexto = LocalContext.current
     var clientId by remember { mutableStateOf(almacen.anilistClientId) }
     PaginaAjustes("Seguimiento", onBack) {
+        FilaSwitch("Subir el progreso al marcar como leído", "También al marcar capítulos a mano, no solo al leerlos", almacen.segAlMarcar) { almacen.segAlMarcar = it }
+        Divisor()
         TituloSeccion("Otros servicios")
         CuentasSeguimiento()
         Divisor()
@@ -685,6 +699,18 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
         ) ocupado()
     }
     // Copia en el formato de Mihon / Komikku (.tachibk): para pasar la biblioteca a esas apps.
+    val crearCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    val fuentes = com.example.lector.ext.ExtManager.obtener(contexto).fuentes.associate { it.id to it.nombre }
+                    val texto = almacen.bibliotecaCsv { id -> fuentes[id] ?: "Fuente $id" }
+                    contexto.contentResolver.openOutputStream(uri)!!.use { it.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())); it.write(texto.toByteArray()) }
+                }.isSuccess
+            }
+            Avisos.mostrar(if (ok) "Lista exportada" else "No se pudo exportar")
+        }
+    }
     val crearTachibk = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null && !TareaCopia.lanzar(contexto, "Creando copia .tachibk") {
                 val informe = contexto.contentResolver.openOutputStream(uri)?.use { com.example.lector.Tachibk.crear(contexto, it, this) }
@@ -736,6 +762,7 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         FilaAjuste(Icons.Rounded.Share, "Crear copia", "Guardar en un archivo .json") { crear.launch(CopiaSeguridad.nombreArchivo()) }
         FilaAjuste(Icons.Rounded.Refresh, "Restaurar copia", "De Lector (.json) o de Mihon, Komikku, TachiyomiSY… (.tachibk)") { restaurar.launch(arrayOf("*/*")) }
+        FilaAjuste(Icons.Rounded.List, "Exportar la lista de la biblioteca", "Archivo .csv con título, autor, fuente y progreso") { crearCsv.launch("biblioteca-shiori.csv") }
         FilaAjuste(Icons.Rounded.Share, "Exportar para Mihon / Komikku", "Archivo .tachibk con tus mangas de fuentes, capítulos leídos, categorías e historial") {
             crearTachibk.launch(com.example.lector.Tachibk.nombreArchivo())
         }
@@ -776,6 +803,12 @@ fun DatosScreen(almacen: Almacen, alRecargar: () -> Unit, onBack: () -> Unit) {
 
         Divisor()
         TituloSeccion("Almacenamiento")
+        FilaAjuste(Icons.Rounded.Delete, "Limpiar datos de mangas que no tienes", "Fichas y listas de capítulos guardadas de mangas que no están en la biblioteca ni en el historial") {
+            scope.launch {
+                val n = withContext(Dispatchers.IO) { almacen.limpiarHuerfanos() }
+                Avisos.mostrar(if (n == 0) "No había nada que limpiar" else "$n archivos borrados")
+            }
+        }
         FilaAjuste(Icons.Rounded.Delete, "Vaciar la caché de imágenes", "Portadas guardadas: $tamImagenes") {
             scope.launch {
                 withContext(Dispatchers.IO) { Imagenes.vaciar() }
@@ -820,6 +853,7 @@ fun AjSeguridadScreen(almacen: Almacen, onBack: () -> Unit) {
         }
         Divisor()
         TituloSeccion("Privacidad")
+        FilaSwitch("Ocultar el contenido de las notificaciones", "No se ven en la pantalla de bloqueo", almacen.ocultarNotificaciones) { almacen.ocultarNotificaciones = it }
         FilaSwitch("Pantalla segura", "Oculta la app en la lista de recientes e impide capturas", almacen.pantallaSegura) { almacen.pantallaSegura = it }
         FilaSwitch("Modo incógnito", "No se anota nada en el historial mientras esté activo", almacen.incognito) { almacen.incognito = it }
         val modoC = com.example.lector.ModoContenido.modo
@@ -882,6 +916,29 @@ fun AjAvanzadoScreen(almacen: Almacen, onBack: () -> Unit) {
             ahorro = it
             ctx.getSharedPreferences("lector", android.content.Context.MODE_PRIVATE).edit().putBoolean("ahorro_datos", it).apply()
         }
+        var uaAbierto by remember { mutableStateOf(false) }
+        val prefsUa = remember { ctx.getSharedPreferences("lector", android.content.Context.MODE_PRIVATE) }
+        var ua by remember { mutableStateOf(prefsUa.getString("user_agent", "").orEmpty()) }
+        FilaAjuste(Icons.Rounded.Edit, "Agente de usuario", if (ua.isBlank()) "El de fábrica (Chrome en Android)" else ua) { uaAbierto = true }
+        if (uaAbierto) {
+            var texto by remember { mutableStateOf(ua) }
+            DialogoAlerta(
+                onDismissRequest = { uaAbierto = false },
+                title = { Text("Agente de usuario") },
+                text = {
+                    androidx.compose.material3.OutlinedTextField(
+                        texto, { texto = it }, placeholder = { Text("Vacío = el de fábrica") }, maxLines = 4,
+                    )
+                },
+                dismissButton = { TextButton({ texto = "" }) { Text("Restablecer") } },
+                confirmButton = {
+                    TextButton({
+                        ua = texto.trim(); prefsUa.edit().putString("user_agent", ua).apply(); uaAbierto = false
+                        Avisos.mostrar("Se aplica a las peticiones nuevas")
+                    }) { Text("Guardar") }
+                },
+            )
+        }
         LText("DNS sobre HTTPS (para las fuentes)", LectorType.Body.copy(fontSize = 15.sp), Modifier.padding(start = 24.dp, top = 4.dp))
         FilaChips(listOf("Desactivado", "Cloudflare", "Google", "AdGuard", "Quad9"), almacen.doh.coerceIn(0, 4)) {
             almacen.doh = it
@@ -889,6 +946,9 @@ fun AjAvanzadoScreen(almacen: Almacen, onBack: () -> Unit) {
         }
         FilaAjuste(Icons.Rounded.Delete, "Borrar las cookies", "Cierra las sesiones iniciadas en los sitios de las fuentes") {
             CookieManager.getInstance().removeAllCookies { Avisos.mostrar("Cookies borradas") }
+        }
+        FilaAjuste(Icons.Rounded.Refresh, "Restablecer el modo de lectura de cada serie", "Todas vuelven al modo general") {
+            Avisos.mostrar("${almacen.restablecerModosDeSerie()} series restablecidas")
         }
         FilaAjuste(Icons.Rounded.Delete, "Borrar los datos de WebView", "Caché y almacenamiento del navegador interno (Cloudflare, inicios de sesión)") {
             runCatching {
@@ -1045,4 +1105,22 @@ internal fun VistaBarra(s: Superficie, modifier: Modifier = Modifier) {
     ) {
         Box(Modifier.padding(4.dp).size(28.dp, 18.dp).clip(forma).background(LectorColors.Iluminada))
     }
+}
+
+
+/** Fila que abre las casillas de categorías y guarda las elegidas como ids separados por coma. */
+@Composable
+private fun FilaCategoriasExcluidas(almacen: Almacen, titulo: String, valor: String, alCambiar: (String) -> Unit) {
+    var abierto by remember { mutableStateOf(false) }
+    val cats = almacen.categorias()
+    val elegidas = almacen.idsDe(valor)
+    val nombres = cats.filter { it.id in elegidas }.joinToString(", ") { it.nombre }
+    FilaAjuste(Icons.Rounded.Close, titulo, nombres.ifBlank { "Ninguna" }) {
+        if (cats.isEmpty()) Avisos.mostrar("Aún no tienes categorías") else abierto = true
+    }
+    if (abierto) DialogoAsignarCategorias(
+        categorias = cats, seleccionInicial = elegidas,
+        alEditar = { abierto = false }, alCancelar = { abierto = false },
+        alAceptar = { alCambiar(it.joinToString(",")); abierto = false },
+    )
 }

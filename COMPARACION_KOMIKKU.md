@@ -1,10 +1,16 @@
-# Shiori 0.72 frente a Komikku y Mihon — qué falta, qué copiar y qué optimizar
+# Shiori 0.73 frente a Komikku y Mihon — qué falta, qué copiar y qué optimizar
 
 Método (2026-11-11): se sacaron todos los ajustes de las pantallas de Komikku (`presentation/more/settings/screen/*`, 27 pantallas)
 y se buscaron uno a uno en el código de Shiori por palabras clave. **«Falta» significa que la búsqueda no encontró nada**; alguno
 podría existir con otro nombre. No se compararon las pantallas a mano una por una. Las funciones ya hechas están en `FUNCIONES_KOMIKKU.md`.
 
 Prioridad: 🔴 se nota a diario · 🟡 útil · ⚪ nicho.
+
+## 0. Hecho en 0.73 (salió de esta lista)
+Categoría por defecto al añadir · categorías que no se revisan / no se descargan solas · marcar leído el capítulo repetido ·
+borrar al marcar como leído · aviso de poco espacio (200 MB) · progreso de seguimiento al marcar a mano · girar páginas anchas ·
+agente de usuario · limpiar datos de mangas que no tienes · exportar la biblioteca a CSV · ocultar notificaciones ·
+restablecer el modo de lectura por serie. (El tamaño de descargas y cachés ya se mostraba.)
 
 ## 1. Opciones que faltan, por menú
 
@@ -13,7 +19,6 @@ Prioridad: 🔴 se nota a diario · 🟡 útil · ⚪ nicho.
 |---|---|---|
 | Zona inicial del zoom (izquierda/derecha/centro/automática) | 🟡 | |
 | Ampliar solas las páginas apaisadas + desplazarlas («pan wide images») | 🟡 | |
-| Girar las páginas anchas para que encajen | 🟡 | |
 | Páginas dobles lado a lado (TachiyomiSY: «page layout») | 🟡 | Tablet Huawei: es donde más se nota. |
 | GIF/WebP animados | 🟡 | Hoy se ven quietos. |
 | Mostrar el modo de lectura y las zonas de toque al abrir | ⚪ | |
@@ -29,10 +34,7 @@ Ya están: saltar leídos (0.72), saltar duplicados, saltar filtrados (el lector
 | Opción | Prioridad | Nota |
 |---|---|---|
 | Dividir imágenes altas al descargar | 🟡 | El lector ya corta en tiras al mostrar; esto lo deja hecho en disco. |
-| Borrar al marcar como leído a mano | 🟡 | Hoy solo al terminar de leer. |
-| Categorías excluidas (de «borrar al leer» y de «descargar nuevos») | 🟡 | |
 | No descargar capítulos duplicados ya leídos | 🟡 | |
-| Comprobar espacio libre antes de descargar | 🟡 | Mihon avisa con menos de 200 MB. |
 | `ComicInfo.xml` dentro del .cbz | ⚪ | Para abrirlos bien en otros lectores. |
 | Contraseña para los .cbz | ⚪ | |
 | Reindexar descargas | ⚪ | |
@@ -42,9 +44,6 @@ Ya están: solo Wi‑Fi, fuentes a la vez, descargar adelante, descargar nuevos,
 ### Biblioteca y revisión
 | Opción | Prioridad | Nota |
 |---|---|---|
-| Categoría por defecto al añadir | 🔴 | Con 6000 entradas ahorra el diálogo cada vez. |
-| Categorías incluidas/excluidas de la revisión | 🔴 | Hoy solo se puede revisar una categoría a mano. |
-| Marcar como leído el capítulo nuevo si ya leíste ese número | 🟡 | Parte hecha en el lector (duplicados). |
 | Orden distinto por categoría | 🟡 | |
 | Refrescar portadas y datos al revisar (interruptor) | 🟡 | Hoy siempre se actualizan. |
 | Restricciones «sin datos medidos» y «batería no baja» | ⚪ | Hay Wi‑Fi y cargando. |
@@ -63,7 +62,6 @@ Ya están: solo Wi‑Fi, fuentes a la vez, descargar adelante, descargar nuevos,
 | Opción | Prioridad | Nota |
 |---|---|---|
 | Abrir el seguimiento al añadir a la biblioteca | 🟡 | |
-| Subir el progreso también al marcar leído a mano | 🟡 | Hoy solo al leer. |
 | Traer el progreso desde el servicio (sincronizar hacia la app) | 🟡 | |
 | Puntuación, estado y fechas en la hoja de seguimiento | 🟡 | La búsqueda no encontró puntuación. |
 | Shikimori, Bangumi | ⚪ | |
@@ -74,13 +72,7 @@ Ya están: solo Wi‑Fi, fuentes a la vez, descargar adelante, descargar nuevos,
 | Opción | Prioridad | Nota |
 |---|---|---|
 | Sincronización entre dispositivos (Google Drive / SyncYomi / WebDAV) | 🟡 | Hay copias en WebDAV, no fusión automática. |
-| Uso de almacenamiento por categoría/fuente | 🟡 | |
-| Limpiar datos de mangas que ya no están en la biblioteca | 🟡 | Fichas, conocidos e historial se acumulan. |
 | Vaciar la caché de capítulos al abrir | ⚪ | |
-| Exportar la lista de la biblioteca (CSV) | ⚪ | |
-| Esconder el contenido de las notificaciones | ⚪ | |
-| Agente de usuario configurable | 🟡 | Ayuda con Cloudflare cuando Chrome cambia de versión. |
-| Restablecer los ajustes de lector por serie | ⚪ | |
 | Igualar títulos de la biblioteca con la fuente | ⚪ | |
 | Compartir registros de fallos, registro detallado | ⚪ | Hay pantalla de fallos. |
 
@@ -125,10 +117,9 @@ Ya copiados: source‑api, red (Cloudflare, límites, DoH), ChapterRecognition, 
 | Descargas | Caché de descargas en memoria con renovación | Shiori ya usa un conjunto en memoria |
 | `press3D`/`pressableCon` con `composed {}` | — | Pendiente desde el paso 9: pasar a `Modifier.Node` |
 
-## 4. Orden sugerido
-1. Categoría por defecto + categorías incluidas/excluidas de la revisión.
-3. Seguimiento: progreso al marcar a mano, puntuación/estado, traer progreso.
-4. `ImageUtil`: dividir altas al descargar, GIF animado, páginas apaisadas.
-5. Limpiar datos huérfanos y uso de almacenamiento.
-6. Decodificador nativo por teselas.
-7. Sincronización sobre WebDAV.
+## 4. Lo que queda, por tamaño
+Mediano (una sesión cada uno): seguimiento con puntuación/estado y traer progreso · GIF animados y páginas dobles lado a lado ·
+dividir imágenes altas y `ComicInfo.xml` al descargar · Shikimori y Bangumi · atajos y widget.
+
+Grande (varias sesiones y hay que probarlo en un dispositivo): decodificador nativo por teselas · interfaz de tablet ·
+fuente local · sincronización entre dispositivos · pasar la biblioteca a base de datos.

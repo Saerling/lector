@@ -603,6 +603,7 @@ fun Visor(
                             escala = almacen.escalaPagina, filtro = filtro, dobleToque = almacen.dobleToqueZoom,
                             detectarAncha = dividir, onAncha = { dividirPagina(it.ref.indice) },
                             onToque = ::toque, onLargo = { menuPagina = ci to it.ref.indice },
+                            rotarAnchas = almacen.rotarAnchas,
                         )
                         is ItemVisor.Transicion -> Transicion(
                             siguiente = it.siguiente,
@@ -1037,8 +1038,12 @@ private fun PaginaPaginada(
     origen: OrigenPaginas, ref: RefPagina, anchoMax: Int, recortar: Boolean, escala: EscalaPagina,
     filtro: ColorFilter?, dobleToque: Boolean, detectarAncha: Boolean,
     onAncha: () -> Unit, onToque: (Offset, IntSize) -> Unit, onLargo: () -> Unit,
+    rotarAnchas: Boolean = false,
 ) {
-    val clave = CacheVisor.clave(origen, ref.indice, ref.mitad, anchoMax, recortar)
+    // Girar las páginas anchas: al ver que lo es, se vuelve a pedir girada (mitad 3).
+    var girada by remember(origen.id, ref.indice) { mutableStateOf(false) }
+    val mitadReal = if (girada && ref.mitad == 0) 3 else ref.mitad
+    val clave = CacheVisor.clave(origen, ref.indice, mitadReal, anchoMax, recortar)
     var pag by remember(clave) { mutableStateOf(CacheVisor.enMemoria(clave)) }
     var fallo by remember(clave) { mutableStateOf<String?>(null) }
     var intento by remember(clave) { mutableIntStateOf(0) }
@@ -1046,7 +1051,7 @@ private fun PaginaPaginada(
         if (pag == null) {
             fallo = null
             try {
-                pag = CacheVisor.obtener(origen, ref.indice, ref.mitad, anchoMax, recortar)
+                pag = CacheVisor.obtener(origen, ref.indice, mitadReal, anchoMax, recortar)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1054,6 +1059,7 @@ private fun PaginaPaginada(
             }
         }
         val p = pag
+        if (p != null && rotarAnchas && !detectarAncha && mitadReal == 0 && p.ancha) girada = true
         if (p != null && detectarAncha && ref.mitad == 0 && p.ancha) onAncha()
     }
 

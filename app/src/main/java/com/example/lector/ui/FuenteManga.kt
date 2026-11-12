@@ -341,7 +341,7 @@ fun FichaMangaScreen(
             Tacto.confirmar()
             Avisos.mostrar("Añadido a la biblioteca")
             // Como en Komikku: al añadir, pregunta las categorías (si hay).
-            if (almacen.categorias().isNotEmpty()) dialogoCats = true
+            if (almacen.catDefecto.isBlank() && almacen.categorias().isNotEmpty()) dialogoCats = true
         }
     }
 
@@ -455,6 +455,21 @@ fun FichaMangaScreen(
     fun progreso() {
         val caps = fi?.capitulos ?: return
         almacen.actualizarProgresoEnLinea(f.id, manga.url, caps.count { ext.esLeido(f.id, manga.url, it.url) }, caps.size)
+    }
+    // Marcado a mano (Komikku): borra las descargas y sube el progreso al seguimiento, según los ajustes.
+    fun trasMarcarLeidos(urls: Collection<String>) {
+        if (urls.isEmpty()) return
+        if (almacen.borrarAlMarcar) urls.forEach { u ->
+            if ((almacen.borrarMarcados || !ext.esMarcado(f.id, manga.url, u)) && almacen.estaDescargado(f.id, manga.url, u)) almacen.borrarDescarga(f.id, manga.url, u)
+        }
+        val cid = enBiblioteca?.id ?: return
+        if (!almacen.segAlMarcar) return
+        val elegidas = urls.toSet()
+        val n = fi?.capitulos.orEmpty().filter { it.url in elegidas }.maxOfOrNull { it.numero }?.takeIf { it > 0f }?.toInt() ?: return
+        scope.launch {
+            com.example.lector.Seguidores.avanzar(ctx, cid, n)
+            if (almacen.seguimientoDe(cid) != null) withContext(Dispatchers.IO) { almacen.avanzarSeguimiento(cid, n) }
+        }
     }
     val enSeleccion = seleccion.isNotEmpty()
 
@@ -786,7 +801,7 @@ fun FichaMangaScreen(
                                 ChapterSwipeAction.MARK_PREVIOUS_READ -> {
                                     val todos = fi?.capitulos.orEmpty()
                                     val idx = todos.indexOfFirst { it.url == c.url }
-                                    if (idx >= 0) ext.marcarLeidos(f.id, manga.url, todos.drop(idx + 1).map { it.url })
+                                    if (idx >= 0) todos.drop(idx + 1).map { it.url }.let { u -> ext.marcarLeidos(f.id, manga.url, u); trasMarcarLeidos(u) }
                                     progreso()
                                 }
                             }
@@ -937,12 +952,12 @@ fun FichaMangaScreen(
             BarraAcciones(
                 visible = true, modifier = Modifier.align(Alignment.BottomCenter),
                 acciones = buildList {
-                    add(AccionBarra(Icons.Rounded.Check, "Leído") { ext.marcarLeidos(f.id, manga.url, seleccion); progreso(); seleccion = emptySet() })
+                    add(AccionBarra(Icons.Rounded.Check, "Leído") { ext.marcarLeidos(f.id, manga.url, seleccion); trasMarcarLeidos(seleccion); progreso(); seleccion = emptySet() })
                     add(AccionBarra(Iconos.OjoTachado, "No leído") { ext.desmarcarLeidos(f.id, manga.url, seleccion); progreso(); seleccion = emptySet() })
                     if (elegidos.size == 1) add(AccionBarra(Icons.Rounded.KeyboardArrowDown, "Anteriores leídos") {
                         val caps = fi?.capitulos.orEmpty()
                         val idx = caps.indexOfFirst { it.url == elegidos[0].url }
-                        if (idx >= 0) ext.marcarLeidos(f.id, manga.url, caps.drop(idx + 1).map { it.url })
+                        if (idx >= 0) caps.drop(idx + 1).map { it.url }.let { u -> ext.marcarLeidos(f.id, manga.url, u); trasMarcarLeidos(u) }
                         progreso(); seleccion = emptySet()
                     })
                     val todosMarcados = elegidos.isNotEmpty() && elegidos.all { ext.esMarcado(f.id, manga.url, it.url) }

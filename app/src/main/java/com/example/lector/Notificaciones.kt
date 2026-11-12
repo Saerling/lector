@@ -63,6 +63,11 @@ object Notificaciones {
         NotificationCompat.Builder(ctx, canal)
             .setSmallIcon(R.drawable.ic_notificacion)
             .setColor(0xFFFA233B.toInt())
+            // Seguridad → «Ocultar el contenido de las notificaciones»: no se ve en la pantalla de bloqueo.
+            .setVisibility(
+                if (ctx.getSharedPreferences("lector", Context.MODE_PRIVATE).getBoolean("ocultar_notif", false)) NotificationCompat.VISIBILITY_SECRET
+                else NotificationCompat.VISIBILITY_PRIVATE,
+            )
 
     fun progreso(ctx: Context, canal: String, titulo: String, texto: String, hechas: Int, total: Int, destino: String?, id: Int): Notification =
         base(ctx, canal)

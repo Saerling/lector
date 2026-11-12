@@ -46,7 +46,9 @@ open class NetworkHelper(
     open val cloudflareClient: OkHttpClient
         get() = client
 
-    fun defaultUserAgentProvider(): String = DEFAULT_USER_AGENT
+    // Ajustes → Avanzado → Agente de usuario (vacío = el de fábrica).
+    fun defaultUserAgentProvider(): String =
+        context.getSharedPreferences("lector", Context.MODE_PRIVATE).getString("user_agent", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_USER_AGENT
 
     companion object {
         const val DEFAULT_USER_AGENT =

@@ -43,6 +43,13 @@ object CacheFichas {
         return File(c, "$h.json.gz")
     }
 
+    fun limpiar(conservar: Set<Pair<Long, String>>): Int {
+        val c = carpeta ?: return 0
+        val nombres = conservar.mapNotNullTo(HashSet()) { archivo(it.first, it.second)?.name }
+        synchronized(recientes) { recientes.clear() }
+        return c.listFiles()?.count { it.isFile && it.name.endsWith(".json.gz") && it.name !in nombres && it.delete() } ?: 0
+    }
+
     /** La ficha guardada (null si nunca se cargó). Llamar fuera del hilo principal. */
     fun leer(fuenteId: Long, url: String): FichaManga? {
         val k = clave(fuenteId, url)

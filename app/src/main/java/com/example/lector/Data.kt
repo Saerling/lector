@@ -363,6 +363,24 @@ class Almacen private constructor(private val contexto: Context) {
     var actSaltarSinLeer by prefBool(prefs, "act_saltar_sin_leer", false)
     var actSaltarNoEmpezados by prefBool(prefs, "act_saltar_no_empezados", false)
     var actInteligente by prefBool(prefs, "act_inteligente", false)
+    // Como Komikku: categoría por defecto al añadir ("" = preguntar, "-" = ninguna sin preguntar, o el id), categorías
+    // que la revisión global y la descarga automática se saltan (ids separados por coma) y opciones de marcado.
+    var catDefecto by prefString(prefs, "cat_defecto", "")
+    var actCatExcluidas by prefString(prefs, "act_cat_excluidas", "")
+    var descCatExcluidas by prefString(prefs, "desc_cat_excluidas", "")
+    var marcarDuplicadosNuevos by prefBool(prefs, "marcar_dup_nuevos", false)
+    var borrarAlMarcar by prefBool(prefs, "borrar_al_marcar", false)
+    var segAlMarcar by prefBool(prefs, "seg_al_marcar", true)
+    var rotarAnchas by prefBool(prefs, "rotar_anchas", false)
+    fun idsDe(lista: String): Set<String> = lista.split(',').filter { it.isNotBlank() }.toSet()
+
+    /** Borra fichas guardadas y listas de capítulos de mangas que no están ni en la biblioteca ni en el historial. */
+    fun limpiarHuerfanos(): Int {
+        val conservar = HashSet<Pair<Long, String>>()
+        cargar().forEach { c -> c.urlManga?.let { conservar += c.fuenteId to it } }
+        historialLinea.forEach { conservar += it.fuenteId to it.urlManga }
+        return CacheFichas.limpiar(conservar) + conocidos.limpiar(conservar)
+    }
     var descargarNuevos by prefBool(prefs, "descargar_nuevos", false)
     var revisarExtensiones by prefBool(prefs, "revisar_ext", true)
     var ultimaRevisionExt by prefLong(prefs, "ult_revision_ext", 0L)
@@ -552,6 +570,24 @@ class Almacen private constructor(private val contexto: Context) {
         if (modo == null) prefs.edit().remove("visor_$clave").remove("modo_$clave").apply()
         else prefs.edit().putString("visor_$clave", modo.name).apply()
     }
+
+    /** Como «Reset per-series reader settings» de Mihon: todas las series vuelven al modo de lectura general. */
+    fun restablecerModosDeSerie(): Int {
+        val claves = prefs.all.keys.filter { it.startsWith("visor_") }
+        prefs.edit().apply { claves.forEach { remove(it) } }.apply()
+        return claves.size
+    }
+
+    /** Lista de la biblioteca en CSV (título, autor, fuente, capítulos, leídos), como «Library List» de Komikku. */
+    fun bibliotecaCsv(nombreFuente: (Long) -> String): String = buildString {
+        fun c(t: String?) = "\"" + t.orEmpty().replace("\"", "\"\"") + "\""
+        appendLine("Título,Autor,Fuente,Capítulos,Leídos,Dirección")
+        cargar().sortedBy { it.titulo.lowercase() }.forEach {
+            appendLine(listOf(c(it.titulo), c(it.autor), c(if (it.enLinea) nombreFuente(it.fuenteId) else "Local"), it.paginas.toString(), it.ultimaPagina.toString(), c(it.urlManga)).joinToString(","))
+        }
+    }
+
+    var ocultarNotificaciones by prefBool(prefs, "ocultar_notif", false)
 
     // Último cómic que abriste, para el botón "Continuar".
     var ultimoAbierto: String?
@@ -922,7 +958,7 @@ class Almacen private constructor(private val contexto: Context) {
         "paleta", "color_portada", "modo_tema", "zonas_toque", "teclas_volumen", "mantener_encendida", "modo_visor",
         "zonas_visor", "invertir_zonas", "escala_pagina", "recortar_webtoon", "dividir_dobles", "invertir_division",
         "relleno_lateral", "animar_paginas", "mostrar_numero", "pantalla_completa", "invertir_volumen",
-        "mostrar_transiciones", "precarga", "velocidad_auto", "doble_toque_zoom", "pasar_capitulo_solo", "saltar_duplicados", "saltar_leidos", "borrar_marcados", "act_saltar_sin_leer", "act_saltar_no_empezados", "act_inteligente",
+        "mostrar_transiciones", "precarga", "velocidad_auto", "doble_toque_zoom", "pasar_capitulo_solo", "saltar_duplicados", "saltar_leidos", "borrar_marcados", "marcar_dup_nuevos", "borrar_al_marcar", "seg_al_marcar", "rotar_anchas", "act_saltar_sin_leer", "act_saltar_no_empezados", "act_inteligente",
         "fondo_lector", "orientacion", "brillo_on", "brillo", "grises", "invertir", "tinte", "tinte_intensidad",
         "recortar_bordes", "vista", "columnas", "mostrar_pagina", "insignia_progreso", "agrupar", "f_descargados",
         "f_sin_leer", "f_empezados", "f_terminados", "f_seguimiento", "f_locales", "ins_sin_leer", "ins_descargas",
@@ -1377,6 +1413,7 @@ class Almacen private constructor(private val contexto: Context) {
             descripcion = descripcion,
         )
         modificar { l -> l + comic }
+        catDefecto.takeIf { d -> d.isNotBlank() && d != "-" && categorias().any { it.id == d } }?.let { asignarCategorias(id, setOf(it)) }
         return comic
     }
 

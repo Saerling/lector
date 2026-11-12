@@ -268,6 +268,7 @@ fun AjustesVisorContenido(
         }
         FilaSwitch("Recortar bordes", "Quita los márgenes lisos (blancos o negros) de cada página", almacen.recortarBordes) { almacen.elegirRecortarBordes(it) }
         FilaSwitch("Dividir páginas dobles", "Las páginas apaisadas se parten en dos", almacen.dividirDobles) { almacen.dividirDobles = it }
+        if (!almacen.dividirDobles) FilaSwitch("Girar las páginas anchas", "Las páginas apaisadas se giran para ocupar toda la pantalla", almacen.rotarAnchas) { almacen.rotarAnchas = it }
         if (almacen.dividirDobles) {
             FilaSwitch("Invertir el orden de las mitades", null, almacen.invertirDivision) { almacen.invertirDivision = it }
         }

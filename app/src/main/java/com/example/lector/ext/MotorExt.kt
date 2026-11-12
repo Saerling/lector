@@ -172,7 +172,13 @@ class MotorExt(app: Application, private val ext: ExtManager) : MotorFuentes {
                     val quitados = previa.filter { c -> c.url !in ahora }
                     val anadidos = it.capitulos.filter { c -> c.url !in antes }
                     val heredados = ext.heredarEstado(fuente.id, manga.url, quitados, anadidos, tituloNum)
-                    if (heredados.isNotEmpty()) com.example.lector.Almacen.obtener(ctx).darPorConocidos(fuente.id, manga.url, heredados)
+                    val alm = com.example.lector.Almacen.obtener(ctx)
+                    if (heredados.isNotEmpty()) alm.darPorConocidos(fuente.id, manga.url, heredados)
+                    // «Marcar como leído el capítulo duplicado» de Komikku: otra versión de un número que ya leíste.
+                    if (alm.marcarDuplicadosNuevos && anadidos.isNotEmpty()) {
+                        val leidosNum = previa.filter { c -> c.numero >= 0f && ext.esLeido(fuente.id, manga.url, c.url) }.mapTo(HashSet()) { c -> c.numero }
+                        ext.marcarLeidos(fuente.id, manga.url, anadidos.filter { c -> c.numero in leidosNum && c.url !in heredados }.map { c -> c.url })
+                    }
                 }
             }
             com.example.lector.CacheFichas.guardar(fuente.id, manga.url, it) // queda guardada en el móvil

@@ -887,3 +887,9 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - Avanzado: «Borrar los datos de WebView» y «Revocar la confianza en extensiones desconocidas» (`ExtManager.revocarConfianza`).
 - Revisión de biblioteca agrupada por fuente (5 fuentes a la vez, cada una en serie), como LibraryUpdateJob.
 - Prueba: «autorec» abre la primera recomendación que la fuente tenga (hasta 8).
+
+## 2cd. PASO 82 (0.73) — Opciones que faltaban de los menús de Komikku (compilado; sin probar en dispositivo)
+- Almacen: `catDefecto` (""/"-"/id, se aplica en `anadirEnLinea`), `actCatExcluidas`, `descCatExcluidas` (ids con coma, `idsDe`), `marcarDuplicadosNuevos` (MotorExt.ficha), `borrarAlMarcar` y `segAlMarcar` (`trasMarcarLeidos` en FuenteManga), `rotarAnchas` (mitad 3 en `decodificar`), `limpiarHuerfanos`, `bibliotecaCsv`, `restablecerModosDeSerie`, `ocultarNotificaciones`.
+- Descargas.encolar: no encola con menos de 200 MB libres. NetworkHelper: agente de usuario de prefs `user_agent`.
+- `FilaCategoriasExcluidas` (AjustesPantallas) reutiliza `DialogoAsignarCategorias`.
+- Lo que queda está en `COMPARACION_KOMIKKU.md` §4.

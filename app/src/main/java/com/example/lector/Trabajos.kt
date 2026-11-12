@@ -102,10 +102,14 @@ object RevisorBiblioteca {
         val motor = Motor.actual ?: error("El motor de fuentes no está listo")
         val asign = alm.asignaciones()
         val zona = java.time.ZoneId.systemDefault()
+        val actExcl = alm.idsDe(alm.actCatExcluidas)
+        val descExcl = alm.idsDe(alm.descCatExcluidas)
         val finDeHoy = java.time.LocalDate.now(zona).plusDays(1).atStartOfDay(zona).toInstant().toEpochMilli()
         val lista = alm.cargar().filter { c ->
             c.enLinea &&
                 (categoria == null || categoria in asign[c.id].orEmpty()) &&
+                // Categorías excluidas de la revisión global (al revisar una categoría a mano no se aplica).
+                (categoria != null || actExcl.isEmpty() || asign[c.id].orEmpty().none { it in actExcl }) &&
                 // Saltar los terminados (estado «Completado» y nada por leer), como la opción de Komikku.
                 !(alm.actSaltarTerminados && c.estado == 2 && c.sinLeer == 0 && c.paginas > 0) &&
                 !(alm.actSaltarSinLeer && c.sinLeer > 0) &&
@@ -156,7 +160,7 @@ object RevisorBiblioteca {
                             }
                             if (n.isNotEmpty()) {
                                 nuevos[c.titulo] = n.size
-                                if (alm.descargarNuevos) withContext(Dispatchers.Main) {
+                                if (alm.descargarNuevos && asign[c.id].orEmpty().none { it in descExcl }) withContext(Dispatchers.Main) {
                                     Descargas.encolar(ctx, f, url, c.titulo, n.asReversed(), avisar = false)
                                 }
                             }

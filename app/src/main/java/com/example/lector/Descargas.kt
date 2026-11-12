@@ -119,6 +119,11 @@ object Descargas {
             if (avisar) Avisos.mostrar("Ya están descargados")
             return 0
         }
+        // Como Mihon: con menos de 200 MB libres no se encola nada.
+        if (ctx.filesDir.usableSpace < 200L * 1024 * 1024) {
+            Avisos.mostrar("Queda poco espacio en el móvil: no se puede descargar")
+            return 0
+        }
         cola.addAll(nuevas)
         nuevas.forEach { errores.remove(it.clave) }
         guardar(ctx)

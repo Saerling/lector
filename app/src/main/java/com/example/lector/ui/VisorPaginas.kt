@@ -191,6 +191,14 @@ suspend fun decodificar(
     val altoFinal = rh / muestra
     val alta = altoFinal > ALTO_TIRA
 
+    // «Girar las páginas anchas» de Mihon (mitad 3): entera y girada 90° para que ocupe la pantalla en vertical.
+    if (mitad == 3) {
+        val b = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = muestra })
+            ?: error("Imagen no válida")
+        val girada = Bitmap.createBitmap(b, 0, 0, b.width, b.height, android.graphics.Matrix().apply { postRotate(90f) }, true)
+        return@withContext PaginaLista(listOf(girada.asImageBitmap()), h, w)
+    }
+
     // Página normal y entera: decodificación directa (de hardware si se puede).
     if (!alta && mitad == 0) {
         val usarHardware = permitirHardware && !recortar && Build.VERSION.SDK_INT >= 26
