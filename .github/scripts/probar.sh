@@ -99,7 +99,7 @@ for r in Ajustes Apariencia AjBiblioteca AjSeguimiento AjVisor AjDescargas AjExp
   adb shell am force-stop com.example.lector; adb logcat -c
   adb shell am start -n com.example.lector/.MainActivity --es destino "probar-ruta:$r" >/dev/null
   sleep 7; : > "textos-$r.txt"
-  for k in 1 2 3 4 5; do
+  for k in 1 2 3 4 5 6 7 8 9; do
     volcar "ui-ruta.xml"; grep -o 'text="[^"]*"' ui-ruta.xml | sed 's/text=//' >> "textos-$r.txt"
     adb shell input swipe $((W/2)) $((H*78/100)) $((W/2)) $((H*30/100)) 300; sleep 1
   done

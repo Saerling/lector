@@ -497,7 +497,10 @@ fun FichaMangaScreen(
 
     Box(Modifier.fillMaxSize().drawBehind { drawRect(fondoEstado.value) }) {
         // Deslizar hacia abajo: vuelve a pedir la ficha y los capítulos a la fuente (lo normal es usar lo guardado).
+        val estadoTirar = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
         androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+            state = estadoTirar,
+            indicator = { IndicadorTirar(estadoTirar, refrescando, Modifier.align(Alignment.TopCenter), com.example.lector.ui.orbes.EstadoOrbe.COMPOSING) },
             isRefreshing = refrescando,
             onRefresh = { Tacto.umbral(); refrescando = true; recarga++ },
             modifier = Modifier.fillMaxSize(),

@@ -904,3 +904,10 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - `ui/orbes/OrbePensante.kt`: Composable (reloj por withFrameNanos, solo redibuja; quieto con Mov.reducido; tinta invertida en oscuro; tinte de acento opcional).
 - `IndicadorCarga(..., estado)` usa el orbe si `EstiloApp.orbes` (por defecto sí). Estados: WORKING revisión de biblioteca y acciones de página, SEARCHING búsquedas (también `SearchLoadingDots`), CONNECTING extensiones/listados/seguimiento/catálogo, COMPOSING cargar capítulo y lista de capítulos, BREATHING página y lector local, WEAVING migraciones, SOLVING copias (IslaCopia), SHAPING importar.
 - Personalización → Estilo: «Thinking orbs» (prefs aspecto estilo_orbes), «Con el color de acento» (estilo_orbes_acento) y vista previa de los nueve.
+
+## 2cg. PASO 85 (0.76) — Orbes en todas las cargas y variando
+- `EstiloApp.variarOrbes` (prefs estilo_orbes_variar): CAMBIANDO (por defecto: cada indicador pasa por los 9 tipos cada 3,2 s con fundido, empezando en uno al azar), AZAR, TAREA (el estado semántico de cada sitio).
+- `IndicadorTirar` (Expresivo.kt) en los 4 «tirar para recargar» (Novedades, Actualizaciones, Biblioteca, ficha).
+- `BonesHost` (Estilo.kt) pone un orbe sobre todos los esqueletos (catálogo, novedades, búsqueda global, portadas, capítulos; PlaylistTrackBones pasa por él).
+- Barras sin avance → orbe: carga de extensiones (Explorar), instalar extensión (Reencontrar), descarga que aún no empieza (ColaDescargas). Vacío de Actualizaciones mientras revisa e «Cargando lo guardado…» con orbe.
+- Se dejan las barras/anillos con porcentaje real (descargas, copias, WebView).

@@ -385,7 +385,10 @@ fun BibliotecaScreen(
             } else Spacer(Modifier.height(8.dp))
 
             // ---- Contenido ----
+            val estadoTirar = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
             PullToRefreshBox(
+                state = estadoTirar,
+                indicator = { IndicadorTirar(estadoTirar, Actualizador.corriendo, Modifier.align(Alignment.TopCenter), com.example.lector.ui.orbes.EstadoOrbe.WORKING) },
                 isRefreshing = Actualizador.corriendo,
                 onRefresh = { if (!Actualizador.corriendo) Actualizador.iniciar(ctx, grupoActual.categoriaId) },
                 modifier = Modifier.weight(1f),

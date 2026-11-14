@@ -921,7 +921,7 @@ fun PlaylistTrackRow(
 /** stand-in rows while the songs are still loading */
 @Composable
 fun PlaylistTrackBones(rows: Int = 7) {
-    BonesHost(modifier = Modifier.fillMaxWidth()) {
+    com.example.lector.ui.BonesHost(modifier = Modifier.fillMaxWidth()) {
         repeat(rows) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

@@ -27,6 +27,10 @@ object EstiloApp {
     // Thinking orbs (Jakub Antalik) como indicador de carga; apagado = el indicador clásico de radios.
     var orbes by mutableStateOf(true); private set
     var orbesAcento by mutableStateOf(false); private set
+    enum class VariarOrbes(val nombre: String) { CAMBIANDO("Ir cambiando"), AZAR("Al azar"), TAREA("Según la tarea") }
+    // Por defecto van pasando por los nueve tipos; «Al azar» elige uno cada vez; «Según la tarea», el de cada espera.
+    var variarOrbes by mutableStateOf(VariarOrbes.CAMBIANDO); private set
+    fun elegir(v: VariarOrbes) { variarOrbes = v; guardar("estilo_orbes_variar", v.name) }
     fun elegirOrbes(v: Boolean) { orbes = v; prefs?.edit()?.putBoolean("estilo_orbes", v)?.apply() }
     fun elegirOrbesAcento(v: Boolean) { orbesAcento = v; prefs?.edit()?.putBoolean("estilo_orbes_acento", v)?.apply() }
     fun elegirPanoramica(v: Boolean) { panoramica = v; prefs?.edit()?.putBoolean("estilo_panoramica", v)?.apply() }
@@ -53,6 +57,7 @@ object EstiloApp {
         panoramica = p.getBoolean("estilo_panoramica", false)
         orbes = p.getBoolean("estilo_orbes", true)
         orbesAcento = p.getBoolean("estilo_orbes_acento", false)
+        variarOrbes = leer(p, "estilo_orbes_variar", VariarOrbes.CAMBIANDO)
         ladoDescargas = leer(p, "estilo_descargas_lado", LadoDescargas.IZQUIERDA)
     }
 

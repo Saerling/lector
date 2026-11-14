@@ -472,11 +472,7 @@ private fun NovedadesTab(
                 modifier = Modifier.fillMaxSize(),
                 state = estadoTirar,
                 indicator = {
-                    androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator(
-                        state = estadoTirar, isRefreshing = refrescando && pendientes,
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = arriba),
-                        containerColor = SearchColors.TileHigh, color = SearchColors.Primary,
-                    )
+                    IndicadorTirar(estadoTirar, refrescando && pendientes, Modifier.align(Alignment.TopCenter).padding(top = arriba), com.example.lector.ui.orbes.EstadoOrbe.SEARCHING)
                 },
             ) {
                 // Lo que ya está en tu biblioteca se marca (portada apagada + insignia), como en Komikku.
@@ -820,7 +816,9 @@ private fun ExtensionesTab(
         Box(Modifier.weight(1f)) {
         LazyColumn(state = estadoLista, contentPadding = PaddingValues(top = LocalArriba.current, bottom = abajo + 190.dp)) {
             if (ext.cargando) item(key = "cargando", contentType = "Aviso") {
-                LinearProgressIndicator(
+                if (com.example.lector.ui.mochy.EstiloApp.orbes) Box(Modifier.fillMaxWidth().padding(bottom = 14.dp), Alignment.Center) {
+                    IndicadorCarga(Modifier.size(34.dp), SearchColors.Primary, estado = com.example.lector.ui.orbes.EstadoOrbe.CONNECTING)
+                } else LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = SearchHorizontalPadding).padding(bottom = 14.dp).height(2.dp).clip(CircleShape),
                     color = SearchColors.Primary, trackColor = SearchColors.Divider,
                 )

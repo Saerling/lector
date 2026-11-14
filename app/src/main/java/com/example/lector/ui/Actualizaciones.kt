@@ -232,7 +232,10 @@ fun ActualizacionesScreen(
                 }
             }
 
+            val estadoTirar = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
             PullToRefreshBox(
+                state = estadoTirar,
+                indicator = { IndicadorTirar(estadoTirar, Actualizador.corriendo, Modifier.align(Alignment.TopCenter), com.example.lector.ui.orbes.EstadoOrbe.WORKING) },
                 isRefreshing = Actualizador.corriendo,
                 onRefresh = { if (!Actualizador.corriendo) Actualizador.iniciar(ctx) },
                 modifier = Modifier.weight(1f),
@@ -418,6 +421,7 @@ private fun escalonAct(i: Int): Int = if (i < 10) i else 0
 @Composable
 private fun VacioActualizaciones(titulo: String, texto: String, enMarcha: Boolean, accion: String = "Buscar ahora", onRevisar: () -> Unit) {
     Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        if (enMarcha) Box(Modifier.fillMaxWidth().padding(top = 8.dp), Alignment.TopCenter) { IndicadorCarga(Modifier.size(44.dp), estado = com.example.lector.ui.orbes.EstadoOrbe.WORKING) }
         LibraryEmptyState(
             Modifier.entrada(0).padding(top = 24.dp, bottom = 160.dp), texto, titulo,
             if (enMarcha) "Revisando…" else accion, onRevisar.takeIf { !enMarcha } ?: {},

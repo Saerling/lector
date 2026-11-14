@@ -162,6 +162,7 @@ fun InfoGuardada(
             item(key = "caps_cab") {
                 // ChapterHeader de Komikku: «N capítulos» y, aparte, cuántos llevas leídos.
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (!cargada) { com.example.lector.ui.IndicadorCarga(Modifier.size(20.dp), estado = com.example.lector.ui.orbes.EstadoOrbe.BREATHING); androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp)) }
                     LText(
                         when {
                             !cargada -> "Cargando lo guardado…"

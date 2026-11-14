@@ -829,7 +829,7 @@ private fun SeccionEstilo() {
             }
             Spacer(Modifier.height(6.dp))
             LText(
-                "Los orbes de puntos de Jakub Antalik como indicador de carga: cada espera usa el suyo (buscar, conectar, revisar, migrar…). Apagado, el indicador clásico.",
+                "Los orbes de puntos de Jakub Antalik en todas las cargas: indicadores, tirar para recargar y esqueletos. Apagado, el indicador clásico.",
                 EstiloPie, color = LectorColors.Muted,
             )
             Spacer(Modifier.height(12.dp))
@@ -848,6 +848,22 @@ private fun SeccionEstilo() {
                     }
                 }
             }
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.graphicsLayer { alpha = if (e.orbes) 1f else 0.45f }) {
+                SelectorMini(
+                    com.example.lector.ui.mochy.EstiloApp.VariarOrbes.entries.map { it.nombre }, e.variarOrbes.ordinal,
+                    { e.elegir(com.example.lector.ui.mochy.EstiloApp.VariarOrbes.entries[it]) }, e.orbes, fondo = ColP.Fila,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            LText(
+                when (e.variarOrbes) {
+                    com.example.lector.ui.mochy.EstiloApp.VariarOrbes.CAMBIANDO -> "Cada indicador va pasando por los nueve tipos."
+                    com.example.lector.ui.mochy.EstiloApp.VariarOrbes.AZAR -> "Cada vez que aparece una carga sale un tipo distinto."
+                    com.example.lector.ui.mochy.EstiloApp.VariarOrbes.TAREA -> "Cada espera usa el suyo: buscar, conectar, revisar, migrar…"
+                },
+                EstiloPie, color = LectorColors.Muted,
+            )
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.graphicsLayer { alpha = if (e.orbes) 1f else 0.45f }) {
                 LText("Con el color de acento", EstiloPie, Modifier.weight(1f), color = ColP.Texto.copy(alpha = 0.9f))

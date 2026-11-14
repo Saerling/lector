@@ -1,5 +1,7 @@
 package com.example.lector.ui
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -179,6 +181,29 @@ fun GrupoBotones(opciones: List<String>, elegida: Int, onElegir: (Int) -> Unit, 
 }
 
 /**
+ * Indicador de «tirar para recargar»: un orbe que crece y aparece según tiras y se queda girando mientras recarga.
+ * Con los orbes apagados, el de Material.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun IndicadorTirar(
+    estado: androidx.compose.material3.pulltorefresh.PullToRefreshState, recargando: Boolean, modifier: Modifier = Modifier,
+    tarea: com.example.lector.ui.orbes.EstadoOrbe = com.example.lector.ui.orbes.EstadoOrbe.CONNECTING,
+) {
+    if (!com.example.lector.ui.mochy.EstiloApp.orbes) {
+        androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator(state = estado, isRefreshing = recargando, modifier = modifier)
+        return
+    }
+    val f = if (recargando) 1f else estado.distanceFraction.coerceIn(0f, 1f)
+    if (f <= 0f) return
+    Box(
+        modifier.padding(top = 14.dp).graphicsLayer { alpha = f; scaleX = 0.6f + 0.4f * f; scaleY = 0.6f + 0.4f * f; translationY = (f - 1f) * 40f }
+            .size(48.dp).clip(CircleShape).background(LectorColors.Card),
+        Alignment.Center,
+    ) { IndicadorCarga(Modifier.size(38.dp), estado = tarea) }
+}
+
+/**
  * Indicador de carga al estilo de iOS: doce radios redondeados que se van apagando en círculo (giro a saltos de
  * 1/12 de vuelta cada ~83 ms). Con «Quitar animaciones» se queda quieto.
  */
@@ -189,13 +214,23 @@ fun IndicadorCarga(
     estado: com.example.lector.ui.orbes.EstadoOrbe = com.example.lector.ui.orbes.EstadoOrbe.BREATHING,
 ) {
     if (com.example.lector.ui.mochy.EstiloApp.orbes) {
-        com.example.lector.ui.orbes.OrbePensante(
-            estado, modifier.size(28.dp),
-            // Sobre una capa oscura (color blanco) o con el tema oscuro, la tinta se invierte: los puntos cercanos brillan.
-            oscuro = color == Color.White || TemaActual.oscuro,
-            tinte = if (com.example.lector.ui.mochy.EstiloApp.orbesAcento) color else null,
-            quieto = Mov.reducido,
-        )
+        val estados = com.example.lector.ui.orbes.EstadoOrbe.entries
+        val variar = com.example.lector.ui.mochy.EstiloApp.variarOrbes
+        // Cada indicador empieza en un tipo distinto; «Ir cambiando» pasa al siguiente cada 3,2 s con un fundido.
+        var indice by remember { mutableIntStateOf(estados.indices.random()) }
+        if (variar == com.example.lector.ui.mochy.EstiloApp.VariarOrbes.CAMBIANDO && !Mov.reducido) {
+            LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(3200); indice = (indice + 1) % estados.size } }
+        }
+        val elegido = if (variar == com.example.lector.ui.mochy.EstiloApp.VariarOrbes.TAREA) estado else estados[indice]
+        androidx.compose.animation.Crossfade(elegido, modifier.size(28.dp), androidx.compose.animation.core.tween(420), label = "orbe") { st ->
+            com.example.lector.ui.orbes.OrbePensante(
+                st, Modifier.fillMaxSize(),
+                // Sobre una capa oscura (color blanco) o con el tema oscuro, la tinta se invierte: los puntos cercanos brillan.
+                oscuro = color == Color.White || TemaActual.oscuro,
+                tinte = if (com.example.lector.ui.mochy.EstiloApp.orbesAcento) color else null,
+                quieto = Mov.reducido,
+            )
+        }
         return
     }
     val t = rememberInfiniteTransition(label = "carga")

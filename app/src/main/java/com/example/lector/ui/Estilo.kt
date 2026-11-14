@@ -321,7 +321,13 @@ private val ColorHueso = Color(0xFFD9D9D9).copy(alpha = 0.22f)
 /** Contenedor de esqueletos: el BonesHost de Mochy (ola de opacidad); sin animaciones, quietos. */
 @Composable
 fun BonesHost(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    if (MovimientoReducido.activo) Column(modifier, content = content)
+    // Con los thinking orbs, un orbe flota sobre el esqueleto mientras carga.
+    if (com.example.lector.ui.mochy.EstiloApp.orbes) androidx.compose.foundation.layout.Box(modifier) {
+        if (MovimientoReducido.activo) Column(Modifier.fillMaxWidth(), content = content)
+        else com.example.lector.ui.mochy.BonesHost(Modifier.fillMaxWidth(), content)
+        IndicadorCarga(Modifier.align(Alignment.Center).size(48.dp))
+    }
+    else if (MovimientoReducido.activo) Column(modifier, content = content)
     else com.example.lector.ui.mochy.BonesHost(modifier, content)
 }
 
