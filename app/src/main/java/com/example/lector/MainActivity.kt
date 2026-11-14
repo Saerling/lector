@@ -400,7 +400,7 @@ private fun Contenido(almacen: Almacen, destino: String?, alConsumirDestino: () 
             title = { Text("Importando…") },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(24.dp))
+                    com.example.lector.ui.IndicadorCarga(Modifier.size(24.dp), estado = com.example.lector.ui.orbes.EstadoOrbe.SHAPING)
                     Spacer(Modifier.width(16.dp))
                     Text("Esto puede tardar con archivos o carpetas grandes.")
                 }

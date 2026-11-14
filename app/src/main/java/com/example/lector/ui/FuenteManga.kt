@@ -732,7 +732,7 @@ fun FichaMangaScreen(
                                         if (abriendoRec == r.id) Box(
                                             Modifier.matchParentSize().clip(SuaveShape(12.dp)).background(Color.Black.copy(alpha = 0.5f)),
                                             Alignment.Center,
-                                        ) { IndicadorCarga(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) }
+                                        ) { IndicadorCarga(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp, estado = com.example.lector.ui.orbes.EstadoOrbe.SEARCHING) }
                                     }
                                     Spacer(Modifier.height(6.dp))
                                     Text(r.titulo, style = TrackSubtitleStyle.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text.copy(alpha = 0.86f), maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -854,7 +854,7 @@ fun FichaMangaScreen(
             if (caps) item {
                 when {
                     cargando && fi == null -> PlaylistTrackBones()
-                    cargando -> Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { IndicadorCarga(Modifier.size(28.dp)) }
+                    cargando -> Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { IndicadorCarga(Modifier.size(28.dp), estado = com.example.lector.ui.orbes.EstadoOrbe.COMPOSING) }
                     error != null -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(error!!, style = PlaylistStatsStyle.copy(fontSize = 12.sp), color = LectorColors.Error, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         Spacer(Modifier.height(10.dp))

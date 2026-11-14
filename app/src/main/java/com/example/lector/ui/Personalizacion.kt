@@ -6,6 +6,7 @@ package com.example.lector.ui
 // con su vista previa asomando abajo a la derecha y el borde del elegido, tarjetas con interruptor y vista previa en
 // vivo, selector de dos opciones con la píldora que se desliza) y mismas medidas. El contenido es el de Shiori.
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.graphics.toArgb
 import android.os.Build
 import androidx.compose.animation.animateColorAsState
@@ -184,7 +185,7 @@ private enum class SeccionP(val titulo: String, val palabras: String) {
     INICIO("Animación de inicio", "inicio arranque agujero negro abrir"),
     RESPUESTA("Respuesta", "luz tocar tactil portada color ficha"),
     GESTOS("Gestos", "gestos deslizar izquierda derecha capitulos marcar leido descargar"),
-    ESTILO("Estilo", "estilo mochy bitchord esquinas continuas menu mantener pulsado catalogo actualizacion ventana indicador descargas");
+    ESTILO("Estilo", "estilo mochy bitchord esquinas continuas menu mantener pulsado catalogo actualizacion ventana indicador descargas carga orbes thinking orbs");
 
     fun coincide(q: String): Boolean {
         val palabrasQ = normalizar(q).split(' ').filter { it.isNotBlank() }
@@ -820,6 +821,38 @@ private fun SeccionEstilo() {
             }
             Spacer(Modifier.height(6.dp))
             LText("Las portadas apaisadas se muestran a lo ancho en Historial y Actualizaciones, como en Komikku.", EstiloPie, color = LectorColors.Muted)
+        }
+        Column(Modifier.fillMaxWidth().clip(FormaTarjeta).background(ColP.Tarjeta).padding(SangriaTexto)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LText("Thinking orbs", EstiloEtiquetaTarjeta, Modifier.weight(1f), color = ColP.Texto.copy(alpha = 0.9f))
+                Interruptor(e.orbes, { e.elegirOrbes(it) })
+            }
+            Spacer(Modifier.height(6.dp))
+            LText(
+                "Los orbes de puntos de Jakub Antalik como indicador de carga: cada espera usa el suyo (buscar, conectar, revisar, migrar…). Apagado, el indicador clásico.",
+                EstiloPie, color = LectorColors.Muted,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).graphicsLayer { alpha = if (e.orbes) 1f else 0.45f },
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                com.example.lector.ui.orbes.EstadoOrbe.entries.forEach { st ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        com.example.lector.ui.orbes.OrbePensante(
+                            st, Modifier.size(52.dp), oscuro = TemaActual.oscuro,
+                            tinte = if (e.orbesAcento) MaterialTheme.colorScheme.primary else null, quieto = !e.orbes || Mov.reducido,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        LText(st.etiqueta.removeSuffix("…"), EstiloPie, color = LectorColors.Muted)
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.graphicsLayer { alpha = if (e.orbes) 1f else 0.45f }) {
+                LText("Con el color de acento", EstiloPie, Modifier.weight(1f), color = ColP.Texto.copy(alpha = 0.9f))
+                Interruptor(e.orbesAcento, { if (e.orbes) e.elegirOrbesAcento(it) })
+            }
         }
     }
 }

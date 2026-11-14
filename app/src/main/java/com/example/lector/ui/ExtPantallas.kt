@@ -175,7 +175,7 @@ private fun DialogoAnadirRepo(ext: ExtManager, cerrar: () -> Unit) {
                 if (trabajando) {
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IndicadorCarga(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        IndicadorCarga(Modifier.size(20.dp), strokeWidth = 2.dp, estado = com.example.lector.ui.orbes.EstadoOrbe.CONNECTING)
                         Spacer(Modifier.width(12.dp))
                         Text("Comprobando el listado…")
                     }
@@ -812,7 +812,7 @@ private fun NavegarFuente(
             item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") {
                 Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), Alignment.Center) {
                     when {
-                        cargando && lista.isNotEmpty() -> IndicadorCarga(Modifier.size(32.dp))
+                        cargando && lista.isNotEmpty() -> IndicadorCarga(Modifier.size(32.dp), estado = com.example.lector.ui.orbes.EstadoOrbe.CONNECTING)
                         cargando -> {}
                         hay && lista.isNotEmpty() -> PlayPill(
                             if (error != null) "Reintentar" else "Cargar más", if (error != null) Icons.Rounded.Refresh else Icons.Rounded.Add,

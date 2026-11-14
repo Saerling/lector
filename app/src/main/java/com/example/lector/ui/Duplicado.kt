@@ -129,7 +129,7 @@ fun DialogoDuplicado(ext: ExtManager, almacen: Almacen, alRecargar: () -> Unit, 
                     }, Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                     if (migrando) {
-                        Box(Modifier.fillMaxWidth().height(46.dp), Alignment.Center) { IndicadorCarga(Modifier.size(22.dp), strokeWidth = 2.dp) }
+                        Box(Modifier.fillMaxWidth().height(46.dp), Alignment.Center) { IndicadorCarga(Modifier.size(22.dp), strokeWidth = 2.dp, estado = com.example.lector.ui.orbes.EstadoOrbe.WEAVING) }
                     } else PillButton("Migrar aquí (con tu progreso)", Icons.Rounded.Refresh, {
                         migrando = true
                         scope.launch {

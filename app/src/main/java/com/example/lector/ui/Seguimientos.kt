@@ -75,7 +75,7 @@ fun CuentasSeguimiento() {
                 Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) { CampoBusqueda(usuario, { usuario = it }, "Usuario o correo") }
                 Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) { CampoBusqueda(clave, { clave = it }, "Contraseña") }
             }
-            if (ocupado) IndicadorCarga(Modifier.padding(10.dp))
+            if (ocupado) IndicadorCarga(Modifier.padding(10.dp), estado = com.example.lector.ui.orbes.EstadoOrbe.CONNECTING)
         }
     }
 }

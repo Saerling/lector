@@ -183,7 +183,21 @@ fun GrupoBotones(opciones: List<String>, elegida: Int, onElegir: (Int) -> Unit, 
  * 1/12 de vuelta cada ~83 ms). Con «Quitar animaciones» se queda quieto.
  */
 @Composable
-fun IndicadorCarga(modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary, @Suppress("UNUSED_PARAMETER") strokeWidth: Dp = 0.dp) {
+fun IndicadorCarga(
+    modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary, @Suppress("UNUSED_PARAMETER") strokeWidth: Dp = 0.dp,
+    // Qué está haciendo la app: elige la animación del thinking orb (Personalización → Estilo).
+    estado: com.example.lector.ui.orbes.EstadoOrbe = com.example.lector.ui.orbes.EstadoOrbe.BREATHING,
+) {
+    if (com.example.lector.ui.mochy.EstiloApp.orbes) {
+        com.example.lector.ui.orbes.OrbePensante(
+            estado, modifier.size(28.dp),
+            // Sobre una capa oscura (color blanco) o con el tema oscuro, la tinta se invierte: los puntos cercanos brillan.
+            oscuro = color == Color.White || TemaActual.oscuro,
+            tinte = if (com.example.lector.ui.mochy.EstiloApp.orbesAcento) color else null,
+            quieto = Mov.reducido,
+        )
+        return
+    }
     val t = rememberInfiniteTransition(label = "carga")
     val giro by t.animateFloat(0f, 12f, infiniteRepeatable(tween(1000, easing = LinearEasing)), label = "giro")
     val quieto = Mov.reducido

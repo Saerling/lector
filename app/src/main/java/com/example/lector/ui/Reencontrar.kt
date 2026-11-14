@@ -167,7 +167,7 @@ fun FuenteNoDisponible(
                     }
                     Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (enviada.isNotBlank() && hechas < fuentes.size) {
-                            IndicadorCarga(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            IndicadorCarga(Modifier.size(14.dp), strokeWidth = 2.dp, estado = com.example.lector.ui.orbes.EstadoOrbe.SEARCHING)
                             Spacer(Modifier.width(10.dp))
                         }
                         LText(estado, LectorType.Label, color = LectorColors.Muted)
@@ -203,7 +203,7 @@ fun FuenteNoDisponible(
                     )
                     if (migrando) {
                         Spacer(Modifier.height(12.dp))
-                        IndicadorCarga(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        IndicadorCarga(Modifier.size(22.dp), strokeWidth = 2.dp, estado = com.example.lector.ui.orbes.EstadoOrbe.WEAVING)
                     }
                 }
             },

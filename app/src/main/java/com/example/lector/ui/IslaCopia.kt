@@ -129,6 +129,11 @@ fun IslaCopia(modifier: Modifier = Modifier) {
 
 @Composable
 private fun Anillo(fraccion: Float) {
+    // Con los thinking orbs, el orbe «solving» (el avance ya lo enseña el líquido de la píldora).
+    if (com.example.lector.ui.mochy.EstiloApp.orbes) {
+        IndicadorCarga(Modifier.size(22.dp), LectorColors.Text, estado = com.example.lector.ui.orbes.EstadoOrbe.SOLVING)
+        return
+    }
     val pista = LectorColors.Text.copy(alpha = 0.15f)
     val color = LectorColors.Text
     Box(

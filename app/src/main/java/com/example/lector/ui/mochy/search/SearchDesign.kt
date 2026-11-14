@@ -690,6 +690,10 @@ fun SearchRule(modifier: Modifier = Modifier) {
 
 @Composable
 fun SearchLoadingDots(modifier: Modifier = Modifier, color: Color = SearchColors.Primary) {
+    if (com.example.lector.ui.mochy.EstiloApp.orbes) {
+        com.example.lector.ui.IndicadorCarga(modifier.size(20.dp), color, estado = com.example.lector.ui.orbes.EstadoOrbe.SEARCHING)
+        return
+    }
     val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "searchLoading")
     Row(
         modifier = modifier,

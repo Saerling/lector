@@ -898,3 +898,9 @@ Capturas de Komikku v1.14.1 que definen el diseño objetivo: `…005824` (Extens
 - WebView con menú ⋮, «Solo descargados» en Más (usa `fDescargados`), «Borrar cookies» en el detalle de extensión, `copiarImagen` en el menú de página.
 - Prueba: intent `probar-ruta:<Ruta>` (LectorApp) y bloque «Ajustes» en probar.sh: abre 15 pantallas, las desplaza, detecta cierres y comprueba que están las opciones nuevas (`falta`). Aviso «Ajustes» en el run.
 - `COMPARACION_KOMIKKU.md` §3b: menús cotejados y lo que sigue faltando.
+
+## 2cf. PASO 84 (0.75) — Thinking orbs
+- `ui/orbes/MotorOrbes.kt`: port exacto del motor de thinking-orbs (MIT, Jakub Antalik): 9 estados × tamaños 64/20, StrictMath para coincidir con V8. `OrbesTest` + `src/test/resources/orbes-golden.txt` (72 casos, 1e-4).
+- `ui/orbes/OrbePensante.kt`: Composable (reloj por withFrameNanos, solo redibuja; quieto con Mov.reducido; tinta invertida en oscuro; tinte de acento opcional).
+- `IndicadorCarga(..., estado)` usa el orbe si `EstiloApp.orbes` (por defecto sí). Estados: WORKING revisión de biblioteca y acciones de página, SEARCHING búsquedas (también `SearchLoadingDots`), CONNECTING extensiones/listados/seguimiento/catálogo, COMPOSING cargar capítulo y lista de capítulos, BREATHING página y lector local, WEAVING migraciones, SOLVING copias (IslaCopia), SHAPING importar.
+- Personalización → Estilo: «Thinking orbs» (prefs aspecto estilo_orbes), «Con el color de acento» (estilo_orbes_acento) y vista previa de los nueve.

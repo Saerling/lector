@@ -187,7 +187,7 @@ fun ActualizacionesScreen(
                             .clickable { if (Actualizador.corriendo) Actualizador.cancelar(ctx) else Actualizador.iniciar(ctx) },
                         Alignment.Center,
                     ) {
-                        if (Actualizador.corriendo) IndicadorCarga(Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                        if (Actualizador.corriendo) IndicadorCarga(Modifier.size(22.dp), strokeWidth = 2.5.dp, estado = com.example.lector.ui.orbes.EstadoOrbe.WORKING)
                         else Icon(Icons.Rounded.Refresh, "Buscar capítulos nuevos", tint = acento, modifier = Modifier.size(21.dp))
                     }
                     Spacer(Modifier.width(8.dp))

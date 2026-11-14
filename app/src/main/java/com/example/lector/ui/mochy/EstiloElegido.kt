@@ -24,6 +24,11 @@ object EstiloApp {
     var ladoDescargas by mutableStateOf(LadoDescargas.IZQUIERDA); private set
     // Portada panorámica de Komikku: las portadas apaisadas se muestran a lo ancho en Historial y Actualizaciones.
     var panoramica by mutableStateOf(false); private set
+    // Thinking orbs (Jakub Antalik) como indicador de carga; apagado = el indicador clásico de radios.
+    var orbes by mutableStateOf(true); private set
+    var orbesAcento by mutableStateOf(false); private set
+    fun elegirOrbes(v: Boolean) { orbes = v; prefs?.edit()?.putBoolean("estilo_orbes", v)?.apply() }
+    fun elegirOrbesAcento(v: Boolean) { orbesAcento = v; prefs?.edit()?.putBoolean("estilo_orbes_acento", v)?.apply() }
     fun elegirPanoramica(v: Boolean) { panoramica = v; prefs?.edit()?.putBoolean("estilo_panoramica", v)?.apply() }
 
     /** Portadas que resultaron apaisadas al cargarse (alto/ancho <= 0,75, como RatioSwitchToPanorama). */
@@ -46,6 +51,8 @@ object EstiloApp {
         ventanaActualizacion = leer(p, "estilo_actualizacion", VentanaActualizacion.MOCHY)
         verDescargas = p.getBoolean("estilo_descargas", true)
         panoramica = p.getBoolean("estilo_panoramica", false)
+        orbes = p.getBoolean("estilo_orbes", true)
+        orbesAcento = p.getBoolean("estilo_orbes_acento", false)
         ladoDescargas = leer(p, "estilo_descargas_lado", LadoDescargas.IZQUIERDA)
     }
 

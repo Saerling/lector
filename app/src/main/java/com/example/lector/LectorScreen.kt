@@ -47,7 +47,7 @@ fun LectorScreen(comic: Comic, almacen: Almacen, alCerrar: () -> Unit) {
         }
     }
     if (!listo) {
-        Box(Modifier.fillMaxSize().background(Color.Black), Alignment.Center) { CircularProgressIndicator() }
+        Box(Modifier.fillMaxSize().background(Color.Black), Alignment.Center) { com.example.lector.ui.IndicadorCarga(color = Color.White) }
         return
     }
 

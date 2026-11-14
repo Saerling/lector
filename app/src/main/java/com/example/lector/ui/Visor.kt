@@ -571,7 +571,7 @@ fun Visor(
         when {
             n == null && (paginado || items.isEmpty() || error != null) -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                 if (error == null) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IndicadorCarga(Modifier.size(48.dp), color = MaterialTheme.colorScheme.primary)
+                    IndicadorCarga(Modifier.size(48.dp), color = MaterialTheme.colorScheme.primary, estado = com.example.lector.ui.orbes.EstadoOrbe.COMPOSING)
                     Spacer(Modifier.height(16.dp))
                     Text(cap.nombre, style = LectorType.Section, color = GrisNeutro, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 40.dp))
                     Text("Cargando capítulo…", style = LectorType.Label, color = GrisNeutro.copy(alpha = 0.7f))
@@ -957,7 +957,7 @@ private fun AccionVisor(icono: ImageVector, texto: String, onClick: () -> Unit) 
 private fun EsqueletoPagina(numero: Int, modifier: Modifier) {
     Box(modifier.clip(FormaEsqueleto).background(ColorEsqueleto), Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            IndicadorCarga(Modifier.size(40.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
+            IndicadorCarga(Modifier.size(40.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f), estado = com.example.lector.ui.orbes.EstadoOrbe.BREATHING)
             Spacer(Modifier.height(14.dp))
             Text(
                 "$numero", style = EstiloContador, color = GrisNeutro,
@@ -1356,7 +1356,7 @@ private fun MenuPagina(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (trabajando) Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), Arrangement.Center, Alignment.CenterVertically) {
-                    IndicadorCarga(Modifier.size(32.dp))
+                    IndicadorCarga(Modifier.size(32.dp), estado = com.example.lector.ui.orbes.EstadoOrbe.WORKING)
                     Spacer(Modifier.width(12.dp))
                     Text("Preparando la página…", style = LectorType.Body, color = LectorColors.Muted)
                 }

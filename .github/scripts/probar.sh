@@ -114,6 +114,15 @@ falta AjExplorar "Extensiones privadas"; falta AjSeguridad "Ocultar el contenido
 falta AjAvanzado "Borrar los datos de WebView"; falta AjAvanzado "Revocar la confianza en extensiones desconocidas"
 falta Datos "Exportar la lista de la biblioteca"; falta Datos "Limpiar datos de mangas que no tienes"
 falta AjVisor "Saltar capítulos leídos"; falta AjVisor "Saltar capítulos duplicados"; falta AjVisor "Girar las páginas anchas"
+# Thinking orbs: Personalización hasta el final (sección Estilo) y captura de la tarjeta con los nueve orbes.
+adb shell am force-stop com.example.lector; adb logcat -c
+adb shell am start -n com.example.lector/.MainActivity --es destino "probar-ruta:Apariencia" >/dev/null
+sleep 7; : > textos-orbes.txt
+for k in $(seq 1 14); do adb shell input swipe $((W/2)) $((H*80/100)) $((W/2)) $((H*20/100)) 200; sleep 0.6; done
+sleep 2; volcar ui-orbes.xml; grep -o 'text="[^"]*"' ui-orbes.xml | sed 's/text=//' > textos-orbes.txt
+adb exec-out screencap -p > "captura-$ETIQUETA-orbes.png"; sleep 0.4; adb exec-out screencap -p > "captura-$ETIQUETA-orbes-2.png"
+falta orbes "Thinking orbs"; falta orbes "Buscando"
+adb shell pidof com.example.lector >/dev/null || echo "Orbes: LA APP SE CERRÓ" >> fallos.txt
 echo "Opciones nuevas comprobadas" >> fallos.txt
 
 # ---- Recomendaciones: abrir una desde la ficha (en la MISMA fuente) y volver con «atrás» a la ficha de antes ----
